@@ -33,16 +33,9 @@
     ],
     "category": "DeveloperTool",
     "shortDescription": "AI-powered development workspace",
-    "longDescription": "Vibe Kanban: Collaborative AI workspace for software development",
-    "createUpdaterArtifacts": true
+    "longDescription": "Vibe Kanban: Collaborative AI workspace for software development"
   },
   "plugins": {
-    "macos-fps": {},
-    "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDMyN0ZCNDVCMDhFMDdEQjAKUldTd2ZlQUlXN1IvTWt1Z0ZmaWpsUUVGOHl3QUExRVVWL0crWkROSjViRUZSTXdUODN4WkFlQ1AK",
-      "endpoints": [
-        "__TAURI_UPDATE_ENDPOINT__"
-      ]
-    }
+    "macos-fps": {}
   }
 }
