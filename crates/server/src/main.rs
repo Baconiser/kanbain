@@ -1,10 +1,7 @@
 use anyhow::{self, Error as AnyhowError};
 use axum::Router;
 use deployment::{Deployment, DeploymentError};
-use server::{
-    DeploymentImpl, middleware::origin::validate_origin, routes, runtime::relay_registration,
-    startup,
-};
+use server::{DeploymentImpl, middleware::origin::validate_origin, routes, startup};
 use services::services::container::ContainerService;
 use sqlx::Error as SqlxError;
 use strip_ansi_escapes::strip;
@@ -12,10 +9,7 @@ use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use tower_http::validate_request::ValidateRequestHeaderLayer;
 use tracing_subscriber::{EnvFilter, prelude::*};
-use utils::{
-    port_file::write_port_file_with_proxy,
-    sentry::{self as sentry_utils, SentrySource, sentry_layer},
-};
+use utils::port_file::write_port_file_with_proxy;
 
 #[derive(Debug, Error)]
 pub enum VibeKanbanError {
@@ -36,17 +30,14 @@ async fn main() -> Result<(), VibeKanbanError> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    sentry_utils::init_once(SentrySource::Backend);
-
     let log_level = std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string());
     let filter_string = format!(
-        "warn,server={level},services={level},db={level},executors={level},deployment={level},local_deployment={level},utils={level},embedded_ssh={level},desktop_bridge={level},relay_hosts={level},relay_client={level},relay_webrtc={level},codex_core=off",
+        "warn,server={level},services={level},db={level},executors={level},deployment={level},local_deployment={level},utils={level},codex_core=off",
         level = log_level
     );
     let env_filter = EnvFilter::try_new(filter_string).expect("Failed to create tracing filter");
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
-        .with(sentry_layer())
         .init();
 
     let shutdown_token = CancellationToken::new();
@@ -142,8 +133,6 @@ async fn main() -> Result<(), VibeKanbanError> {
             tracing::error!("Preview proxy error: {}", e);
         }
     });
-
-    relay_registration::spawn_relay(&deployment).await;
 
     tokio::select! {
         _ = shutdown_signal() => {

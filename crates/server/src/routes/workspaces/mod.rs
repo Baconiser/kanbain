@@ -7,7 +7,6 @@ pub mod execution;
 pub mod gh_cli_setup;
 pub mod git;
 pub mod integration;
-pub mod links;
 pub mod pr;
 pub mod repos;
 pub mod streams;
@@ -54,8 +53,7 @@ pub fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
             post(workspace_summary::get_workspace_summaries),
         )
         .nest("/{id}", workspace_id_router)
-        .nest("/{id}/attachments", attachments::router(deployment))
-        .nest("/{id}/links", links::router(deployment));
+        .nest("/{id}/attachments", attachments::router(deployment));
 
     Router::new().nest("/workspaces", workspaces_router)
 }

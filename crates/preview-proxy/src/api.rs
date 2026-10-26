@@ -8,11 +8,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use utils::http_headers::is_hop_by_hop_header;
-use ws_bridge::{bridge_axum_ws, connect_upstream_ws};
 
 use crate::{
     PreviewProxyService,
     proxy_common::{build_local_upstream_url, extract_ws_protocols, should_forward_request_header},
+    ws_bridge::{bridge_axum_ws, connect_upstream_ws},
 };
 
 type MaybeWsUpgrade = Result<WebSocketUpgrade, WebSocketUpgradeRejection>;

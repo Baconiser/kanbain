@@ -9,7 +9,7 @@ use services::services::container::ContainerService;
 
 use crate::{
     DeploymentImpl,
-    middleware::signed_ws::{MaybeSignedWebSocket, SignedWsUpgrade},
+    middleware::ws::{AppWebSocket, WsUpgrade},
 };
 
 #[derive(Debug, Deserialize)]
@@ -25,7 +25,7 @@ pub struct WorkspaceStreamQuery {
 }
 
 pub async fn stream_workspaces_ws(
-    ws: SignedWsUpgrade,
+    ws: WsUpgrade,
     Query(query): Query<WorkspaceStreamQuery>,
     State(deployment): State<DeploymentImpl>,
 ) -> impl IntoResponse {
@@ -38,7 +38,7 @@ pub async fn stream_workspaces_ws(
 }
 
 pub async fn stream_workspace_diff_ws(
-    ws: SignedWsUpgrade,
+    ws: WsUpgrade,
     Query(params): Query<DiffStreamQuery>,
     Extension(workspace): Extension<db::models::workspace::Workspace>,
     State(deployment): State<DeploymentImpl>,
@@ -53,7 +53,7 @@ pub async fn stream_workspace_diff_ws(
 }
 
 async fn handle_workspace_diff_ws(
-    mut socket: MaybeSignedWebSocket,
+    mut socket: AppWebSocket,
     deployment: DeploymentImpl,
     workspace: db::models::workspace::Workspace,
     stats_only: bool,
@@ -98,7 +98,7 @@ async fn handle_workspace_diff_ws(
 }
 
 async fn handle_workspaces_ws(
-    mut socket: MaybeSignedWebSocket,
+    mut socket: AppWebSocket,
     deployment: DeploymentImpl,
     archived: Option<bool>,
     limit: Option<i64>,

@@ -17,15 +17,18 @@ use axum::{
 };
 use reqwest::Client;
 use uuid::Uuid;
-use ws_bridge::{UpstreamWsConnectError, WsBridgeError, bridge_axum_ws, connect_upstream_ws};
 
-use crate::proxy_common::{
-    build_local_upstream_url, extract_ws_protocols, normalized_proxy_path,
-    should_forward_request_header,
+use crate::{
+    proxy_common::{
+        build_local_upstream_url, extract_ws_protocols, normalized_proxy_path,
+        should_forward_request_header,
+    },
+    ws_bridge::{UpstreamWsConnectError, WsBridgeError, bridge_axum_ws, connect_upstream_ws},
 };
 
 pub mod api;
 mod proxy_common;
+pub mod ws_bridge;
 
 #[derive(Clone)]
 pub struct PreviewProxyService {

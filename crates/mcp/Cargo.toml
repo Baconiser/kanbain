@@ -12,7 +12,6 @@ path = "src/bin/vibe_kanban_mcp.rs"
 uninlined-format-args = "allow"
 
 [dependencies]
-api-types = { path = "../api-types" , version = "0.1.45" }
 db = { path = "../db" , version = "0.1.45" }
 executors = { path = "../executors" , version = "0.1.45" }
 utils = { path = "../utils" , version = "0.1.45" }
@@ -25,8 +24,6 @@ tracing-subscriber = { workspace = true }
 uuid = { version = "1.0", features = ["v4", "serde"] }
 rmcp = { version = "1.2.0", features = ["server", "transport-io"] }
 schemars = { workspace = true }
-sentry = { version = "0.46.2", default-features = false, features = ["anyhow", "backtrace", "panic", "debug-images", "reqwest", "rustls"] }
 reqwest = { workspace = true }
 rustls = { workspace = true }
-regex = "1"
 thiserror = { workspace = true }

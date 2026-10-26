@@ -25,7 +25,6 @@ json-patch = "2.0"
 thiserror = { workspace = true }
 enum_dispatch = "0.3.13"
 futures-io = "0.3.31"
-tokio-stream = { version = "0.1.17", features = ["io-util"] }
 futures = "0.3.31"
 bon = "3.6"
 os_pipe = "1.2"

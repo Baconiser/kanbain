@@ -15,7 +15,7 @@ use uuid::Uuid;
 use crate::{
     DeploymentImpl,
     error::ApiError,
-    middleware::signed_ws::{MaybeSignedWebSocket, SignedWsUpgrade},
+    middleware::ws::{AppWebSocket, WsUpgrade},
 };
 
 #[derive(Debug, Deserialize)]
@@ -50,7 +50,7 @@ enum TerminalMessage {
 }
 
 async fn terminal_ws(
-    ws: SignedWsUpgrade,
+    ws: WsUpgrade,
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<TerminalQuery>,
 ) -> Result<impl IntoResponse, ApiError> {
@@ -93,7 +93,7 @@ async fn terminal_ws(
 }
 
 async fn handle_terminal_ws(
-    mut socket: MaybeSignedWebSocket,
+    mut socket: AppWebSocket,
     deployment: DeploymentImpl,
     working_dir: PathBuf,
     cols: u16,
@@ -165,7 +165,7 @@ async fn handle_terminal_ws(
     let _ = deployment.pty().close_session(session_id).await;
 }
 
-async fn send_error(socket: &mut MaybeSignedWebSocket, message: &str) -> anyhow::Result<()> {
+async fn send_error(socket: &mut AppWebSocket, message: &str) -> anyhow::Result<()> {
     let msg = TerminalMessage::Error {
         message: message.to_string(),
     };

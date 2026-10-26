@@ -1,8 +1,6 @@
 pub mod error;
 pub mod middleware;
-pub mod relay_pairing;
 pub mod routes;
-pub mod runtime;
 pub mod startup;
 
 // #[cfg(feature = "cloud")]

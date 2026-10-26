@@ -95,3 +95,6 @@ vibe-kanban-cloud/
 *.ts.net.key
 Caddyfile
 Caddyfile.dev
+
+# pnpm store when created inside the repo (e.g. dev containers on mounted drives)
+.pnpm-store/

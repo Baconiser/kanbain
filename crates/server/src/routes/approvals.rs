@@ -15,7 +15,7 @@ use utils::{
 
 use crate::{
     DeploymentImpl,
-    middleware::signed_ws::{MaybeSignedWebSocket, SignedWsUpgrade},
+    middleware::ws::{AppWebSocket, WsUpgrade},
 };
 
 async fn respond_to_approval(
@@ -26,21 +26,7 @@ async fn respond_to_approval(
     let service = deployment.approvals();
 
     match service.respond(&id, request).await {
-        Ok((outcome, context)) => {
-            deployment
-                .track_if_analytics_allowed(
-                    "approval_responded",
-                    serde_json::json!({
-                        "approval_id": &id,
-                        "status": format!("{:?}", outcome),
-                        "tool_name": context.tool_name,
-                        "execution_process_id": context.execution_process_id.to_string(),
-                    }),
-                )
-                .await;
-
-            Ok(ResponseJson(ApiResponse::success(outcome)))
-        }
+        Ok((outcome, _context)) => Ok(ResponseJson(ApiResponse::success(outcome))),
         Err(e) => {
             tracing::error!("Failed to respond to approval: {:?}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -49,7 +35,7 @@ async fn respond_to_approval(
 }
 
 async fn stream_approvals_ws(
-    ws: SignedWsUpgrade,
+    ws: WsUpgrade,
     State(deployment): State<DeploymentImpl>,
 ) -> impl IntoResponse {
     ws.on_upgrade(move |socket| async move {
@@ -60,7 +46,7 @@ async fn stream_approvals_ws(
 }
 
 async fn handle_approvals_ws(
-    mut socket: MaybeSignedWebSocket,
+    mut socket: AppWebSocket,
     deployment: DeploymentImpl,
 ) -> anyhow::Result<()> {
     let mut stream = deployment.approvals().patch_stream();

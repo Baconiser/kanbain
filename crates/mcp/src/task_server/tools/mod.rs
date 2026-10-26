@@ -1,9 +1,7 @@
 use std::str::FromStr;
 
-use api_types::{Issue, ListProjectStatusesResponse, ProjectStatus};
-use db::models::{execution_process::ExecutionProcessStatus, tag::Tag};
+use db::models::execution_process::ExecutionProcessStatus;
 use executors::executors::BaseCodingAgent;
-use regex::Regex;
 use rmcp::{
     ErrorData,
     model::{CallToolResult, Content},
@@ -37,12 +35,6 @@ impl ToolError {
 }
 
 mod context;
-mod issue_assignees;
-mod issue_relationships;
-mod issue_tags;
-mod organizations;
-mod remote_issues;
-mod remote_projects;
 mod repos;
 mod sessions;
 mod task_attempts;
@@ -52,13 +44,7 @@ impl McpServer {
     pub fn global_mode_router() -> rmcp::handler::server::tool::ToolRouter<Self> {
         Self::context_tools_router()
             + Self::workspaces_tools_router()
-            + Self::organizations_tools_router()
             + Self::repos_tools_router()
-            + Self::remote_projects_tools_router()
-            + Self::remote_issues_tools_router()
-            + Self::issue_assignees_tools_router()
-            + Self::issue_tags_tools_router()
-            + Self::issue_relationships_tools_router()
             + Self::task_attempts_tools_router()
             + Self::session_tools_router()
     }
@@ -204,154 +190,6 @@ impl McpServer {
     }
 
     // Expands @tagname references in text by replacing them with tag content.
-    async fn expand_tags(&self, text: &str) -> String {
-        let tag_pattern = match Regex::new(r"@([^\s@]+)") {
-            Ok(re) => re,
-            Err(_) => return text.to_string(),
-        };
-
-        let tag_names: Vec<String> = tag_pattern
-            .captures_iter(text)
-            .filter_map(|cap| cap.get(1).map(|m| m.as_str().to_string()))
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .collect();
-
-        if tag_names.is_empty() {
-            return text.to_string();
-        }
-
-        let url = self.url("/api/tags");
-        let tags: Vec<Tag> = match self.client.get(&url).send().await {
-            Ok(resp) if resp.status().is_success() => {
-                match resp.json::<ApiResponseEnvelope<Vec<Tag>>>().await {
-                    Ok(envelope) if envelope.success => envelope.data.unwrap_or_default(),
-                    _ => return text.to_string(),
-                }
-            }
-            _ => return text.to_string(),
-        };
-
-        let tag_map: std::collections::HashMap<&str, &str> = tags
-            .iter()
-            .map(|t| (t.tag_name.as_str(), t.content.as_str()))
-            .collect();
-
-        let result = tag_pattern.replace_all(text, |caps: &regex::Captures| {
-            let tag_name = caps.get(1).map(|m| m.as_str()).unwrap_or("");
-            match tag_map.get(tag_name) {
-                Some(content) => (*content).to_string(),
-                None => caps.get(0).map(|m| m.as_str()).unwrap_or("").to_string(),
-            }
-        });
-
-        result.into_owned()
-    }
-
-    // Resolves a project_id from an explicit parameter or falls back to context.
-    fn resolve_project_id(&self, explicit: Option<Uuid>) -> Result<Uuid, ToolError> {
-        if let Some(id) = explicit {
-            return Ok(id);
-        }
-        if let Some(ctx) = &self.context
-            && let Some(id) = ctx.project_id
-        {
-            return Ok(id);
-        }
-        Err(ToolError::message(
-            "project_id is required (not available from workspace context)",
-        ))
-    }
-
-    // Resolves an organization_id from an explicit parameter or falls back to context.
-    fn resolve_organization_id(&self, explicit: Option<Uuid>) -> Result<Uuid, ToolError> {
-        if let Some(id) = explicit {
-            return Ok(id);
-        }
-        if let Some(ctx) = &self.context
-            && let Some(id) = ctx.organization_id
-        {
-            return Ok(id);
-        }
-        Err(ToolError::message(
-            "organization_id is required (not available from workspace context)",
-        ))
-    }
-
-    // Fetches project statuses for a project.
-    async fn fetch_project_statuses(
-        &self,
-        project_id: Uuid,
-    ) -> Result<Vec<ProjectStatus>, ToolError> {
-        let url = self.url(&format!(
-            "/api/remote/project-statuses?project_id={}",
-            project_id
-        ));
-        let response: ListProjectStatusesResponse = self.send_json(self.client.get(&url)).await?;
-        Ok(response.project_statuses)
-    }
-
-    // Resolves a status name to status_id.
-    async fn resolve_status_id(
-        &self,
-        project_id: Uuid,
-        status_name: &str,
-    ) -> Result<Uuid, ToolError> {
-        let statuses = self.fetch_project_statuses(project_id).await?;
-        statuses
-            .iter()
-            .find(|s| s.name.eq_ignore_ascii_case(status_name))
-            .map(|s| s.id)
-            .ok_or_else(|| {
-                let available: Vec<&str> = statuses.iter().map(|s| s.name.as_str()).collect();
-                ToolError::message(format!(
-                    "Unknown status '{}'. Available statuses: {:?}",
-                    status_name, available
-                ))
-            })
-    }
-
-    // Gets the default status_id for a project (first non-hidden status by sort_order).
-    async fn default_status_id(&self, project_id: Uuid) -> Result<Uuid, ToolError> {
-        let statuses = self.fetch_project_statuses(project_id).await?;
-        statuses
-            .iter()
-            .filter(|s| !s.hidden)
-            .min_by_key(|s| s.sort_order)
-            .map(|s| s.id)
-            .ok_or_else(|| ToolError::message("No visible statuses found for project"))
-    }
-
-    // Resolves a status_id to its display name. Falls back to UUID string if lookup fails.
-    async fn resolve_status_name(&self, project_id: Uuid, status_id: Uuid) -> String {
-        match self.fetch_project_statuses(project_id).await {
-            Ok(statuses) => statuses
-                .iter()
-                .find(|s| s.id == status_id)
-                .map(|s| s.name.clone())
-                .unwrap_or_else(|| status_id.to_string()),
-            Err(_) => status_id.to_string(),
-        }
-    }
-
-    // Links a workspace to a remote issue by fetching issue.project_id and calling link endpoint.
-    async fn link_workspace_to_issue(
-        &self,
-        workspace_id: Uuid,
-        issue_id: Uuid,
-    ) -> Result<(), ToolError> {
-        let issue_url = self.url(&format!("/api/remote/issues/{}", issue_id));
-        let issue: Issue = self.send_json(self.client.get(&issue_url)).await?;
-
-        let link_url = self.url(&format!("/api/workspaces/{}/links", workspace_id));
-        let link_payload = serde_json::json!({
-            "project_id": issue.project_id,
-            "issue_id": issue_id,
-        });
-        self.send_empty_json(self.client.post(&link_url).json(&link_payload))
-            .await
-    }
-
     fn parse_executor_agent(executor: &str) -> Result<BaseCodingAgent, ToolError> {
         let normalized = executor.replace('-', "_").to_ascii_uppercase();
         BaseCodingAgent::from_str(&normalized)
@@ -446,9 +284,6 @@ mod tests {
             base_url: "http://127.0.0.1:3000".to_string(),
             tool_router: ToolRouter::default(),
             context: Some(McpContext {
-                organization_id: None,
-                project_id: None,
-                issue_id: None,
                 orchestrator_session_id: Some(session_id),
                 workspace_id,
                 workspace_branch: "main".to_string(),
@@ -485,9 +320,6 @@ mod tests {
     fn global_context_omits_orchestrator_session_id_from_serialized_output() {
         install_rustls_provider();
         let context = McpContext {
-            organization_id: None,
-            project_id: None,
-            issue_id: None,
             orchestrator_session_id: None,
             workspace_id: Uuid::new_v4(),
             workspace_branch: "main".to_string(),

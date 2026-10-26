@@ -6,9 +6,9 @@ use axum::{
     routing::any,
 };
 use deployment::Deployment;
-use ws_bridge::{bridge_axum_ws, connect_upstream_ws};
+use preview_proxy::ws_bridge::{bridge_axum_ws, connect_upstream_ws};
 
-use crate::{DeploymentImpl, middleware::signed_ws::SignedWsUpgrade};
+use crate::{DeploymentImpl, middleware::ws::WsUpgrade};
 
 pub(super) fn api_router() -> Router<DeploymentImpl> {
     Router::new()
@@ -25,7 +25,7 @@ pub fn subdomain_router(deployment: DeploymentImpl) -> Router {
 async fn proxy_preview_request_no_tail(
     State(deployment): State<DeploymentImpl>,
     Path(target_port): Path<u16>,
-    ws_upgrade: Result<SignedWsUpgrade, WebSocketUpgradeRejection>,
+    ws_upgrade: Result<WsUpgrade, WebSocketUpgradeRejection>,
     request: Request,
 ) -> Response {
     match ws_upgrade {
@@ -46,7 +46,7 @@ async fn proxy_preview_request_no_tail(
 async fn proxy_preview_request(
     State(deployment): State<DeploymentImpl>,
     Path((target_port, tail)): Path<(u16, String)>,
-    ws_upgrade: Result<SignedWsUpgrade, WebSocketUpgradeRejection>,
+    ws_upgrade: Result<WsUpgrade, WebSocketUpgradeRejection>,
     request: Request,
 ) -> Response {
     match ws_upgrade {
@@ -65,7 +65,7 @@ async fn proxy_preview_request(
 }
 
 async fn forward_preview_ws(
-    ws: SignedWsUpgrade,
+    ws: WsUpgrade,
     target_port: u16,
     tail: String,
     request: Request,
