@@ -1,0 +1,39 @@
+{
+  "name": "KanbAIn",
+  "image": "mcr.microsoft.com/devcontainers/rust:1-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    // Own Docker daemon so the sandbox network gateway (model/egress proxy) is local to the backend
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  // Keep build output and crate downloads off the bind mount (slow on Windows hosts)
+  "mounts": [
+    "source=kanbain-target,target=${containerWorkspaceFolder}/target,type=volume",
+    "source=kanbain-cargo-registry,target=/usr/local/cargo/registry,type=volume"
+  ],
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "rust-analyzer.check.command": "clippy"
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "tamasfe.even-better-toml",
+        "fill-labs.dependi",
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "bradlc.vscode-tailwindcss"
+      ]
+    }
+  },
+
+  // scripts/setup-dev-environment.js allocates frontend/backend/preview-proxy from 3000 upward
+  "forwardPorts": [3000, 3001, 3002]
+}
