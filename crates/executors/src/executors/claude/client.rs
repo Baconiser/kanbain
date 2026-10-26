@@ -16,7 +16,7 @@ use crate::{
                 PermissionUpdateType,
             },
         },
-        codex::client::LogWriter,
+        log_writer::LogWriter,
     },
 };
 

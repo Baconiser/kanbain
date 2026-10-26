@@ -8,25 +8,14 @@ use axum::{
 };
 use db::models::{workspace::Workspace, workspace_repo::WorkspaceRepo};
 use deployment::Deployment;
-use executors::{
-    executors::{CodingAgent, ExecutorError},
-    profile::{ExecutorConfigs, ExecutorProfileId},
-};
+use executors::executors::ExecutorError;
 use serde::{Deserialize, Serialize};
 use services::services::container::ContainerService;
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
-use super::{codex_setup, cursor_setup, gh_cli_setup::GhCliSetupError};
+use super::gh_cli_setup::GhCliSetupError;
 use crate::{DeploymentImpl, error::ApiError};
-
-#[derive(Debug, Deserialize, Serialize, TS)]
-pub struct RunAgentSetupRequest {
-    pub executor_profile_id: ExecutorProfileId,
-}
-
-#[derive(Debug, Serialize, TS)]
-pub struct RunAgentSetupResponse {}
 
 #[derive(Deserialize, TS)]
 pub struct OpenEditorRequest {
@@ -53,30 +42,7 @@ pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/editor/path", get(get_workspace_editor_path))
         .route("/editor/open", post(open_workspace_in_editor))
-        .route("/agent/setup", post(run_agent_setup))
         .route("/github/cli/setup", post(gh_cli_setup_handler))
-}
-
-#[axum::debug_handler]
-pub async fn run_agent_setup(
-    Extension(workspace): Extension<Workspace>,
-    State(deployment): State<DeploymentImpl>,
-    Json(payload): Json<RunAgentSetupRequest>,
-) -> Result<ResponseJson<ApiResponse<RunAgentSetupResponse>>, ApiError> {
-    let executor_profile_id = payload.executor_profile_id;
-    let config = ExecutorConfigs::get_cached();
-    let coding_agent = config.get_coding_agent_or_default(&executor_profile_id);
-    match coding_agent {
-        CodingAgent::CursorAgent(_) => {
-            cursor_setup::run_cursor_setup(&deployment, &workspace).await?;
-        }
-        CodingAgent::Codex(codex) => {
-            codex_setup::run_codex_setup(&deployment, &workspace, &codex).await?;
-        }
-        _ => return Err(ApiError::Executor(ExecutorError::SetupHelperNotSupported)),
-    }
-
-    Ok(ResponseJson(ApiResponse::success(RunAgentSetupResponse {})))
 }
 
 pub async fn open_workspace_in_editor(

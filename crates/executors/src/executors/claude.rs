@@ -39,7 +39,7 @@ use crate::{
     env::ExecutionEnv,
     executors::{
         AppendPrompt, AvailabilityInfo, BaseCodingAgent, ExecutorError, SpawnedChild,
-        StandardCodingAgentExecutor, codex::client::LogWriter, utils::reorder_slash_commands,
+        StandardCodingAgentExecutor, log_writer::LogWriter, utils::reorder_slash_commands,
     },
     logs::{
         ActionType, AnsweredQuestion, AskUserQuestionItem, AskUserQuestionOption, FileChange,

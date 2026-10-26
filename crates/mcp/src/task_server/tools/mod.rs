@@ -189,7 +189,6 @@ impl McpServer {
         Ok(())
     }
 
-    // Expands @tagname references in text by replacing them with tag content.
     fn parse_executor_agent(executor: &str) -> Result<BaseCodingAgent, ToolError> {
         let normalized = executor.replace('-', "_").to_ascii_uppercase();
         BaseCodingAgent::from_str(&normalized)
@@ -198,7 +197,7 @@ impl McpServer {
 
     fn normalize_executor_name(executor: Option<&str>) -> Result<String, ToolError> {
         let Some(executor) = executor.map(str::trim).filter(|value| !value.is_empty()) else {
-            return Ok("CODEX".to_string());
+            return Ok("CLAUDE_CODE".to_string());
         };
 
         Self::parse_executor_agent(executor)
