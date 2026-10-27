@@ -87,9 +87,7 @@ const SOUND_OPTIONS: SoundOption[] = [
 
 const AGENT_PRIORITY: BaseCodingAgent[] = [
   BaseCodingAgent.CLAUDE_CODE,
-  BaseCodingAgent.CODEX,
   BaseCodingAgent.OPENCODE,
-  BaseCodingAgent.GEMINI,
 ];
 
 const DiscordIcon: Icon = forwardRef<SVGSVGElement, IconProps>(
