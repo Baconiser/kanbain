@@ -197,7 +197,7 @@ Rules for every phase:
    - Frontend: `packages/remote-web`.
    - CI: the `remote-*` and `relay-*` workflows.
    - **Keep** `crates/tauri-app` and `crates/preview-proxy`.
-   - **Important:** the board still depends on `routes/remote/*` and Electric until 0b. To keep the app usable, **stub** them (an empty board with a "local tickets coming in 0b" notice), or swap 0a and 0b for the board code.
+   - **Frontend (decided 2026-10-27):** the cloud board is **deleted, not stubbed**. Remove the kanban/issue pages and containers, organizations, OAuth/sign-in, remote hosts and relay pairing, cloud notifications, export, Electric (`lib/electric`, `integrations/electric`, `remoteApi.ts`), PostHog/Sentry and the release-notes feed from `web-core`/`local-web`. Remove the matching navigation destinations and routes. A `/tickets` placeholder page ("local tickets are coming") takes the board's place in the AppBar. Keep the presentational components in `packages/ui` (kanban cards, columns, selection dialogs) for 0b to reuse. `shared/remote-types.ts` stays frozen until 0b replaces it. Remove the host-scoping plumbing (`HostIdProvider`, `/api/host/<id>` scoping, `AppRuntime = 'remote'`) in a follow-up commit.
 4. **Delete executors** other than Claude Code and OpenCode (`crates/executors/src/executors/*`, `default_profiles.json`, frontend executor lists and icons, i18n keys). Run `node scripts/check-unused-i18n-keys.mjs`.
 5. **Rename** as one mechanical commit:
    - Crates/packages (`vibe-kanban*` → `kanbain*`, `@vibe/*` → `@kanbain/*`), the binary, `npx-cli`, env vars `VK_*` → `KANBAIN_*`, the data-folder name (see `crates/utils` asset/dir helpers), Tauri `productName`/`identifier`.
@@ -221,9 +221,9 @@ Rules for every phase:
 2. **Models** in `crates/db/src/models/` (`project.rs`, `issue.rs`, `project_status.rs`, `issue_comment.rs`, `tag.rs`, …) with ts-rs derives. Default statuses are seeded per project with their `kind`.
 3. **Routes**: replace `crates/server/src/routes/remote/*` with local CRUD routes (`routes/projects.rs`, `routes/issues.rs`, …). Keep request/response shapes close to the old ones so the frontend changes stay small.
 4. **Live updates**: add `projects`/`issues`/`statuses`/`comments` to the SQLite update-hook JSON-Patch streams (`services/events.rs`, `events/streams.rs`) and expose them over WS/SSE.
-5. **Frontend**: swap the data layer. Replace the `useShape(...)` calls in `providers/remote/ProjectProvider.tsx` and the `lib/electric/collections.ts` mutations with hooks over the local stream plus REST mutations. Remove `@electric-sql/*` dependencies. Move providers out of `remote/`.
+5. **Frontend**: build a **new board** on the local API, replacing the `/tickets` placeholder from 0a. The upstream board containers were deleted in 0a. Build new containers (project list in the AppBar, board, ticket panel, comments, sub-issues, relationships) on hooks over the local stream plus REST mutations, and design them around this plan's model (status `kind`, External ID, ask/yolo, no organizations or assignees). Reuse the presentational components in `packages/ui` and the command-bar selection builders (status, priority, sub-issue). Delete `shared/remote-types.ts`, and remove the kanban entries in `shared/keyboard/registry.ts` or wire them up.
 6. **Workspace↔issue link**: a local `workspaces.issue_id` FK (replaces `routes/workspaces/links.rs` remote call).
-7. **Attachments**: local storage in `<data>/attachments/` (replaces the Azurite/remote path; `useAzureAttachments.ts` → local).
+7. **Attachments**: local storage in `<data>/attachments/` (replaces the deleted Azure path). Wire the WYSIWYG image/attachment nodes (`fetchAttachmentUrl` in `WYSIWYGEditor.tsx`) to it.
 8. **Backups (D12)**: daily backup plus pre-migration backup of the SQLite file, keeping the last N; an export endpoint.
 9. **Local API launch token (D3)**: the backend generates a token at start, Tauri hands it to the webview, every route checks it, and dev mode reads it from an env/file.
 
@@ -349,7 +349,7 @@ Rules for every phase:
 ---
 
 ## 4. Risks and mitigations
-- **Phase 0b is the largest change** (replacing the Electric data layer). Keep API shapes close to the remote ones, do it one entity at a time, and keep the board working after each step.
+- **Phase 0b is the largest change** (a new board on a new data layer). Build it one entity at a time (projects, statuses, issues, then comments/tags/relationships), with each step usable on `/tickets`.
 - **Docker Desktop on Windows**: WSL2 memory limits, slow file IO, and differences in how `host.docker.internal` and networks behave. The design uses git transfer instead of bind mounts, and I test the network rules on Linux. Windows network behaviour must be checked by the user early, at the end of Phase 1.
 - **CLI drift**: keep CLI versions pinned in one place, test the adapter output against `--help`/schema, and bump versions deliberately.
 - **Subscription login through the proxy**: depends on Claude Code sending the OAuth capability header through the gateway. Verify in Phase 2; the API key path is the fallback. Before offering KanbAIn to others with claude.ai login, check Anthropic's terms.
