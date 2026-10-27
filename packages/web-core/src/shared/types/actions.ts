@@ -6,12 +6,9 @@ import type {
   Workspace,
   PatchType,
 } from 'shared/types';
-import type { Workspace as RemoteWorkspace } from 'shared/remote-types';
 import type { DiffViewMode } from '@/shared/stores/useDiffViewStore';
-import type { LayoutMode } from '@/shared/stores/useUiPreferencesStore';
 import { RIGHT_MAIN_PANEL_MODES } from '@/shared/stores/useUiPreferencesStore';
 import type { AppNavigation } from '@/shared/lib/routes/appNavigation';
-import type { ProjectIssueCreateOptions } from '@/shared/stores/useKanbanIssueComposerStore';
 import type { AppRuntime } from '@/shared/hooks/useAppRuntime';
 
 // Portable type aliases (avoid importing from component containers)
@@ -37,14 +34,6 @@ export type ActionIcon = Icon | SpecialIconType;
 // Dev server state type for visibility context
 export type DevServerState = 'stopped' | 'starting' | 'running' | 'stopping';
 
-// Project mutations interface (registered by ProjectProvider consumers)
-export interface ProjectMutations {
-  removeIssue: (id: string) => void;
-  duplicateIssue: (issueId: string) => void;
-  getIssue: (issueId: string) => { simple_id: string } | undefined;
-  getAssigneesForIssue: (issueId: string) => { user_id: string }[];
-}
-
 // Workspace type for sidebar (minimal subset needed for workspace selection)
 interface SidebarWorkspace {
   id: string;
@@ -67,46 +56,11 @@ export interface ActionExecutorContext {
   // Logs panel state
   currentLogs: LogEntry[] | null;
   logsPanelContent: LogsPanelContent | null;
-  // Command bar navigation
-  openStatusSelection: (projectId: string, issueIds: string[]) => Promise<void>;
-  openPrioritySelection: (
-    projectId: string,
-    issueIds: string[]
-  ) => Promise<void>;
-  openAssigneeSelection: (
-    projectId: string,
-    issueIds: string[],
-    isCreateMode?: boolean
-  ) => Promise<void>;
-  openSubIssueSelection: (
-    projectId: string,
-    issueId: string,
-    mode?: 'addChild' | 'setParent'
-  ) => Promise<{ type: string } | undefined>;
-  openWorkspaceSelection: (projectId: string, issueId: string) => Promise<void>;
-  openRelationshipSelection: (
-    projectId: string,
-    issueId: string,
-    relationshipType: 'blocking' | 'related' | 'has_duplicate',
-    direction: 'forward' | 'reverse'
-  ) => Promise<void>;
-  // Kanban navigation (URL-based)
-  navigateToCreateIssue: (options?: ProjectIssueCreateOptions) => void;
-  // Default status for issue creation based on current kanban tab
-  defaultCreateStatusId?: string;
-  // Current kanban context (for project settings action)
-  kanbanOrgId?: string;
-  kanbanProjectId?: string;
-  // Project mutations (registered when inside ProjectProvider)
-  projectMutations?: ProjectMutations;
-  // Remote workspaces (from Electric sync via UserContext)
-  remoteWorkspaces: RemoteWorkspace[];
 }
 
 // Context for evaluating action visibility and state conditions
 export interface ActionVisibilityContext {
   // Layout state
-  layoutMode: LayoutMode;
   rightMainPanelMode:
     (typeof RIGHT_MAIN_PANEL_MODES)[keyof typeof RIGHT_MAIN_PANEL_MODES] | null;
   isLeftSidebarVisible: boolean;
@@ -139,14 +93,6 @@ export interface ActionVisibilityContext {
 
   // Logs panel state
   logsPanelContent: LogsPanelContent | null;
-
-  // Kanban state
-  hasSelectedKanbanIssue: boolean;
-  hasSelectedKanbanIssueParent: boolean;
-  isCreatingIssue: boolean;
-
-  // Auth state
-  isSignedIn: boolean;
 }
 
 // Enum discriminant for action target types
@@ -154,7 +100,6 @@ export enum ActionTargetType {
   NONE = 'none',
   WORKSPACE = 'workspace',
   GIT = 'git',
-  ISSUE = 'issue',
 }
 
 // Base properties shared by all actions
@@ -198,22 +143,9 @@ export interface GitActionDefinition extends ActionBase {
   ) => Promise<void> | void;
 }
 
-// Issue action (requires projectId + issueIds)
-export interface IssueActionDefinition extends ActionBase {
-  requiresTarget: ActionTargetType.ISSUE;
-  execute: (
-    ctx: ActionExecutorContext,
-    projectId: string,
-    issueIds: string[]
-  ) => Promise<void> | void;
-}
-
 // Discriminated union
 export type ActionDefinition =
-  | GlobalActionDefinition
-  | WorkspaceActionDefinition
-  | GitActionDefinition
-  | IssueActionDefinition;
+  GlobalActionDefinition | WorkspaceActionDefinition | GitActionDefinition;
 
 // Divider markers
 export const NavbarDivider = { type: 'divider' } as const;

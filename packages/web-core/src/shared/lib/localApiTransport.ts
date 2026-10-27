@@ -25,12 +25,6 @@ export interface LocalApiTransport {
   ) => Promise<WebSocket> | WebSocket;
 }
 
-const LOCAL_ONLY_API_PREFIXES = [
-  '/api/open-remote-editor/',
-  '/api/relay-auth/server/',
-  '/api/relay-auth/client/',
-];
-
 function isAbsoluteUrl(pathOrUrl: string): boolean {
   return /^https?:\/\//i.test(pathOrUrl) || /^wss?:\/\//i.test(pathOrUrl);
 }
@@ -55,12 +49,6 @@ function toAbsoluteWsUrl(pathOrUrl: string): string {
 function scopeLocalApiPath(pathOrUrl: string, hostId: string | null): string {
   if (!hostId) return pathOrUrl;
   const path = toPathAndQuery(pathOrUrl);
-  // These endpoints must always hit the local backend because they rely on
-  // local-only credentials/state.
-  if (LOCAL_ONLY_API_PREFIXES.some((prefix) => path.startsWith(prefix))) {
-    return pathOrUrl;
-  }
-
   if (!path.startsWith('/api/') || path.startsWith('/api/host/'))
     return pathOrUrl;
 

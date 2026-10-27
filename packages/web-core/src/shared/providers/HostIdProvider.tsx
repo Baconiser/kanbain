@@ -1,15 +1,7 @@
-import {
-  createContext,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  type ReactNode,
-} from 'react';
-import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
-import { getDestinationHostId } from '@/shared/lib/routes/appNavigation';
+import { createContext, useContext, type ReactNode } from 'react';
 
 // Module-level getter so the API transport can read the hostId outside React
-let _hostId: string | null = null;
+const _hostId: string | null = null;
 export function getCurrentHostId(): string | null {
   return _hostId;
 }
@@ -21,20 +13,7 @@ export function useHostId(): string | null {
 }
 
 export function HostIdProvider({ children }: { children: ReactNode }) {
-  const destination = useCurrentAppDestination();
-  const hostId = useMemo(
-    () => getDestinationHostId(destination),
-    [destination]
-  );
-
-  useLayoutEffect(() => {
-    _hostId = hostId;
-    return () => {
-      _hostId = null;
-    };
-  }, [hostId]);
-
   return (
-    <HostIdContext.Provider value={hostId}>{children}</HostIdContext.Provider>
+    <HostIdContext.Provider value={_hostId}>{children}</HostIdContext.Provider>
   );
 }

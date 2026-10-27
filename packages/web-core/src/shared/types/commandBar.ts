@@ -10,12 +10,7 @@ import type {
 
 // Define page IDs first to avoid circular reference
 export type PageId =
-  | 'root'
-  | 'workspaceActions'
-  | 'diffOptions'
-  | 'viewOptions'
-  | 'repoActions' // Page for repo-specific actions (opened from repo card or CMD+K)
-  | 'issueActions'; // Page for issue-specific actions (kanban mode)
+  'root' | 'workspaceActions' | 'diffOptions' | 'viewOptions' | 'repoActions'; // Page for repo-specific actions (opened from repo card or CMD+K)
 
 // Items that can appear inside a group
 export type CommandBarGroupItem =

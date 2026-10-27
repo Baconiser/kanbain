@@ -13,14 +13,9 @@ import type {
   Repo,
 } from 'shared/types';
 import { ScratchType } from 'shared/types';
-import {
-  PROJECT_ISSUES_SHAPE,
-  type Workspace as RemoteWorkspace,
-} from 'shared/remote-types';
 import { useScratch } from '@/shared/hooks/useScratch';
 import { useDebouncedCallback } from '@/shared/hooks/useDebouncedCallback';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
-import { useShape } from '@/shared/integrations/electric/hooks';
 import { repoApi } from '@/shared/lib/api';
 import { resolveCreateModeBootstrap } from '@/features/create-mode/model/createModeBootstrap';
 import { useWorkspaceCreateDefaults } from '@/shared/hooks/useWorkspaceCreateDefaults';
@@ -181,34 +176,6 @@ function draftReducer(state: DraftState, action: DraftAction): DraftState {
 
 const DRAFT_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 
-function getLatestWorkspaceIdForRemoteProject({
-  remoteWorkspaces,
-  localWorkspaceIds,
-  remoteProjectId,
-}: {
-  remoteWorkspaces: RemoteWorkspace[];
-  localWorkspaceIds: Set<string>;
-  remoteProjectId: string;
-}): string | null {
-  let latestWorkspaceId: string | null = null;
-  let latestUpdatedAt = Number.NEGATIVE_INFINITY;
-
-  for (const workspace of remoteWorkspaces) {
-    if (!workspace.issue_id) continue;
-    if (workspace.project_id !== remoteProjectId) continue;
-    if (!workspace.local_workspace_id) continue;
-    if (!localWorkspaceIds.has(workspace.local_workspace_id)) continue;
-
-    const updatedAt = new Date(workspace.updated_at).getTime();
-    if (updatedAt > latestUpdatedAt) {
-      latestUpdatedAt = updatedAt;
-      latestWorkspaceId = workspace.local_workspace_id;
-    }
-  }
-
-  return latestWorkspaceId;
-}
-
 // ============================================================================
 // Hook
 // ============================================================================
@@ -217,10 +184,7 @@ interface UseCreateModeStateParams {
   initialState?: CreateModeInitialState | null;
   draftId?: string | null;
   lastWorkspaceId: string | null;
-  remoteWorkspaces: RemoteWorkspace[];
-  localWorkspaceIds: Set<string>;
   localWorkspacesLoading: boolean;
-  remoteWorkspacesLoading: boolean;
 }
 
 interface UseCreateModeStateResult {
@@ -249,10 +213,7 @@ export function useCreateModeState({
   initialState,
   draftId,
   lastWorkspaceId,
-  remoteWorkspaces,
-  localWorkspaceIds,
   localWorkspacesLoading,
-  remoteWorkspacesLoading,
 }: UseCreateModeStateParams): UseCreateModeStateResult {
   const { profiles, config, loading: systemLoading } = useUserSystem();
   const scratchId = draftId ?? DRAFT_WORKSPACE_ID;
@@ -339,22 +300,10 @@ export function useCreateModeState({
   const [projectDefaultsStatus, setProjectDefaultsStatus] = useState<
     'pending' | 'applied' | 'empty' | 'n/a'
   >('pending');
-  const sourceWorkspaceId = useMemo(() => {
-    if (state.linkedIssue) {
-      const linkedIssueWorkspaceId = getLatestWorkspaceIdForRemoteProject({
-        remoteWorkspaces,
-        localWorkspaceIds,
-        remoteProjectId: state.linkedIssue.remoteProjectId,
-      });
-      return linkedIssueWorkspaceId ?? lastWorkspaceId;
-    }
-    return lastWorkspaceId;
-  }, [state.linkedIssue, remoteWorkspaces, localWorkspaceIds, lastWorkspaceId]);
+  const sourceWorkspaceId = lastWorkspaceId;
 
   const shouldLoadWorkspaceDefaults =
-    state.phase === 'ready' &&
-    !localWorkspacesLoading &&
-    (!state.linkedIssue || !remoteWorkspacesLoading);
+    state.phase === 'ready' && !localWorkspacesLoading;
 
   const { preferredRepos, preferredExecutorConfig, hasResolvedPreferredRepos } =
     useWorkspaceCreateDefaults({
@@ -365,7 +314,6 @@ export function useCreateModeState({
   const hasResolvedInitialRepoDefaults =
     (state.phase === 'ready' &&
       !localWorkspacesLoading &&
-      (!state.linkedIssue || !remoteWorkspacesLoading) &&
       hasResolvedPreferredRepos &&
       (preferredRepos.length === 0 ||
         state.repos.length > 0 ||
@@ -545,33 +493,6 @@ export function useCreateModeState({
     state.attachments,
     debouncedSave,
   ]);
-
-  // ============================================================================
-  // Resolve linked issue details from Electric (when simpleId/title are missing)
-  // ============================================================================
-  const needsIssueResolution =
-    !!state.linkedIssue && !state.linkedIssue.simpleId;
-  const issueProjectId = state.linkedIssue?.remoteProjectId ?? '';
-
-  const { data: issuesForResolution } = useShape(
-    PROJECT_ISSUES_SHAPE,
-    { project_id: issueProjectId },
-    { enabled: needsIssueResolution && !!issueProjectId }
-  );
-
-  useEffect(() => {
-    if (!needsIssueResolution || !state.linkedIssue) return;
-    const issue = issuesForResolution.find(
-      (i) => i.id === state.linkedIssue!.issueId
-    );
-    if (issue) {
-      dispatch({
-        type: 'RESOLVE_LINKED_ISSUE',
-        simpleId: issue.simple_id,
-        title: issue.title,
-      });
-    }
-  }, [needsIssueResolution, issuesForResolution, state.linkedIssue]);
 
   // ============================================================================
   // Derived state

@@ -1,13 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useParams } from '@tanstack/react-router';
 import { useTranslation } from 'react-i18next';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
-import { useUserContext } from '@/shared/hooks/useUserContext';
 import { useScratch } from '@/shared/hooks/useScratch';
-import { useAllOrganizationProjects } from '@/shared/hooks/useAllOrganizationProjects';
-import { useUserOrganizations } from '@/shared/hooks/useUserOrganizations';
 import { ScratchType, type DraftWorkspaceData } from 'shared/types';
-import type { Project } from 'shared/remote-types';
 import { splitMessageToTitleDescription } from '@/shared/lib/string';
 import { cn } from '@/shared/lib/utils';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
@@ -21,15 +16,10 @@ import {
 } from '@/shared/stores/useUiPreferencesStore';
 import type { Workspace } from '@/shared/hooks/useWorkspaces';
 import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog';
-import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import {
   WorkspacesSidebar,
   type WorkspacesSidebarPersistKeys,
 } from '@vibe/ui/components/WorkspacesSidebar';
-import {
-  MultiSelectDropdown,
-  type MultiSelectDropdownOption,
-} from '@vibe/ui/components/MultiSelectDropdown';
 import { PropertyDropdown } from '@vibe/ui/components/PropertyDropdown';
 import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
 import { IconButton } from '@vibe/ui/components/IconButton';
@@ -46,13 +36,11 @@ import {
 } from '@vibe/ui/components/Dialog';
 import {
   FunnelIcon,
-  FolderIcon,
   GitPullRequestIcon,
   SortAscendingIcon,
   SortDescendingIcon,
   XIcon,
 } from '@phosphor-icons/react';
-import { useRemoteCloudHostsAppBarModel } from '@/shared/hooks/useRemoteCloudHosts';
 
 export type WorkspaceLayoutMode = 'flat' | 'accordion';
 
@@ -60,7 +48,6 @@ export type WorkspaceLayoutMode = 'flat' | 'accordion';
 const DRAFT_WORKSPACE_ID = '00000000-0000-0000-0000-000000000001';
 
 const PAGE_SIZE = 50;
-const NO_PROJECT_ID = '__no_project__';
 const DEFAULT_WORKSPACE_SORT = {
   sortBy: 'updated_at' as WorkspaceSortBy,
   sortOrder: 'desc' as WorkspaceSortOrder,
@@ -154,11 +141,8 @@ function WorkspacesSortDialog({
 interface WorkspacesFilterDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projectOptions: MultiSelectDropdownOption<string>[];
-  projectIds: string[];
   prFilter: WorkspacePrFilter;
   hasActiveFilters: boolean;
-  onProjectFilterChange: (projectIds: string[]) => void;
   onPrFilterChange: (prFilter: WorkspacePrFilter) => void;
   onClearFilters: () => void;
 }
@@ -166,11 +150,8 @@ interface WorkspacesFilterDialogProps {
 function WorkspacesFilterDialog({
   open,
   onOpenChange,
-  projectOptions,
-  projectIds,
   prFilter,
   hasActiveFilters,
-  onProjectFilterChange,
   onPrFilterChange,
   onClearFilters,
 }: WorkspacesFilterDialogProps) {
@@ -192,13 +173,6 @@ function WorkspacesFilterDialog({
 
         <div className="px-double py-double">
           <div className="flex flex-col items-start gap-base">
-            <MultiSelectDropdown
-              values={projectIds}
-              options={projectOptions}
-              onChange={onProjectFilterChange}
-              icon={FolderIcon}
-              label={t('kanban.workspaceSidebar.projectFilterLabel')}
-            />
             <PropertyDropdown
               value={prFilter}
               options={PR_FILTER_OPTIONS.map((option) => ({
@@ -265,8 +239,6 @@ export function WorkspacesSidebarContainer({
   } = useWorkspaceContext();
 
   const isMobile = useIsMobile();
-  const { hosts: remoteCloudHosts } = useRemoteCloudHostsAppBarModel();
-  const { hostId: routeHostId } = useParams({ strict: false });
   const setMobileActiveTab = useUiPreferencesStore((s) => s.setMobileActiveTab);
   const [searchQuery, setSearchQuery] = useState('');
   const [showArchive, setShowArchive] = usePersistedExpanded(
@@ -290,9 +262,6 @@ export function WorkspacesSidebarContainer({
 
   // Workspace sidebar filters + sort
   const workspaceFilters = useUiPreferencesStore((s) => s.workspaceFilters);
-  const setWorkspaceProjectFilter = useUiPreferencesStore(
-    (s) => s.setWorkspaceProjectFilter
-  );
   const setWorkspacePrFilter = useUiPreferencesStore(
     (s) => s.setWorkspacePrFilter
   );
@@ -305,87 +274,7 @@ export function WorkspacesSidebarContainer({
     (s) => s.setWorkspaceSortOrder
   );
 
-  // Remote data for project filter (all orgs)
-  const { workspaces: remoteWorkspaces } = useUserContext();
-  const { data: allRemoteProjects } = useAllOrganizationProjects();
-  const { data: orgsData } = useUserOrganizations();
-  const organizations = useMemo(
-    () => orgsData?.organizations ?? [],
-    [orgsData?.organizations]
-  );
-
-  // Map local workspace ID → remote project ID
-  const remoteProjectByLocalId = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const rw of remoteWorkspaces) {
-      if (rw.local_workspace_id) {
-        map.set(rw.local_workspace_id, rw.project_id);
-      }
-    }
-    return map;
-  }, [remoteWorkspaces]);
-
-  // Build org name lookup
-  const orgNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const org of organizations) {
-      map.set(org.id, org.name);
-    }
-    return map;
-  }, [organizations]);
-
-  // Group projects by org, only including projects with linked workspaces
-  const projectGroups = useMemo(() => {
-    const linkedProjectIds = new Set(remoteProjectByLocalId.values());
-    const relevant = allRemoteProjects.filter((p) =>
-      linkedProjectIds.has(p.id)
-    );
-
-    const groupMap = new Map<string, Project[]>();
-    for (const project of relevant) {
-      const arr = groupMap.get(project.organization_id) ?? [];
-      arr.push(project);
-      groupMap.set(project.organization_id, arr);
-    }
-
-    return Array.from(groupMap.entries())
-      .map(([orgId, projects]) => ({
-        orgId,
-        orgName: orgNameById.get(orgId) ?? 'Unknown',
-        projects: projects.sort((a, b) => a.name.localeCompare(b.name)),
-      }))
-      .sort((a, b) => a.orgName.localeCompare(b.orgName));
-  }, [allRemoteProjects, remoteProjectByLocalId, orgNameById]);
-
-  // Build flat project options for MultiSelectDropdown
-  const projectOptions = useMemo<MultiSelectDropdownOption<string>[]>(
-    () => [
-      {
-        value: NO_PROJECT_ID,
-        label: t('kanban.workspaceSidebar.noProject'),
-      },
-      ...projectGroups.flatMap((g) =>
-        g.projects.map((p) => ({
-          value: p.id,
-          label: p.name,
-          renderOption: () => (
-            <div className="flex items-center gap-base">
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: `hsl(${p.color})` }}
-              />
-              {p.name}
-            </div>
-          ),
-        }))
-      ),
-    ],
-    [projectGroups, t]
-  );
-
-  const hasActiveFilters =
-    workspaceFilters.projectIds.length > 0 ||
-    workspaceFilters.prFilter !== 'all';
+  const hasActiveFilters = workspaceFilters.prFilter !== 'all';
   const hasNonDefaultSort =
     workspaceSort.sortBy !== DEFAULT_WORKSPACE_SORT.sortBy ||
     workspaceSort.sortOrder !== DEFAULT_WORKSPACE_SORT.sortOrder;
@@ -401,23 +290,9 @@ export function WorkspacesSidebarContainer({
   const searchLower = searchQuery.toLowerCase();
   const isSearching = searchQuery.length > 0;
 
-  // Apply sidebar filters (project + PR), then search
+  // Apply sidebar PR filter, then search
   const filteredActiveWorkspaces = useMemo(() => {
     let result = activeWorkspaces;
-
-    // Project filter
-    if (workspaceFilters.projectIds.length > 0) {
-      const includeNoProject =
-        workspaceFilters.projectIds.includes(NO_PROJECT_ID);
-      const realProjectIds = workspaceFilters.projectIds.filter(
-        (id) => id !== NO_PROJECT_ID
-      );
-      result = result.filter((ws) => {
-        const projectId = remoteProjectByLocalId.get(ws.id);
-        if (!projectId) return includeNoProject;
-        return realProjectIds.includes(projectId);
-      });
-    }
 
     // PR filter
     if (workspaceFilters.prFilter === 'has_pr') {
@@ -436,23 +311,10 @@ export function WorkspacesSidebarContainer({
     }
 
     return result;
-  }, [activeWorkspaces, workspaceFilters, remoteProjectByLocalId, searchLower]);
+  }, [activeWorkspaces, workspaceFilters, searchLower]);
 
   const filteredArchivedWorkspaces = useMemo(() => {
     let result = archivedWorkspaces;
-
-    if (workspaceFilters.projectIds.length > 0) {
-      const includeNoProject =
-        workspaceFilters.projectIds.includes(NO_PROJECT_ID);
-      const realProjectIds = workspaceFilters.projectIds.filter(
-        (id) => id !== NO_PROJECT_ID
-      );
-      result = result.filter((ws) => {
-        const projectId = remoteProjectByLocalId.get(ws.id);
-        if (!projectId) return includeNoProject;
-        return realProjectIds.includes(projectId);
-      });
-    }
 
     if (workspaceFilters.prFilter === 'has_pr') {
       result = result.filter((ws) => !!ws.prStatus);
@@ -469,12 +331,7 @@ export function WorkspacesSidebarContainer({
     }
 
     return result;
-  }, [
-    archivedWorkspaces,
-    workspaceFilters,
-    remoteProjectByLocalId,
-    searchLower,
-  ]);
+  }, [archivedWorkspaces, workspaceFilters, searchLower]);
 
   const sortWorkspaces = useCallback(
     (workspaces: Workspace[]) =>
@@ -651,31 +508,13 @@ export function WorkspacesSidebarContainer({
       <WorkspacesFilterDialog
         open={isFilterDialogOpen}
         onOpenChange={setIsFilterDialogOpen}
-        projectOptions={projectOptions}
-        projectIds={workspaceFilters.projectIds}
         prFilter={workspaceFilters.prFilter}
         hasActiveFilters={hasActiveFilters}
-        onProjectFilterChange={setWorkspaceProjectFilter}
         onPrFilterChange={setWorkspacePrFilter}
         onClearFilters={clearWorkspaceFilters}
       />
     </>
   );
-
-  const activeRemoteHost = useMemo(() => {
-    if (remoteCloudHosts.length === 0 || !routeHostId) {
-      return null;
-    }
-
-    return remoteCloudHosts.find((host) => host.id === routeHostId) ?? null;
-  }, [routeHostId, remoteCloudHosts]);
-
-  const handleOpenRemoteHostSettings = useCallback(() => {
-    void SettingsDialog.show({
-      initialSection: 'relay',
-      ...(routeHostId ? { initialState: { hostId: routeHostId } } : {}),
-    });
-  }, [routeHostId]);
 
   return (
     <WorkspacesSidebar
@@ -700,8 +539,6 @@ export function WorkspacesSidebarContainer({
       searchControls={searchControls}
       onOpenWorkspaceActions={handleOpenWorkspaceActions}
       persistKeys={sidebarPersistKeys}
-      activeRemoteHost={activeRemoteHost}
-      onOpenRemoteHostSettings={handleOpenRemoteHostSettings}
     />
   );
 }

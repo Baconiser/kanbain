@@ -23,7 +23,7 @@ const localesDir = path.join(
   ROOT,
   'packages/web-core/src/i18n/locales/en',
 );
-const namespaces = ['common', 'settings', 'projects', 'tasks', 'organization'];
+const namespaces = ['common', 'settings', 'projects', 'tasks'];
 const srcDirs = [
   'packages/web-core/src',
   'packages/local-web/src',

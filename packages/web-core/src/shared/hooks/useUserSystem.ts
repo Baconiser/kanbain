@@ -1,11 +1,6 @@
 import { useContext } from 'react';
 import { createHmrContext } from '@/shared/lib/hmrContext';
-import type {
-  Config,
-  Environment,
-  BaseAgentCapability,
-  LoginStatus,
-} from 'shared/types';
+import type { Config, Environment, BaseAgentCapability } from 'shared/types';
 import type { ExecutorProfile } from 'shared/types';
 
 export interface UserSystemState {
@@ -15,9 +10,6 @@ export interface UserSystemState {
   environment: Environment | null;
   profiles: Record<string, ExecutorProfile> | null;
   capabilities: Record<string, BaseAgentCapability[]> | null;
-  machineId: string | null;
-  loginStatus: LoginStatus | null;
-  remoteAuthDegraded: string | null;
 }
 
 export interface UserSystemContextType {
@@ -36,9 +28,6 @@ export interface UserSystemContextType {
   environment: Environment | null;
   profiles: Record<string, ExecutorProfile> | null;
   capabilities: Record<string, BaseAgentCapability[]> | null;
-  machineId: string | null;
-  loginStatus: LoginStatus | null;
-  remoteAuthDegraded: string | null;
   setEnvironment: (env: Environment | null) => void;
   setProfiles: (profiles: Record<string, ExecutorProfile> | null) => void;
   setCapabilities: (caps: Record<string, BaseAgentCapability[]> | null) => void;

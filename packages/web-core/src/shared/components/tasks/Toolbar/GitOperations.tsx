@@ -34,7 +34,6 @@ interface GitOperationsProps {
   isAttemptRunning: boolean;
   selectedBranch: string | null;
   layout?: 'horizontal' | 'vertical';
-  issueIdentifier?: string;
 }
 
 export type GitOperationsInputs = Omit<GitOperationsProps, 'selectedAttempt'>;
@@ -46,7 +45,6 @@ function GitOperations({
   isAttemptRunning,
   selectedBranch,
   layout = 'horizontal',
-  issueIdentifier,
 }: GitOperationsProps) {
   const { t } = useTranslation('tasks');
 
@@ -252,7 +250,6 @@ function GitOperations({
       attempt: selectedAttempt,
       repoId: getSelectedRepoId(),
       targetBranch: getSelectedRepoStatus()?.target_branch_name,
-      issueIdentifier,
     });
   };
 

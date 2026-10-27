@@ -5,31 +5,14 @@ import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 
 interface CreateWorkspaceParams {
   data: CreateAndStartWorkspaceRequest;
-  linkToIssue?: {
-    remoteProjectId: string;
-    issueId: string;
-  };
 }
 
 export function useCreateWorkspace() {
   const queryClient = useQueryClient();
 
   const createWorkspace = useMutation({
-    mutationFn: async ({ data, linkToIssue }: CreateWorkspaceParams) => {
+    mutationFn: async ({ data }: CreateWorkspaceParams) => {
       const { workspace } = await workspacesApi.createAndStart(data);
-
-      if (linkToIssue && workspace) {
-        try {
-          await workspacesApi.linkToIssue(
-            workspace.id,
-            linkToIssue.remoteProjectId,
-            linkToIssue.issueId
-          );
-        } catch (linkError) {
-          console.error('Failed to link workspace to issue:', linkError);
-        }
-      }
-
       return { workspace };
     },
     onSuccess: () => {

@@ -40,23 +40,8 @@ import {
   ExecutorConfig,
   DraftFollowUpData,
   AgentPresetOptionsQuery,
-  RunAgentSetupRequest,
-  RunAgentSetupResponse,
   GhCliSetupError,
   RunScriptError,
-  StatusResponse,
-  CreateOrganizationRequest,
-  CreateOrganizationResponse,
-  ListOrganizationsResponse,
-  OrganizationMemberWithProfile,
-  ListMembersResponse,
-  CreateInvitationRequest,
-  CreateInvitationResponse,
-  RevokeInvitationRequest,
-  UpdateMemberRoleRequest,
-  UpdateMemberRoleResponse,
-  Invitation,
-  ListInvitationsResponse,
   OpenEditorResponse,
   OpenEditorRequest,
   PrError,
@@ -65,8 +50,6 @@ import {
   CreateScratch,
   UpdateScratch,
   PushError,
-  TokenResponse,
-  CurrentUserResponse,
   QueueStatus,
   PrCommentsResponse,
   MergeWorkspaceRequest,
@@ -81,7 +64,6 @@ import {
   GitRemote,
   ListPrsError,
   PullRequestDetail,
-  LinkPrToIssueRequest,
   AttachExistingPrRequest,
   AttachPrResponse,
   CreateWorkspaceFromPrBody,
@@ -89,23 +71,10 @@ import {
   CreateFromPrError,
   CreateAndStartWorkspaceRequest,
   CreateAndStartWorkspaceResponse,
-  RelayPairedClient,
-  ListRelayPairedClientsResponse,
-  RemoveRelayPairedClientResponse,
-  PairRelayHostRequest,
-  PairRelayHostResponse,
-  RelayPairedHost,
-  ListRelayPairedHostsResponse,
-  RemoveRelayPairedHostResponse,
-  OpenRemoteWorkspaceInEditorRequest,
-  OpenRemoteEditorResponse,
-  ProfileResponse,
 } from 'shared/types';
-import type { Project as RemoteProject } from 'shared/remote-types';
 import type { WorkspaceWithSession } from '@/shared/types/attempt';
 import { createWorkspaceWithSession } from '@/shared/types/attempt';
 import { resolveHostRequestScope } from '@/shared/lib/hostRequestScope';
-import { makeRequest as makeRemoteRequest } from '@/shared/lib/remoteApi';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
 
 export class ApiError<E = unknown> extends Error {
@@ -178,31 +147,6 @@ export type Err<E> = { success: false; error: E | undefined; message?: string };
 
 // Result type for endpoints that need typed errors
 export type Result<T, E> = Ok<T> | Err<E>;
-
-type ListRemoteProjectsResponse = {
-  projects: RemoteProject[];
-};
-
-export type OrganizationBillingStatus =
-  'free' | 'active' | 'past_due' | 'cancelled' | 'requires_subscription';
-
-export interface OrganizationBillingStatusResponse {
-  status: OrganizationBillingStatus;
-  billing_enabled: boolean;
-  can_manage_billing: boolean;
-  seat_info: {
-    current_members: number;
-    free_seats: number;
-    requires_subscription: boolean;
-    subscription: {
-      status: string;
-      current_period_end: string;
-      cancel_at_period_end: boolean;
-      quantity: number;
-      unit_amount: number;
-    } | null;
-  } | null;
-}
 
 // Special handler for Result-returning endpoints
 const handleApiResponseAsResult = async <T, E>(
@@ -466,39 +410,6 @@ export const workspacesApi = {
       method: 'DELETE',
     });
     return handleApiResponse<void>(response);
-  },
-
-  linkToIssue: async (
-    workspaceId: string,
-    projectId: string,
-    issueId: string
-  ): Promise<void> => {
-    const response = await makeRequest(`/api/workspaces/${workspaceId}/links`, {
-      method: 'POST',
-      body: JSON.stringify({ project_id: projectId, issue_id: issueId }),
-    });
-    return handleApiResponse<void>(response);
-  },
-
-  unlinkFromIssue: async (workspaceId: string): Promise<void> => {
-    const response = await makeRequest(`/api/workspaces/${workspaceId}/links`, {
-      method: 'DELETE',
-    });
-    return handleApiResponse<void>(response);
-  },
-
-  runAgentSetup: async (
-    workspaceId: string,
-    data: RunAgentSetupRequest
-  ): Promise<RunAgentSetupResponse> => {
-    const response = await makeRequest(
-      `/api/workspaces/${workspaceId}/integration/agent/setup`,
-      {
-        method: 'POST',
-        body: JSON.stringify(data),
-      }
-    );
-    return handleApiResponse<RunAgentSetupResponse>(response);
   },
 
   openEditor: async (
@@ -962,26 +873,6 @@ export const repoApi = {
   },
 };
 
-// Issue PR linking APIs
-export const issuePrsApi = {
-  getPrInfo: async (
-    url: string
-  ): Promise<Result<PullRequestDetail, ListPrsError>> => {
-    const response = await makeRequest(
-      `/api/repos/pr-info?url=${encodeURIComponent(url)}`
-    );
-    return handleApiResponseAsResult<PullRequestDetail, ListPrsError>(response);
-  },
-
-  linkToIssue: async (data: LinkPrToIssueRequest): Promise<void> => {
-    const response = await makeRequest('/api/remote/pull-requests/link', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-    await handleApiResponse<void>(response);
-  },
-};
-
 // Config APIs (backwards compatible)
 export const configApi = {
   getConfig: async (hostId?: string | null): Promise<UserSystemInfo> => {
@@ -1233,255 +1124,6 @@ export const approvalsApi = {
   },
 };
 
-// OAuth API
-export type AuthMethodsResponse = {
-  local_auth_enabled: boolean;
-  oauth_providers: string[];
-};
-
-export const oauthApi = {
-  authMethods: async (): Promise<AuthMethodsResponse> => {
-    const response = await makeRequest('/api/auth/methods', {
-      cache: 'no-store',
-    });
-    return handleApiResponse<AuthMethodsResponse>(response);
-  },
-
-  handoffInit: async (
-    provider: string,
-    returnTo: string
-  ): Promise<{ handoff_id: string; authorize_url: string }> => {
-    const response = await makeRequest('/api/auth/handoff/init', {
-      method: 'POST',
-      body: JSON.stringify({ provider, return_to: returnTo }),
-    });
-    return handleApiResponse<{ handoff_id: string; authorize_url: string }>(
-      response
-    );
-  },
-
-  status: async (): Promise<StatusResponse> => {
-    const response = await makeRequest('/api/auth/status', {
-      cache: 'no-store',
-    });
-    return handleApiResponse<StatusResponse>(response);
-  },
-
-  localLogin: async (
-    email: string,
-    password: string
-  ): Promise<ProfileResponse> => {
-    const response = await makeRequest('/api/auth/local/login', {
-      method: 'POST',
-      body: JSON.stringify({ email, password }),
-    });
-    return handleApiResponse<ProfileResponse>(response);
-  },
-
-  logout: async (): Promise<void> => {
-    const response = await makeRequest('/api/auth/logout', {
-      method: 'POST',
-    });
-    if (!response.ok) {
-      throw new ApiError(
-        `Logout failed with status ${response.status}`,
-        response.status,
-        response
-      );
-    }
-  },
-
-  /** Returns the current access token for the remote server (auto-refreshes if needed) */
-  getToken: async (): Promise<TokenResponse> => {
-    const response = await makeRequest('/api/auth/token');
-    if (response.status === 401) {
-      throw new ApiError('Unauthorized', 401, response);
-    }
-    return handleApiResponse<TokenResponse>(response);
-  },
-
-  /** Returns the user ID of the currently authenticated user */
-  getCurrentUser: async (): Promise<CurrentUserResponse> => {
-    const response = await makeRequest('/api/auth/user');
-    return handleApiResponse<CurrentUserResponse>(response);
-  },
-};
-
-/**
- * @deprecated Use `tokenManager.getToken()` from
- * `@/shared/lib/auth/tokenManager` instead.
- * This function does not handle 401 responses or token refresh coordination.
- */
-export async function getCachedToken(): Promise<string | null> {
-  const { tokenManager } = await import('@/shared/lib/auth/tokenManager');
-  return tokenManager.getToken();
-}
-
-const handleRemoteResponse = async <T>(response: Response): Promise<T> => {
-  if (!response.ok) {
-    let errorMessage = `Request failed with status ${response.status}`;
-
-    try {
-      const body = (await response.json()) as {
-        error?: string;
-        message?: string;
-      };
-      errorMessage = body.error || body.message || errorMessage;
-    } catch {
-      errorMessage = response.statusText || errorMessage;
-    }
-
-    throw new ApiError(errorMessage, response.status, response);
-  }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
-};
-
-// Organizations API
-export const organizationsApi = {
-  getMembers: async (
-    orgId: string
-  ): Promise<OrganizationMemberWithProfile[]> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/members`
-    );
-    const result = await handleRemoteResponse<ListMembersResponse>(response);
-    return result.members;
-  },
-
-  getUserOrganizations: async (): Promise<ListOrganizationsResponse> => {
-    const response = await makeRemoteRequest('/v1/organizations');
-    return handleRemoteResponse<ListOrganizationsResponse>(response);
-  },
-
-  createOrganization: async (
-    data: CreateOrganizationRequest
-  ): Promise<CreateOrganizationResponse> => {
-    const response = await makeRemoteRequest('/v1/organizations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return handleRemoteResponse<CreateOrganizationResponse>(response);
-  },
-
-  createInvitation: async (
-    orgId: string,
-    data: CreateInvitationRequest
-  ): Promise<CreateInvitationResponse> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/invitations`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }
-    );
-    return handleRemoteResponse<CreateInvitationResponse>(response);
-  },
-
-  removeMember: async (orgId: string, userId: string): Promise<void> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/members/${userId}`,
-      {
-        method: 'DELETE',
-      }
-    );
-    return handleRemoteResponse<void>(response);
-  },
-
-  updateMemberRole: async (
-    orgId: string,
-    userId: string,
-    data: UpdateMemberRoleRequest
-  ): Promise<UpdateMemberRoleResponse> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/members/${userId}/role`,
-      {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      }
-    );
-    return handleRemoteResponse<UpdateMemberRoleResponse>(response);
-  },
-
-  listInvitations: async (orgId: string): Promise<Invitation[]> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/invitations`
-    );
-    const result =
-      await handleRemoteResponse<ListInvitationsResponse>(response);
-    return result.invitations;
-  },
-
-  revokeInvitation: async (
-    orgId: string,
-    invitationId: string
-  ): Promise<void> => {
-    const body: RevokeInvitationRequest = { invitation_id: invitationId };
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/invitations/revoke`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }
-    );
-    return handleRemoteResponse<void>(response);
-  },
-
-  getBillingStatus: async (
-    orgId: string
-  ): Promise<OrganizationBillingStatusResponse> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/billing`
-    );
-    return handleRemoteResponse<OrganizationBillingStatusResponse>(response);
-  },
-
-  createPortalSession: async (
-    orgId: string,
-    returnUrl: string
-  ): Promise<{ url: string }> => {
-    const response = await makeRemoteRequest(
-      `/v1/organizations/${orgId}/billing/portal`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          return_url: returnUrl,
-        }),
-      }
-    );
-    return handleRemoteResponse<{ url: string }>(response);
-  },
-
-  deleteOrganization: async (orgId: string): Promise<void> => {
-    const response = await makeRemoteRequest(`/v1/organizations/${orgId}`, {
-      method: 'DELETE',
-    });
-    return handleRemoteResponse<void>(response);
-  },
-};
-
-export const remoteProjectsApi = {
-  listByOrganization: async (
-    organizationId: string
-  ): Promise<RemoteProject[]> => {
-    const response = await makeRequest(
-      `/api/remote/projects?organization_id=${encodeURIComponent(organizationId)}`
-    );
-    const result =
-      await handleApiResponse<ListRemoteProjectsResponse>(response);
-    return result.projects;
-  },
-};
-
 // Scratch API
 export const scratchApi = {
   create: async (
@@ -1584,97 +1226,6 @@ export const queueApi = {
   getStatus: async (sessionId: string): Promise<QueueStatus> => {
     const response = await makeRequest(`/api/sessions/${sessionId}/queue`);
     return handleApiResponse<QueueStatus>(response);
-  },
-};
-
-// Relay API
-export const relayApi = {
-  getEnrollmentCode: async (): Promise<{ enrollment_code: string }> => {
-    const response = await makeRequest(
-      '/api/relay-auth/server/enrollment-code',
-      {
-        method: 'POST',
-      }
-    );
-    return handleApiResponse<{ enrollment_code: string }>(response);
-  },
-
-  listPairedClients: async (): Promise<RelayPairedClient[]> => {
-    const response = await makeRequest('/api/relay-auth/server/clients');
-    const body =
-      await handleApiResponse<ListRelayPairedClientsResponse>(response);
-    return body.clients;
-  },
-
-  removePairedClient: async (
-    clientId: string
-  ): Promise<RemoveRelayPairedClientResponse> => {
-    const response = await makeRequest(
-      `/api/relay-auth/server/clients/${encodeURIComponent(clientId)}`,
-      {
-        method: 'DELETE',
-      }
-    );
-    return handleApiResponse<RemoveRelayPairedClientResponse>(response);
-  },
-
-  pairRelayHost: async (
-    payload: PairRelayHostRequest
-  ): Promise<PairRelayHostResponse> => {
-    const response = await makeRequest('/api/relay-auth/client/pair', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    return handleApiResponse<PairRelayHostResponse>(response);
-  },
-
-  listPairedRelayHosts: async (): Promise<RelayPairedHost[]> => {
-    const response = await makeRequest('/api/relay-auth/client/hosts');
-    const body =
-      await handleApiResponse<ListRelayPairedHostsResponse>(response);
-    return body.hosts;
-  },
-
-  removePairedRelayHost: async (
-    hostId: string
-  ): Promise<RemoveRelayPairedHostResponse> => {
-    const response = await makeRequest(
-      `/api/relay-auth/client/hosts/${encodeURIComponent(hostId)}`,
-      {
-        method: 'DELETE',
-      }
-    );
-    return handleApiResponse<RemoveRelayPairedHostResponse>(response);
-  },
-
-  openRemoteWorkspaceInEditor: async (
-    payload: OpenRemoteWorkspaceInEditorRequest
-  ): Promise<OpenRemoteEditorResponse> => {
-    const response = await makeRequest('/api/open-remote-editor/workspace', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
-    return handleApiResponse<OpenRemoteEditorResponse>(response);
-  },
-};
-
-// Releases API (GitHub releases proxy)
-export interface GitHubRelease {
-  name: string;
-  tag_name: string;
-  published_at: string;
-  body: string;
-}
-
-interface ReleasesResponse {
-  releases: GitHubRelease[];
-}
-
-export const releasesApi = {
-  list: async (): Promise<GitHubRelease[]> => {
-    const response = await makeRequest('/api/releases');
-    const result = await handleApiResponse<ReleasesResponse>(response);
-    return result.releases;
   },
 };
 

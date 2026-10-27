@@ -1,36 +1,27 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { CaretLeftIcon, PlusIcon, XIcon } from '@phosphor-icons/react';
+import { CaretLeftIcon, XIcon } from '@phosphor-icons/react';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
 
 import { cn } from '@/shared/lib/utils';
 import { SettingsSection } from './settings/SettingsSection';
-import { SettingsSelect } from './settings/SettingsComponents';
 import type {
   SettingsSectionType,
   SettingsSectionInitialState,
 } from './settings/SettingsSection';
-import {
-  SETTINGS_SECTION_DEFINITIONS,
-  isHostSpecificSettingsSection,
-} from './settings/settingsRegistry';
+import { SETTINGS_SECTION_DEFINITIONS } from './settings/settingsRegistry';
 import {
   SettingsDirtyProvider,
   useSettingsDirty,
 } from './settings/SettingsDirtyContext';
-import {
-  SettingsHostProvider,
-  useSettingsHost,
-} from './settings/SettingsHostContext';
 import { SettingsMachineUserSystemProvider } from './settings/SettingsMachineUserSystemProvider';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
 
 export interface SettingsDialogProps {
   initialSection?: SettingsSectionType;
   initialState?: SettingsSectionInitialState[SettingsSectionType];
-  initialHostId?: string | 'local';
 }
 
 interface SettingsDialogContentProps {
@@ -47,33 +38,6 @@ function SettingsDialogNavigation({
   onSectionSelect: (sectionId: SettingsSectionType) => void;
 }) {
   const { t } = useTranslation('settings');
-  const {
-    availableHosts,
-    hostsResolved,
-    selectedHost,
-    selectedHostId,
-    setSelectedHostId,
-  } = useSettingsHost();
-  const hostSections = SETTINGS_SECTION_DEFINITIONS.filter(
-    (section) => section.group === 'host'
-  );
-  const universalSections = SETTINGS_SECTION_DEFINITIONS.filter(
-    (section) => section.group === 'universal'
-  );
-  const hostOptions = availableHosts.map((host) => ({
-    value: host.id,
-    label: host.status != null ? `${host.label} (${host.status})` : host.label,
-  }));
-  const hostSettingsDisabled = !hostsResolved || !selectedHost;
-  const hostHint = !hostsResolved
-    ? t('settings.general.loading')
-    : availableHosts.length === 0
-      ? t('settings.hostPicker.pairMachineHint')
-      : t('settings.hostPicker.selectMachineHint');
-
-  const handlePairOtherMachines = () => {
-    onSectionSelect('relay');
-  };
 
   const renderSectionButton = (sectionId: SettingsSectionType) => {
     const section = SETTINGS_SECTION_DEFINITIONS.find(
@@ -82,22 +46,16 @@ function SettingsDialogNavigation({
     if (!section) return null;
     const Icon = section.icon;
     const isActive = activeSection === section.id;
-    const isDisabled =
-      isHostSpecificSettingsSection(section.id) && hostSettingsDisabled;
     return (
       <button
         key={section.id}
         type="button"
         onClick={() => onSectionSelect(section.id)}
-        disabled={isDisabled}
-        aria-disabled={isDisabled}
         className={cn(
           'flex items-center gap-3 text-left px-3 py-2 rounded-sm text-sm transition-colors',
-          isDisabled
-            ? 'text-low opacity-50 cursor-not-allowed'
-            : isActive
-              ? 'bg-brand/10 text-brand font-medium'
-              : 'text-normal hover:bg-primary/10'
+          isActive
+            ? 'bg-brand/10 text-brand font-medium'
+            : 'text-normal hover:bg-primary/10'
         )}
       >
         <Icon className="size-icon-sm shrink-0" weight="bold" />
@@ -109,45 +67,10 @@ function SettingsDialogNavigation({
   };
 
   return (
-    <nav className="flex-1 p-2 flex flex-col gap-4 overflow-y-auto">
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.machineSettings')}
-          </div>
-        </div>
-        <div className="px-2">
-          <SettingsSelect
-            value={selectedHostId ?? undefined}
-            options={hostOptions}
-            actions={[
-              {
-                label: t('settings.layout.nav.pairOtherMachines'),
-                icon: PlusIcon,
-                onClick: handlePairOtherMachines,
-              },
-            ]}
-            onChange={setSelectedHostId}
-            placeholder={t('settings.layout.nav.selectHost')}
-          />
-          {hostSettingsDisabled && (
-            <p className="mt-2 px-1 text-xs text-low">{hostHint}</p>
-          )}
-        </div>
-        <div className="flex flex-col gap-1">
-          {hostSections.map((section) => renderSectionButton(section.id))}
-        </div>
-      </div>
-      <div className="space-y-2">
-        <div className="px-3 pt-1">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-low">
-            {t('settings.layout.nav.accountSettings')}
-          </div>
-        </div>
-        <div className="flex flex-col gap-1">
-          {universalSections.map((section) => renderSectionButton(section.id))}
-        </div>
-      </div>
+    <nav className="flex-1 p-2 flex flex-col gap-1 overflow-y-auto">
+      {SETTINGS_SECTION_DEFINITIONS.map((section) =>
+        renderSectionButton(section.id)
+      )}
     </nav>
   );
 }
@@ -159,7 +82,6 @@ function SettingsDialogContent({
 }: SettingsDialogContentProps) {
   const { t } = useTranslation('settings');
   const { isDirty } = useSettingsDirty();
-  const { availableHosts, hostsResolved, selectedHost } = useSettingsHost();
 
   const resolvedInitialSection = useMemo<SettingsSectionType>(() => {
     if (
@@ -171,12 +93,8 @@ function SettingsDialogContent({
       return initialSection;
     }
 
-    if (hostsResolved && availableHosts.length === 0) {
-      return 'organizations';
-    }
-
     return 'general';
-  }, [availableHosts.length, hostsResolved, initialSection]);
+  }, [initialSection]);
 
   const [activeSection, setActiveSection] = useState<SettingsSectionType>(
     resolvedInitialSection
@@ -215,16 +133,6 @@ function SettingsDialogContent({
     setActiveSection(sectionId);
     setMobileShowContent(true);
   };
-
-  useEffect(() => {
-    if (
-      hostsResolved &&
-      isHostSpecificSettingsSection(activeSection) &&
-      availableHosts.length === 0
-    ) {
-      setActiveSection('organizations');
-    }
-  }, [activeSection, availableHosts.length, hostsResolved]);
 
   const handleMobileBack = () => {
     setMobileShowContent(false);
@@ -330,35 +238,13 @@ function SettingsDialogContent({
             </div>
             {/* Section content */}
             <div className="flex-1 overflow-y-auto">
-              {isHostSpecificSettingsSection(activeSection) ? (
-                selectedHost ? (
-                  <SettingsMachineUserSystemProvider>
-                    <SettingsSection
-                      type={activeSection}
-                      onClose={handleCloseWithConfirmation}
-                      initialState={initialState}
-                    />
-                  </SettingsMachineUserSystemProvider>
-                ) : !hostsResolved ? (
-                  <div className="px-6 py-8 text-sm text-low">
-                    {t('settings.general.loading')}
-                  </div>
-                ) : availableHosts.length > 0 ? (
-                  <div className="px-6 py-8 text-sm text-low">
-                    {t('settings.hostPicker.selectMachineHint')}
-                  </div>
-                ) : (
-                  <div className="px-6 py-8 text-sm text-low">
-                    {t('settings.hostPicker.noHostAvailable')}
-                  </div>
-                )
-              ) : (
+              <SettingsMachineUserSystemProvider>
                 <SettingsSection
                   type={activeSection}
                   onClose={handleCloseWithConfirmation}
                   initialState={initialState}
                 />
-              )}
+              </SettingsMachineUserSystemProvider>
             </div>
           </div>
         </div>
@@ -368,7 +254,7 @@ function SettingsDialogContent({
 }
 
 const SettingsDialogImpl = create<SettingsDialogProps>(
-  ({ initialSection, initialState, initialHostId }) => {
+  ({ initialSection, initialState }) => {
     const modal = useModal();
     const handleClose = useCallback(() => {
       modal.hide();
@@ -378,13 +264,11 @@ const SettingsDialogImpl = create<SettingsDialogProps>(
 
     return createPortal(
       <SettingsDirtyProvider>
-        <SettingsHostProvider initialHostId={initialHostId}>
-          <SettingsDialogContent
-            initialSection={initialSection}
-            initialState={initialState}
-            onClose={handleClose}
-          />
-        </SettingsHostProvider>
+        <SettingsDialogContent
+          initialSection={initialSection}
+          initialState={initialState}
+          onClose={handleClose}
+        />
       </SettingsDirtyProvider>,
       document.body
     );

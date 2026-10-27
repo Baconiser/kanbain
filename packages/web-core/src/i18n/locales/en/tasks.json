@@ -472,13 +472,6 @@
     "statusFailed": "Failed with exit code {{exitCode}}",
     "statusKilled": "Process was killed"
   },
-  "shareDialog": {
-    "loginRequired": {
-      "title": "Sign in required",
-      "description": "Sign in to access this feature.",
-      "action": "Sign in"
-    }
-  },
   "createWorkspaceFromPr": {
     "title": "Create Workspace from PR",
     "description": "Select an open pull request to create a workspace from. A task will be created automatically using the PR title.",
@@ -507,31 +500,6 @@
       "failedToLoadPrs": "Failed to load pull requests",
       "prNotFound": "Pull request not found",
       "failedToCreateWorkspace": "Failed to create workspace"
-    }
-  },
-  "linkPrToIssue": {
-    "title": "Link Pull Request",
-    "description": "Link an existing pull request to this issue.",
-    "urlTab": "From URL",
-    "browseTab": "Browse",
-    "urlLabel": "Pull Request URL",
-    "urlPlaceholder": "https://github.com/owner/repo/pull/123",
-    "repositoryLabel": "Repository",
-    "remoteLabel": "Remote",
-    "pullRequestLabel": "Pull Request",
-    "loadingPrInfo": "Loading PR info...",
-    "invalidUrl": "Could not load PR info from this URL",
-    "baseBranch": "Base:",
-    "linkPr": "Link PR",
-    "linking": "Linking...",
-    "status": {
-      "open": "Open",
-      "merged": "Merged",
-      "closed": "Closed",
-      "unknown": "Unknown"
-    },
-    "errors": {
-      "failed": "Failed to link PR. Please try again."
     }
   }
 }

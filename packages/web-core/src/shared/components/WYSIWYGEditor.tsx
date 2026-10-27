@@ -85,12 +85,18 @@ import {
   buildRepoSelectionPages,
   type RepoSelectionResult,
 } from '@/shared/dialogs/command-bar/selections/repoSelection';
-import { fetchAttachmentSasUrl } from '@/shared/lib/remoteApi';
 import { writeClipboardViaBridge } from '@/shared/lib/clipboard';
 import type { SendMessageShortcut } from 'shared/types';
 import type { BaseCodingAgent } from 'shared/types';
 
 /** Markdown string representing the editor content */
+
+// Attachment references pointed at cloud storage, which is gone. Local
+// attachments arrive with the SQLite ticket store.
+function fetchAttachmentUrl(): Promise<string> {
+  return Promise.reject(new Error('Attachments are not available yet'));
+}
+
 export type SerializedEditorState = string;
 
 type WysiwygProps = {
@@ -371,7 +377,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
     const imageNodeDefinition = useMemo(
       () =>
         createImageNode({
-          fetchAttachmentUrl: fetchAttachmentSasUrl,
+          fetchAttachmentUrl: fetchAttachmentUrl,
           openImagePreview: (options) => {
             ImagePreviewDialog.show(options);
           },
@@ -381,7 +387,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
     const attachmentNodeDefinition = useMemo(
       () =>
         createAttachmentNode({
-          fetchAttachmentUrl: fetchAttachmentSasUrl,
+          fetchAttachmentUrl: fetchAttachmentUrl,
         }),
       []
     );
