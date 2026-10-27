@@ -44,7 +44,6 @@ jobs:
             frontend:
               - 'packages/local-web/**'
               - 'packages/web-core/**'
-              - 'packages/remote-web/**'
               - 'packages/ui/**'
               - 'shared/**'
               - 'scripts/check-i18n.sh'
@@ -178,13 +177,11 @@ jobs:
         run: |
           npx concurrently \
             --kill-others-on-fail \
-            --names "local:lint,local:fmt,local:build,remote:fmt,remote:build,ui:check,ui:lint,ui:fmt,core:check,core:fmt,i18n,i18n:unused,legacy" \
+            --names "local:lint,local:fmt,local:build,ui:check,ui:lint,ui:fmt,core:check,core:fmt,i18n,i18n:unused,legacy" \
             --timings \
             "cd packages/local-web && npm run lint" \
             "cd packages/local-web && npm run format:check" \
             "cd packages/local-web && npm run build" \
-            "cd packages/remote-web && npm run format:check" \
-            "cd packages/remote-web && npm run build" \
             "cd packages/ui && npm run check" \
             "cd packages/ui && npm run lint" \
             "cd packages/ui && npm run format:check" \
