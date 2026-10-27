@@ -65,7 +65,6 @@ export const SEQUENCE_FIRST_KEYS = new Set([
   'y', // Yank/Copy
   't', // Toggle
   'r', // Run
-  'i', // Issue
 ]);
 
 /**
@@ -257,78 +256,6 @@ export const sequentialBindings: SequentialBinding[] = [
     group: 'Run',
     actionId: 'run-archive-script',
   },
-
-  // Issue (I)
-  {
-    id: 'seq-issue-create',
-    keys: ['i', 'c'],
-    description: 'Create Issue',
-    group: 'Issue',
-    actionId: 'create-issue',
-  },
-  {
-    id: 'seq-issue-status',
-    keys: ['i', 's'],
-    description: 'Change Status',
-    group: 'Issue',
-    actionId: 'change-issue-status',
-  },
-  {
-    id: 'seq-issue-priority',
-    keys: ['i', 'p'],
-    description: 'Change Priority',
-    group: 'Issue',
-    actionId: 'change-issue-priority',
-  },
-  {
-    id: 'seq-issue-assignees',
-    keys: ['i', 'a'],
-    description: 'Change Assignees',
-    group: 'Issue',
-    actionId: 'change-assignees',
-  },
-  {
-    id: 'seq-issue-make-sub-issue',
-    keys: ['i', 'm'],
-    description: 'Make Sub-issue of',
-    group: 'Issue',
-    actionId: 'make-sub-issue-of',
-  },
-  {
-    id: 'seq-issue-add-sub-issue',
-    keys: ['i', 'b'],
-    description: 'Add Sub-issue',
-    group: 'Issue',
-    actionId: 'add-sub-issue',
-  },
-  {
-    id: 'seq-issue-remove-parent',
-    keys: ['i', 'u'],
-    description: 'Remove Parent',
-    group: 'Issue',
-    actionId: 'remove-parent-issue',
-  },
-  {
-    id: 'seq-issue-link-workspace',
-    keys: ['i', 'w'],
-    description: 'Link Workspace',
-    group: 'Issue',
-    actionId: 'link-workspace',
-  },
-  {
-    id: 'seq-issue-duplicate',
-    keys: ['i', 'd'],
-    description: 'Duplicate Issue',
-    group: 'Issue',
-    actionId: 'duplicate-issue',
-  },
-  {
-    id: 'seq-issue-delete',
-    keys: ['i', 'x'],
-    description: 'Delete Issue',
-    group: 'Issue',
-    actionId: 'delete-issue',
-  },
 ];
 
 export const keyBindings: KeyBinding[] = [
@@ -350,13 +277,6 @@ export const keyBindings: KeyBinding[] = [
   {
     action: Action.EXIT,
     keys: 'esc',
-    scopes: [Scope.KANBAN],
-    description: 'Close panel or navigate to projects',
-    group: 'Navigation',
-  },
-  {
-    action: Action.EXIT,
-    keys: 'esc',
     scopes: [Scope.EDIT_COMMENT],
     description: 'Cancel comment',
     group: 'Comments',
@@ -369,22 +289,6 @@ export const keyBindings: KeyBinding[] = [
     group: 'Navigation',
   },
 
-  // Creation actions
-  {
-    action: Action.CREATE,
-    keys: 'c',
-    scopes: [Scope.KANBAN],
-    description: 'Create new task',
-    group: 'Kanban',
-  },
-  {
-    action: Action.CREATE,
-    keys: 'c',
-    scopes: [Scope.PROJECTS],
-    description: 'Create new project',
-    group: 'Projects',
-  },
-
   // Submit actions
   {
     action: Action.SUBMIT,
@@ -394,58 +298,6 @@ export const keyBindings: KeyBinding[] = [
     group: 'Dialog',
   },
 
-  // Navigation actions
-  {
-    action: Action.FOCUS_SEARCH,
-    keys: 'slash',
-    scopes: [Scope.KANBAN],
-    description: 'Focus search',
-    group: 'Navigation',
-  },
-  {
-    action: Action.NAV_UP,
-    keys: 'k',
-    scopes: [Scope.KANBAN],
-    description: 'Move up within column',
-    group: 'Navigation',
-  },
-  {
-    action: Action.NAV_DOWN,
-    keys: 'j',
-    scopes: [Scope.KANBAN],
-    description: 'Move down within column',
-    group: 'Navigation',
-  },
-  {
-    action: Action.NAV_LEFT,
-    keys: 'h',
-    scopes: [Scope.KANBAN],
-    description: 'Move to previous column',
-    group: 'Navigation',
-  },
-  {
-    action: Action.NAV_RIGHT,
-    keys: 'l',
-    scopes: [Scope.KANBAN],
-    description: 'Move to next column',
-    group: 'Navigation',
-  },
-  {
-    action: Action.OPEN_DETAILS,
-    keys: ['meta+enter', 'ctrl+enter'],
-    scopes: [Scope.KANBAN],
-    description:
-      'Open details; when open, cycle views forward (attempt → preview → diffs)',
-    group: 'Navigation',
-  },
-  {
-    action: Action.CYCLE_VIEW_BACKWARD,
-    keys: ['meta+shift+enter', 'ctrl+shift+enter'],
-    scopes: [Scope.KANBAN],
-    description: 'Cycle views backward (diffs → preview → attempt)',
-    group: 'Navigation',
-  },
-
   // Global actions
   {
     action: Action.SHOW_HELP,
@@ -453,15 +305,6 @@ export const keyBindings: KeyBinding[] = [
     scopes: [Scope.GLOBAL],
     description: 'Show keyboard shortcuts help',
     group: 'Global',
-  },
-
-  // Task actions
-  {
-    action: Action.DELETE_TASK,
-    keys: 'd',
-    scopes: [Scope.KANBAN],
-    description: 'Delete selected task',
-    group: 'Task Details',
   },
 
   // Approval actions

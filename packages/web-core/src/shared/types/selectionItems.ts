@@ -1,4 +1,4 @@
-import type { IssuePriority } from 'shared/remote-types';
+import type { IssuePriority } from 'shared/types';
 
 export interface RepoItem {
   id: string;
