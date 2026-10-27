@@ -41,7 +41,7 @@ struct WorkspaceContainerRefRow {
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
 pub struct Workspace {
     pub id: Uuid,
-    pub task_id: Option<Uuid>,
+    pub issue_id: Option<Uuid>,
     pub container_ref: Option<String>,
     pub branch: String,
     pub setup_completed_at: Option<DateTime<Utc>>,
@@ -85,6 +85,7 @@ pub struct WorkspaceContext {
 pub struct CreateWorkspace {
     pub branch: String,
     pub name: Option<String>,
+    pub issue_id: Option<Uuid>,
 }
 
 impl Workspace {
@@ -93,7 +94,7 @@ impl Workspace {
         let workspaces = sqlx::query_as!(
             Workspace,
             r#"SELECT id AS "id!: Uuid",
-                          task_id AS "task_id: Uuid",
+                          issue_id AS "issue_id: Uuid",
                           container_ref,
                           branch,
                           setup_completed_at AS "setup_completed_at: DateTime<Utc>",
@@ -195,7 +196,7 @@ impl Workspace {
         sqlx::query_as!(
             Workspace,
             r#"SELECT  id                AS "id!: Uuid",
-                       task_id           AS "task_id: Uuid",
+                       issue_id           AS "issue_id: Uuid",
                        container_ref,
                        branch,
                        setup_completed_at AS "setup_completed_at: DateTime<Utc>",
@@ -217,7 +218,7 @@ impl Workspace {
         sqlx::query_as!(
             Workspace,
             r#"SELECT  id                AS "id!: Uuid",
-                       task_id           AS "task_id: Uuid",
+                       issue_id           AS "issue_id: Uuid",
                        container_ref,
                        branch,
                        setup_completed_at AS "setup_completed_at: DateTime<Utc>",
@@ -260,7 +261,7 @@ impl Workspace {
             r#"
             SELECT
                 w.id as "id!: Uuid",
-                w.task_id as "task_id: Uuid",
+                w.issue_id as "issue_id: Uuid",
                 w.container_ref,
                 w.branch as "branch!",
                 w.setup_completed_at as "setup_completed_at: DateTime<Utc>",
@@ -315,11 +316,11 @@ impl Workspace {
     ) -> Result<Self, WorkspaceError> {
         Ok(sqlx::query_as!(
             Workspace,
-            r#"INSERT INTO workspaces (id, task_id, container_ref, branch, setup_completed_at, name)
+            r#"INSERT INTO workspaces (id, issue_id, container_ref, branch, setup_completed_at, name)
                VALUES ($1, $2, $3, $4, $5, $6)
-               RETURNING id as "id!: Uuid", task_id as "task_id: Uuid", container_ref, branch, setup_completed_at as "setup_completed_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>", archived as "archived!: bool", pinned as "pinned!: bool", name, worktree_deleted as "worktree_deleted!: bool""#,
+               RETURNING id as "id!: Uuid", issue_id as "issue_id: Uuid", container_ref, branch, setup_completed_at as "setup_completed_at: DateTime<Utc>", created_at as "created_at!: DateTime<Utc>", updated_at as "updated_at!: DateTime<Utc>", archived as "archived!: bool", pinned as "pinned!: bool", name, worktree_deleted as "worktree_deleted!: bool""#,
             id,
-            Option::<Uuid>::None,
+            data.issue_id,
             Option::<String>::None,
             data.branch,
             Option::<DateTime<Utc>>::None,
@@ -504,7 +505,7 @@ impl Workspace {
         let records = sqlx::query!(
             r#"SELECT
                 w.id AS "id!: Uuid",
-                w.task_id AS "task_id: Uuid",
+                w.issue_id AS "issue_id: Uuid",
                 w.container_ref,
                 w.branch,
                 w.setup_completed_at AS "setup_completed_at: DateTime<Utc>",
@@ -546,7 +547,7 @@ impl Workspace {
             .map(|rec| WorkspaceWithStatus {
                 workspace: Workspace {
                     id: rec.id,
-                    task_id: rec.task_id,
+                    issue_id: rec.issue_id,
                     container_ref: rec.container_ref,
                     branch: rec.branch,
                     setup_completed_at: rec.setup_completed_at,
@@ -598,7 +599,7 @@ impl Workspace {
         let rec = sqlx::query!(
             r#"SELECT
                 w.id AS "id!: Uuid",
-                w.task_id AS "task_id: Uuid",
+                w.issue_id AS "issue_id: Uuid",
                 w.container_ref,
                 w.branch,
                 w.setup_completed_at AS "setup_completed_at: DateTime<Utc>",
@@ -643,7 +644,7 @@ impl Workspace {
         let mut ws = WorkspaceWithStatus {
             workspace: Workspace {
                 id: rec.id,
-                task_id: rec.task_id,
+                issue_id: rec.issue_id,
                 container_ref: rec.container_ref,
                 branch: rec.branch,
                 setup_completed_at: rec.setup_completed_at,

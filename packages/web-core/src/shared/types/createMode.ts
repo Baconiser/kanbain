@@ -4,7 +4,7 @@ export interface LinkedIssue {
   issueId: string;
   simpleId?: string;
   title?: string;
-  remoteProjectId: string;
+  projectId: string;
 }
 
 export interface CreateModeInitialState {

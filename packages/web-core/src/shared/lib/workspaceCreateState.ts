@@ -37,7 +37,7 @@ export function buildLinkedIssueCreateState(
     issueId: issue.id,
     simpleId: issue.simple_id,
     title: issue.title,
-    remoteProjectId: projectId,
+    projectId: projectId,
   };
 }
 

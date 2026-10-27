@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      name,\n                      id_prefix,\n                      external_id_pattern,\n                      external_id_key,\n                      sort_order,\n                      settings as \"settings!: Json<ProjectSettings>\",\n                      created_at as \"created_at!: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM projects\n               ORDER BY sort_order ASC, created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "id_prefix",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "external_id_pattern",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "external_id_key",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "sort_order",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "settings!: Json<ProjectSettings>",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 8,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "e44632c69efe14b81265b9c7ddf0a1ba7ad1166ba37529db7f1211632eed44cc"
+}

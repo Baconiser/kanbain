@@ -152,7 +152,7 @@ export async function resolveCreateModeBootstrap({
         issueId: scratchData.linked_issue.issue_id,
         simpleId: scratchData.linked_issue.simple_id || undefined,
         title: scratchData.linked_issue.title || undefined,
-        remoteProjectId: scratchData.linked_issue.remote_project_id,
+        projectId: scratchData.linked_issue.project_id,
       };
     }
 

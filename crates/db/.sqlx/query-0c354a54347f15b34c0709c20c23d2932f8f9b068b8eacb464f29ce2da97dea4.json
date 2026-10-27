@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_tags (id, project_id, issue_id, tag_id)\n               VALUES ($1, $2, $3, $4)\n               ON CONFLICT (issue_id, tag_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "0c354a54347f15b34c0709c20c23d2932f8f9b068b8eacb464f29ce2da97dea4"
+}

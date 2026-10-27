@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_attachments (id, issue_id, attachment_id)\n                   VALUES ($1, $2, $3)\n                   ON CONFLICT (issue_id, attachment_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "4c01d79f8d6c96d318347e7101517006f9a5b5789592dee89a1a028a045a9341"
+}

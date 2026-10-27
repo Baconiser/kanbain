@@ -3,14 +3,21 @@ pub mod execution_process;
 pub mod execution_process_logs;
 pub mod execution_process_repo_state;
 pub mod file;
+pub mod issue;
+pub mod issue_comment;
+pub mod issue_relationship;
 pub mod merge;
 pub mod project;
+pub mod project_status;
+pub mod project_tag;
 pub mod pull_request;
 pub mod repo;
 pub mod requests;
 pub mod scratch;
 pub mod session;
 pub mod tag;
-pub mod task;
 pub mod workspace;
 pub mod workspace_repo;
+
+#[cfg(test)]
+mod ticket_tests;

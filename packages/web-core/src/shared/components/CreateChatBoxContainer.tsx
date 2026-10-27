@@ -234,12 +234,7 @@ export function CreateChatBoxContainer({
         repo_id: r.id,
         target_branch: targetBranches[r.id]!,
       })),
-      linked_issue: linkedIssue
-        ? {
-            remote_project_id: linkedIssue.remoteProjectId,
-            issue_id: linkedIssue.issueId,
-          }
-        : null,
+      linked_issue: linkedIssue ? { issue_id: linkedIssue.issueId } : null,
       attachment_ids: getAttachmentIds(),
     };
     const result = await createWorkspace.mutateAsync({ data });
@@ -248,9 +243,9 @@ export function CreateChatBoxContainer({
       onWorkspaceCreated(result.workspace.id);
     }
 
-    if (linkedIssue?.remoteProjectId) {
-      saveProjectRepoDefaults(linkedIssue.remoteProjectId, data.repos).catch(
-        (err) => console.warn('Failed to save project repo defaults:', err)
+    if (linkedIssue?.projectId) {
+      saveProjectRepoDefaults(linkedIssue.projectId, data.repos).catch((err) =>
+        console.warn('Failed to save project repo defaults:', err)
       );
     }
 

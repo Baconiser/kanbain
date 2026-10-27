@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issues (id, project_id, number, status_id, title, description,\n                                   priority, sort_order, parent_issue_id,\n                                   parent_issue_sort_order, external_id, mode, budget_usd,\n                                   completed_at)\n               VALUES ($1, $2, $3, $4, $5, $6, $7,\n                       COALESCE($8, (SELECT COALESCE(MAX(sort_order), 0) + 1\n                                     FROM issues WHERE status_id = $4)),\n                       $9, $10, $11, $12, $13, $14)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 14
+    },
+    "nullable": []
+  },
+  "hash": "b9e487b2a518930a44a4ec6f859c28119a8c22d53a354f5cac8724fd48706d4e"
+}

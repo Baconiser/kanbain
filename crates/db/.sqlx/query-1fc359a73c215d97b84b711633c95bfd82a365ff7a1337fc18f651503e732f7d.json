@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO projects (id, name, id_prefix, sort_order)\n               VALUES ($1, $2, $3, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM projects))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "1fc359a73c215d97b84b711633c95bfd82a365ff7a1337fc18f651503e732f7d"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE projects\n               SET name = $2, id_prefix = $3, external_id_pattern = $4,\n                   external_id_key = $5, sort_order = $6, settings = $7,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "82389ff3cebd986cae58a8175c6d439d70b262786be34c796486ad55d54b1ce1"
+}

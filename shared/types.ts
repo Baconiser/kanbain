@@ -6,7 +6,78 @@
 
 export type Repo = { id: string, path: string, name: string, display_name: string, setup_script: string | null, cleanup_script: string | null, archive_script: string | null, copy_files: string | null, parallel_setup_script: boolean, dev_server_script: string | null, default_target_branch: string | null, default_working_dir: string | null, created_at: Date, updated_at: Date, };
 
-export type Project = { id: string, name: string, default_agent_working_dir: string | null, remote_project_id: string | null, created_at: Date, updated_at: Date, };
+export type Project = { id: string, name: string, id_prefix: string, external_id_pattern: string | null, external_id_key: string | null, sort_order: number, settings: ProjectSettings, created_at: string, updated_at: string, };
+
+export type ProjectSettings = { 
+/**
+ * Skip the "allow history analysis?" prompt for this project's tickets.
+ */
+history_always_allow: boolean, };
+
+export type CreateProject = { name: string, id_prefix: string | null, repo_ids: Array<string>, };
+
+export type UpdateProject = { name?: string, id_prefix?: string, external_id_pattern?: string | null, external_id_key?: string | null, sort_order?: number, settings?: ProjectSettings, };
+
+export type ProjectRepo = { id: string, project_id: string, repo_id: string, created_at: string, };
+
+export type ProjectStatus = { id: string, project_id: string, name: string, color: string, sort_order: number, hidden: boolean, kind: ProjectStatusKind, created_at: string, };
+
+export type ProjectStatusKind = "backlog" | "planning" | "awaiting_approval" | "in_progress" | "testing" | "review" | "done" | "blocked" | "custom";
+
+export type CreateProjectStatus = { name: string, color: string, kind?: ProjectStatusKind, hidden?: boolean, sort_order?: number, };
+
+export type UpdateProjectStatus = { name?: string, color?: string, kind?: ProjectStatusKind, hidden?: boolean, sort_order?: number, };
+
+export type ProjectTag = { id: string, project_id: string, name: string, color: string, };
+
+export type CreateProjectTag = { name: string, color: string, };
+
+export type UpdateProjectTag = { name?: string, color?: string, };
+
+export type IssueTag = { id: string, project_id: string, issue_id: string, tag_id: string, };
+
+export type Issue = { id: string, project_id: string, number: number, status_id: string, title: string, description: string | null, priority: IssuePriority | null, sort_order: number, parent_issue_id: string | null, parent_issue_sort_order: number | null, external_id: string | null, mode: IssueMode, fix_round: number, budget_usd: number | null, completed_at: string | null, created_at: string, updated_at: string, };
+
+export type IssuePriority = "urgent" | "high" | "medium" | "low";
+
+export type IssueMode = "ask" | "yolo";
+
+export type CreateIssue = { title: string, description?: string, 
+/**
+ * Defaults to the project's first Backlog status.
+ */
+status_id?: string, priority?: IssuePriority, sort_order?: number, parent_issue_id?: string, parent_issue_sort_order?: number, external_id?: string, mode?: IssueMode, budget_usd?: number, };
+
+export type UpdateIssue = { title?: string, description?: string | null, status_id?: string, priority?: IssuePriority | null, sort_order?: number, parent_issue_id?: string | null, parent_issue_sort_order?: number | null, external_id?: string | null, mode?: IssueMode, budget_usd?: number | null, };
+
+export type BulkUpdateIssueItem = { id: string, title?: string, description?: string | null, status_id?: string, priority?: IssuePriority | null, sort_order?: number, parent_issue_id?: string | null, parent_issue_sort_order?: number | null, external_id?: string | null, mode?: IssueMode, budget_usd?: number | null, };
+
+export type IssueRelationship = { id: string, project_id: string, issue_id: string, related_issue_id: string, relationship_type: IssueRelationshipType, created_at: string, };
+
+export type IssueRelationshipType = "blocking" | "related" | "has_duplicate";
+
+export type CreateIssueRelationship = { related_issue_id: string, relationship_type: IssueRelationshipType, };
+
+export type IssueComment = { id: string, issue_id: string, parent_id: string | null, 
+/**
+ * `user`, or `agent:<run id>` for comments posted by an agent run.
+ */
+author: string, message: string, created_at: string, updated_at: string, };
+
+export type CreateIssueComment = { message: string, parent_id?: string, };
+
+export type UpdateIssueComment = { message: string, };
+
+export type LinkProjectRepoRequest = { repo_id: string, };
+
+export type DeleteStatusQuery = { 
+/**
+ * Status that receives the deleted status's tickets. Defaults to the
+ * first other status.
+ */
+move_to: string | null, };
+
+export type AssociateIssueAttachmentsRequest = { attachment_ids: Array<string>, };
 
 export type UpdateRepo = { display_name?: string | null, setup_script?: string | null, cleanup_script?: string | null, archive_script?: string | null, copy_files?: string | null, parallel_setup_script?: boolean | null, dev_server_script?: string | null, default_target_branch?: string | null, default_working_dir?: string | null, };
 
@@ -36,7 +107,7 @@ export type DraftWorkspaceData = { message: string, repos: Array<DraftWorkspaceR
 
 export type DraftWorkspaceAttachment = { id: string, file_path: string, original_name: string, mime_type: string | null, size_bytes: bigint, };
 
-export type DraftWorkspaceLinkedIssue = { issue_id: string, simple_id: string, title: string, remote_project_id: string, };
+export type DraftWorkspaceLinkedIssue = { issue_id: string, simple_id: string, title: string, project_id: string, };
 
 export type DraftWorkspaceRepo = { repo_id: string, target_branch: string, };
 
@@ -152,9 +223,9 @@ export type CreateScratch = { payload: ScratchPayload, };
 
 export type UpdateScratch = { payload: ScratchPayload, };
 
-export type Workspace = { id: string, task_id: string | null, container_ref: string | null, branch: string, setup_completed_at: string | null, created_at: string, updated_at: string, archived: boolean, pinned: boolean, name: string | null, worktree_deleted: boolean, };
+export type Workspace = { id: string, issue_id: string | null, container_ref: string | null, branch: string, setup_completed_at: string | null, created_at: string, updated_at: string, archived: boolean, pinned: boolean, name: string | null, worktree_deleted: boolean, };
 
-export type WorkspaceWithStatus = { is_running: boolean, is_errored: boolean, id: string, task_id: string | null, container_ref: string | null, branch: string, setup_completed_at: string | null, created_at: string, updated_at: string, archived: boolean, pinned: boolean, name: string | null, worktree_deleted: boolean, };
+export type WorkspaceWithStatus = { is_running: boolean, is_errored: boolean, id: string, issue_id: string | null, container_ref: string | null, branch: string, setup_completed_at: string | null, created_at: string, updated_at: string, archived: boolean, pinned: boolean, name: string | null, worktree_deleted: boolean, };
 
 export type Session = { id: string, workspace_id: string, name: string | null, executor: string | null, agent_working_dir: string | null, created_at: string, updated_at: string, };
 
@@ -266,7 +337,7 @@ export type OpenEditorResponse = { url: string | null, };
 
 export type CreateWorkspaceApiRequest = { name: string | null, };
 
-export type LinkedIssueInfo = { remote_project_id: string, issue_id: string, };
+export type LinkedIssueInfo = { issue_id: string, };
 
 export type CreatePrApiRequest = { title: string, body: string | null, target_branch: string | null, draft: boolean | null, repo_id: string, auto_generate_description: boolean, };
 

@@ -1,4 +1,7 @@
-use std::{str::FromStr, sync::Arc};
+use std::{
+    str::FromStr,
+    sync::{Arc, Mutex},
+};
 
 use db::{
     DBService,
@@ -17,6 +20,8 @@ use uuid::Uuid;
 pub mod patches;
 #[path = "events/streams.rs"]
 mod streams;
+#[path = "events/tickets.rs"]
+pub mod tickets;
 #[path = "events/types.rs"]
 pub mod types;
 
@@ -74,10 +79,51 @@ impl EventService {
             Box::pin(async move {
                 let mut handle = conn.lock_handle().await?;
                 let runtime_handle = tokio::runtime::Handle::current();
+
+                // Ticket changes are buffered per connection and flushed on commit.
+                let pending: Arc<Mutex<Vec<tickets::PendingChange>>> = Arc::default();
+                let pending_for_preupdate = pending.clone();
+                let pending_for_update = pending.clone();
+                handle.set_commit_hook({
+                    let pending = pending.clone();
+                    let msg_store = msg_store_for_hook.clone();
+                    let db = db_for_hook.clone();
+                    let runtime_handle = runtime_handle.clone();
+                    move || {
+                        let changes = std::mem::take(&mut *pending.lock().unwrap());
+                        if !changes.is_empty() {
+                            let msg_store = msg_store.clone();
+                            let db = db.clone();
+                            runtime_handle.spawn(async move {
+                                // The hook runs just before the commit lands.
+                                tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+                                tickets::flush_changes(&db.pool, &msg_store, changes).await;
+                            });
+                        }
+                        true
+                    }
+                });
+                handle.set_rollback_hook({
+                    let pending = pending.clone();
+                    move || pending.lock().unwrap().clear()
+                });
+
                 handle.set_preupdate_hook({
                     let msg_store_for_preupdate = msg_store_for_hook.clone();
                     move |preupdate: sqlx::sqlite::PreupdateHookResult<'_>| {
                         if preupdate.operation != SqliteOperation::Delete {
+                            return;
+                        }
+
+                        if let Some(table) = tickets::TicketTable::from_table(preupdate.table) {
+                            if let Ok(value) = preupdate.get_old_column_value(0)
+                                && let Ok(id) = <Uuid as Decode<Sqlite>>::decode(value)
+                            {
+                                pending_for_preupdate
+                                    .lock()
+                                    .unwrap()
+                                    .push(tickets::PendingChange::Remove { table, id });
+                            }
                             return;
                         }
 
@@ -121,6 +167,15 @@ impl EventService {
                     let entry_count_for_hook = entry_count_for_hook.clone();
                     let msg_store_for_hook = msg_store_for_hook.clone();
                     let db = db_for_hook.clone();
+
+                    if let Some(table) = tickets::TicketTable::from_table(hook.table) {
+                        if let Some(change) =
+                            tickets::PendingChange::from_update(table, hook.rowid, &hook.operation)
+                        {
+                            pending_for_update.lock().unwrap().push(change);
+                        }
+                        return;
+                    }
 
                     if let Ok(table) = HookTables::from_str(hook.table) {
                         let rowid = hook.rowid;

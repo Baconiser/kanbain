@@ -8,6 +8,7 @@ default-run = "server"
 uninlined-format-args = "allow"
 
 [dependencies]
+regex = "1.11.1"
 deployment = { path = "../deployment" , version = "0.1.45" }
 executors = { path = "../executors" , version = "0.1.45" }
 local-deployment = { path = "../local-deployment" , version = "0.1.45" }

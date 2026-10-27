@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues SET status_id = $2, updated_at = datetime('now', 'subsec')\n               WHERE status_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "670452f707c33467b494103cddaaad4824cbd7f13a90b23aa1917216c026275e"
+}

@@ -357,6 +357,9 @@ impl IntoResponse for ApiError {
             ApiError::Container(_) => ErrorInfo::internal("ContainerError"),
             ApiError::Executor(_) => ErrorInfo::internal("ExecutorError"),
             ApiError::CommandBuilder(_) => ErrorInfo::internal("CommandBuildError"),
+            ApiError::Database(sqlx::Error::RowNotFound) => {
+                ErrorInfo::with_status(StatusCode::NOT_FOUND, "NotFound", "Not found".to_string())
+            }
             ApiError::Database(_) => ErrorInfo::internal("DatabaseError"),
             ApiError::Worktree(err) => ErrorInfo::with_status(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -382,6 +385,16 @@ impl IntoResponse for ApiError {
             .unwrap_or_else(|| format!("{}: {}", info.error_type, self));
         let response = ApiResponse::<()>::error(&message);
         (info.status, Json(response)).into_response()
+    }
+}
+
+impl From<db::models::issue::IssueError> for ApiError {
+    fn from(err: db::models::issue::IssueError) -> Self {
+        use db::models::issue::IssueError;
+        match err {
+            IssueError::Database(db_err) => ApiError::Database(db_err),
+            other => ApiError::BadRequest(other.to_string()),
+        }
     }
 }
 

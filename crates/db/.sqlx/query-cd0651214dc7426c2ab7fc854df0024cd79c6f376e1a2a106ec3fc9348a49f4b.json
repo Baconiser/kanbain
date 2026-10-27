@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM issue_attachments WHERE issue_id = $1 AND attachment_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "cd0651214dc7426c2ab7fc854df0024cd79c6f376e1a2a106ec3fc9348a49f4b"
+}

@@ -15,7 +15,9 @@ pub mod execution_processes;
 pub mod filesystem;
 pub mod frontend;
 pub mod health;
+pub mod issues;
 pub mod preview;
+pub mod projects;
 pub mod repo;
 pub mod scratch;
 pub mod search;
@@ -32,6 +34,8 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(workspaces::router(&deployment))
         .merge(execution_processes::router(&deployment))
         .merge(tags::router(&deployment))
+        .merge(projects::router())
+        .merge(issues::router())
         .merge(filesystem::router())
         .merge(repo::router())
         .merge(events::router(&deployment))

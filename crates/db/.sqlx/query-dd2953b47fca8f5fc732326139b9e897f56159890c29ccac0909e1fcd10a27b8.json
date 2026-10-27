@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO project_statuses (id, project_id, name, color, sort_order, hidden, kind)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "dd2953b47fca8f5fc732326139b9e897f56159890c29ccac0909e1fcd10a27b8"
+}

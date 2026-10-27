@@ -330,10 +330,10 @@ export function useCreateModeState({
   // When no linked issue with a project, mark project defaults as not applicable
   useEffect(() => {
     if (state.phase !== 'ready') return;
-    if (!state.linkedIssue?.remoteProjectId) {
+    if (!state.linkedIssue?.projectId) {
       setProjectDefaultsStatus('n/a');
     }
-  }, [state.phase, state.linkedIssue?.remoteProjectId]);
+  }, [state.phase, state.linkedIssue?.projectId]);
 
   // ============================================================================
   // Auto-apply repos/branches defaults for fresh drafts
@@ -355,10 +355,7 @@ export function useCreateModeState({
     if (!shouldLoadWorkspaceDefaults) return;
     if (!hasResolvedPreferredRepos) return;
     // When a project is linked, wait for project defaults to resolve first
-    if (
-      state.linkedIssue?.remoteProjectId &&
-      projectDefaultsStatus === 'pending'
-    )
+    if (state.linkedIssue?.projectId && projectDefaultsStatus === 'pending')
       return;
     if (hasAppliedRepoDefaultsRef.current) return;
 
@@ -379,7 +376,7 @@ export function useCreateModeState({
     state.repos.length,
     preferredRepos,
     projectDefaultsStatus,
-    state.linkedIssue?.remoteProjectId,
+    state.linkedIssue?.projectId,
   ]);
 
   // ============================================================================
@@ -388,12 +385,12 @@ export function useCreateModeState({
   const scratchDefaultsProjectRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const remoteProjectId = state.linkedIssue?.remoteProjectId;
-    if (!remoteProjectId) return;
+    const projectId = state.linkedIssue?.projectId;
+    if (!projectId) return;
     if (state.repos.length > 0) return;
-    if (scratchDefaultsProjectRef.current === remoteProjectId) return;
+    if (scratchDefaultsProjectRef.current === projectId) return;
 
-    scratchDefaultsProjectRef.current = remoteProjectId;
+    scratchDefaultsProjectRef.current = projectId;
     let cancelled = false;
 
     (async () => {
@@ -403,7 +400,7 @@ export function useCreateModeState({
 
         const availableRepoIds = new Set(allRepos.map((r) => r.id));
         const scratchDefaults = await getValidProjectRepoDefaults(
-          remoteProjectId,
+          projectId,
           availableRepoIds
         );
         if (cancelled) return;
@@ -438,7 +435,7 @@ export function useCreateModeState({
     return () => {
       cancelled = true;
     };
-  }, [state.linkedIssue?.remoteProjectId, state.repos.length]);
+  }, [state.linkedIssue?.projectId, state.repos.length]);
 
   // ============================================================================
   // Persistence to scratch (debounced)
@@ -479,7 +476,7 @@ export function useCreateModeState({
             issue_id: state.linkedIssue.issueId,
             simple_id: state.linkedIssue.simpleId ?? '',
             title: state.linkedIssue.title ?? '',
-            remote_project_id: state.linkedIssue.remoteProjectId,
+            project_id: state.linkedIssue.projectId,
           }
         : null,
       attachments: state.attachments,

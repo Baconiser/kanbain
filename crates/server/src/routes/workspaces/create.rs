@@ -1,5 +1,7 @@
 use axum::{Json, extract::State, response::Json as ResponseJson};
 use db::models::{
+    issue::Issue,
+    project::Project,
     requests::{
         CreateAndStartWorkspaceRequest, CreateAndStartWorkspaceResponse, CreateWorkspaceApiRequest,
     },
@@ -15,10 +17,31 @@ use crate::{DeploymentImpl, error::ApiError};
 pub(crate) async fn create_workspace_record(
     deployment: &DeploymentImpl,
     name: Option<String>,
+    issue_id: Option<Uuid>,
 ) -> Result<Workspace, ApiError> {
+    let pool = &deployment.db().pool;
     let workspace_id = Uuid::new_v4();
-    let branch_label = name
+
+    // A workspace started from a ticket is branched after the ticket's ID.
+    let issue_label = match issue_id {
+        Some(issue_id) => {
+            let issue = Issue::find_by_id(pool, issue_id)
+                .await?
+                .ok_or_else(|| ApiError::BadRequest("Linked ticket not found".to_string()))?;
+            let project = Project::find_by_id(pool, issue.project_id)
+                .await?
+                .ok_or_else(|| ApiError::BadRequest("Ticket project not found".to_string()))?;
+            Some(format!(
+                "{} {}",
+                issue.display_id(&project.id_prefix),
+                issue.title
+            ))
+        }
+        None => None,
+    };
+    let branch_label = issue_label
         .as_deref()
+        .or(name.as_deref())
         .filter(|branch_label| !branch_label.is_empty())
         .unwrap_or("workspace");
     let git_branch_name = deployment
@@ -27,10 +50,11 @@ pub(crate) async fn create_workspace_record(
         .await;
 
     let workspace = Workspace::create(
-        &deployment.db().pool,
+        pool,
         &CreateWorkspace {
             branch: git_branch_name,
             name: name.filter(|workspace_name| !workspace_name.is_empty()),
+            issue_id,
         },
         workspace_id,
     )
@@ -43,7 +67,7 @@ pub async fn create_workspace(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<CreateWorkspaceApiRequest>,
 ) -> Result<ResponseJson<ApiResponse<Workspace>>, ApiError> {
-    let workspace = create_workspace_record(&deployment, payload.name).await?;
+    let workspace = create_workspace_record(&deployment, payload.name, None).await?;
 
     Ok(ResponseJson(ApiResponse::success(workspace)))
 }
@@ -64,7 +88,7 @@ pub async fn create_and_start_workspace(
     let CreateAndStartWorkspaceRequest {
         name,
         repos,
-        linked_issue: _,
+        linked_issue,
         executor_config,
         prompt,
         attachment_ids,
@@ -84,7 +108,9 @@ pub async fn create_and_start_workspace(
 
     let mut managed_workspace = deployment
         .workspace_manager()
-        .load_managed_workspace(create_workspace_record(&deployment, name).await?)
+        .load_managed_workspace(
+            create_workspace_record(&deployment, name, linked_issue.map(|l| l.issue_id)).await?,
+        )
         .await?;
 
     for repo in &repos {

@@ -158,7 +158,8 @@ pub struct DraftWorkspaceLinkedIssue {
     pub issue_id: String,
     pub simple_id: String,
     pub title: String,
-    pub remote_project_id: String,
+    #[serde(default)]
+    pub project_id: String,
 }
 
 /// Uploaded attachment stored in a draft workspace

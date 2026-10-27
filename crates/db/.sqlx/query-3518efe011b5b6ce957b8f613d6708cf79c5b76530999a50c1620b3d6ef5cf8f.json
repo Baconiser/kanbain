@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues\n               SET title = $2, description = $3, status_id = $4, priority = $5,\n                   sort_order = $6, parent_issue_id = $7, parent_issue_sort_order = $8,\n                   external_id = $9, mode = $10, budget_usd = $11, completed_at = $12,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 12
+    },
+    "nullable": []
+  },
+  "hash": "3518efe011b5b6ce957b8f613d6708cf79c5b76530999a50c1620b3d6ef5cf8f"
+}

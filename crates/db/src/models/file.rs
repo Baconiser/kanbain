@@ -135,6 +135,30 @@ impl File {
         .await
     }
 
+    pub async fn find_by_issue_id(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            File,
+            r#"SELECT i.id as "id!: Uuid",
+                      i.file_path as "file_path!",
+                      i.original_name as "original_name!",
+                      i.mime_type,
+                      i.size_bytes as "size_bytes!",
+                      i.hash as "hash!",
+                      i.created_at as "created_at!: DateTime<Utc>",
+                      i.updated_at as "updated_at!: DateTime<Utc>"
+               FROM attachments i
+               JOIN issue_attachments ia ON i.id = ia.attachment_id
+               WHERE ia.issue_id = $1
+               ORDER BY ia.created_at"#,
+            issue_id
+        )
+        .fetch_all(pool)
+        .await
+    }
+
     pub async fn delete(pool: &SqlitePool, id: Uuid) -> Result<(), sqlx::Error> {
         sqlx::query!(r#"DELETE FROM attachments WHERE id = $1"#, id)
             .execute(pool)
@@ -155,7 +179,8 @@ impl File {
                       i.updated_at as "updated_at!: DateTime<Utc>"
                FROM attachments i
                LEFT JOIN workspace_attachments wa ON i.id = wa.attachment_id
-               WHERE wa.workspace_id IS NULL"#
+               LEFT JOIN issue_attachments ia ON i.id = ia.attachment_id
+               WHERE wa.workspace_id IS NULL AND ia.issue_id IS NULL"#
         )
         .fetch_all(pool)
         .await
@@ -193,5 +218,46 @@ impl WorkspaceAttachment {
             .await?;
         }
         Ok(())
+    }
+}
+
+pub struct IssueAttachment;
+
+impl IssueAttachment {
+    /// Associate attachments with an issue, skipping duplicates.
+    pub async fn associate_many(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+        attachment_ids: &[Uuid],
+    ) -> Result<(), sqlx::Error> {
+        for &attachment_id in attachment_ids {
+            let id = Uuid::new_v4();
+            sqlx::query!(
+                r#"INSERT INTO issue_attachments (id, issue_id, attachment_id)
+                   VALUES ($1, $2, $3)
+                   ON CONFLICT (issue_id, attachment_id) DO NOTHING"#,
+                id,
+                issue_id,
+                attachment_id
+            )
+            .execute(pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn remove(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+        attachment_id: Uuid,
+    ) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query!(
+            "DELETE FROM issue_attachments WHERE issue_id = $1 AND attachment_id = $2",
+            issue_id,
+            attachment_id
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected())
     }
 }

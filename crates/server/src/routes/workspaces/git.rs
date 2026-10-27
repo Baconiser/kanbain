@@ -588,21 +588,6 @@ pub async fn rename_branch(
 
     db::models::workspace::Workspace::update_branch_name(pool, workspace.id, new_branch_name)
         .await?;
-    let updated_children_count = WorkspaceRepo::update_target_branch_for_children_of_workspace(
-        pool,
-        workspace.id,
-        &old_branch,
-        new_branch_name,
-    )
-    .await?;
-
-    if updated_children_count > 0 {
-        tracing::info!(
-            "Updated {} child workspaces to target new branch '{}'",
-            updated_children_count,
-            new_branch_name
-        );
-    }
 
     Ok(ResponseJson(ApiResponse::success(RenameBranchResponse {
         branch: new_branch_name.to_string(),

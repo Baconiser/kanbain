@@ -1,0 +1,116 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      project_id as \"project_id!: Uuid\",\n                      number,\n                      status_id as \"status_id!: Uuid\",\n                      title,\n                      description,\n                      priority as \"priority: IssuePriority\",\n                      sort_order,\n                      parent_issue_id as \"parent_issue_id: Uuid\",\n                      parent_issue_sort_order,\n                      external_id,\n                      mode as \"mode!: IssueMode\",\n                      fix_round,\n                      budget_usd,\n                      completed_at as \"completed_at: DateTime<Utc>\",\n                      created_at as \"created_at!: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM issues\n               WHERE rowid = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "number",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "status_id!: Uuid",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "title",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "priority: IssuePriority",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "sort_order",
+        "ordinal": 7,
+        "type_info": "Float"
+      },
+      {
+        "name": "parent_issue_id: Uuid",
+        "ordinal": 8,
+        "type_info": "Blob"
+      },
+      {
+        "name": "parent_issue_sort_order",
+        "ordinal": 9,
+        "type_info": "Float"
+      },
+      {
+        "name": "external_id",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "mode!: IssueMode",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "fix_round",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "budget_usd",
+        "ordinal": 13,
+        "type_info": "Float"
+      },
+      {
+        "name": "completed_at: DateTime<Utc>",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 15,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 16,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "55c84eb19bfd58ac489b5f2a61620ef77e7ae52ee19cebb17ee8e758d9ec8211"
+}

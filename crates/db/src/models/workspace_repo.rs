@@ -226,30 +226,6 @@ impl WorkspaceRepo {
         Ok(())
     }
 
-    pub async fn update_target_branch_for_children_of_workspace(
-        pool: &SqlitePool,
-        parent_workspace_id: Uuid,
-        old_branch: &str,
-        new_branch: &str,
-    ) -> Result<u64, sqlx::Error> {
-        let result = sqlx::query!(
-            r#"UPDATE workspace_repos
-               SET target_branch = $1, updated_at = datetime('now')
-               WHERE target_branch = $2
-                 AND workspace_id IN (
-                     SELECT w.id FROM workspaces w
-                     JOIN tasks t ON w.task_id = t.id
-                     WHERE t.parent_workspace_id = $3
-                 )"#,
-            new_branch,
-            old_branch,
-            parent_workspace_id
-        )
-        .execute(pool)
-        .await?;
-        Ok(result.rows_affected())
-    }
-
     /// Find repos for a workspace with their copy_files configuration.
     pub async fn find_repos_with_copy_files(
         pool: &SqlitePool,
