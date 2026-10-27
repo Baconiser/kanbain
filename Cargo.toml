@@ -14,7 +14,6 @@ members = [
     "crates/git-host",
     "crates/local-deployment",
     "crates/deployment",
-    "crates/review",
     "crates/tauri-app",
     "crates/preview-proxy",
 ]

@@ -230,17 +230,6 @@ async function runMcp(args: string[]): Promise<void> {
   });
 }
 
-async function runReview(args: string[]): Promise<void> {
-  await extractAndRun("vibe-kanban-review", (bin) => {
-    const proc = spawn(bin, args, { stdio: "inherit" });
-    proc.on("exit", (c) => process.exit(c || 0));
-    proc.on("error", (e) => {
-      console.error("Review CLI error:", e.message);
-      process.exit(1);
-    });
-  });
-}
-
 async function runMain(desktopMode: boolean): Promise<void> {
   checkForUpdates();
 
@@ -315,13 +304,6 @@ async function main(): Promise<void> {
     .allowUnknownOptions()
     .action((_args: string[], options: RootOptions) => {
       runOrExit(runMain(Boolean(options.desktop)));
-    });
-
-  cli
-    .command("review [...args]", "Run the review CLI")
-    .allowUnknownOptions()
-    .action((args: string[]) => {
-      runOrExit(runReview(args));
     });
 
   cli
