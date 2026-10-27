@@ -5,7 +5,7 @@ import {
   Navbar,
   type NavbarSectionItem,
   type MobileTabId,
-} from '@vibe/ui/components/Navbar';
+} from '@kanbain/ui/components/Navbar';
 import { NavbarActionGroups } from '@/shared/actions';
 import {
   NavbarDivider,

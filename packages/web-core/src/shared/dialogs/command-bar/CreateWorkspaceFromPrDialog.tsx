@@ -9,17 +9,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@vibe/ui/components/KeyboardDialog';
-import { Button } from '@vibe/ui/components/Button';
-import { Checkbox } from '@vibe/ui/components/Checkbox';
-import { Label } from '@vibe/ui/components/Label';
+} from '@kanbain/ui/components/KeyboardDialog';
+import { Button } from '@kanbain/ui/components/Button';
+import { Checkbox } from '@kanbain/ui/components/Checkbox';
+import { Label } from '@kanbain/ui/components/Label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@vibe/ui/components/Select';
+} from '@kanbain/ui/components/Select';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
 import { workspacesApi, repoApi } from '@/shared/lib/api';

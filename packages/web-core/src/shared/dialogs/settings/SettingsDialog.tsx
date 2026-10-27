@@ -17,7 +17,7 @@ import {
   useSettingsDirty,
 } from './settings/SettingsDirtyContext';
 import { SettingsMachineUserSystemProvider } from './settings/SettingsMachineUserSystemProvider';
-import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
+import { ConfirmDialog } from '@kanbain/ui/components/ConfirmDialog';
 
 export interface SettingsDialogProps {
   initialSection?: SettingsSectionType;

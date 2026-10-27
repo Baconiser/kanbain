@@ -28,7 +28,7 @@ Build once, then run the binary directly. This is faster to restart than
 ```bash
 cargo build --bin server
 BACKEND_PORT=$BACKEND_PORT PREVIEW_PROXY_PORT=$PREVIEW_PROXY_PORT \
-  VK_ALLOWED_ORIGINS=http://localhost:$FRONTEND_PORT \
+  KANBAIN_ALLOWED_ORIGINS=http://localhost:$FRONTEND_PORT \
   DISABLE_WORKTREE_CLEANUP=1 RUST_LOG=info \
   nohup ./target/debug/server > /tmp/kanbain-backend.log 2>&1 &
 timeout 120 bash -c "until curl -sf http://127.0.0.1:$BACKEND_PORT/api/health >/dev/null; do sleep 2; done"

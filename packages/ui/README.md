@@ -1,4 +1,4 @@
-# @vibe/ui
+# @kanbain/ui
 
 Shared UI package for reusable web app primitives.
 

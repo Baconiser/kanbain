@@ -7,8 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuTriggerButton,
-} from '@vibe/ui/components/Dropdown';
-import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
+} from '@kanbain/ui/components/Dropdown';
+import { PrimaryButton } from '@kanbain/ui/components/PrimaryButton';
 import type { Icon } from '@phosphor-icons/react';
 
 // ============================================================================

@@ -21,7 +21,7 @@ import {
 import {
   CollapsibleSectionHeader,
   type SectionAction,
-} from '@vibe/ui/components/CollapsibleSectionHeader';
+} from '@kanbain/ui/components/CollapsibleSectionHeader';
 
 type SectionDef = {
   title: string;

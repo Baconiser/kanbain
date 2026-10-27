@@ -41,7 +41,7 @@ import {
   SessionChatBox,
   type ExecutionStatus,
   type SessionChatBoxEditorRenderProps,
-} from '@vibe/ui/components/SessionChatBox';
+} from '@kanbain/ui/components/SessionChatBox';
 import { ModelSelectorContainer } from '@/shared/components/ModelSelectorContainer';
 import {
   useWorkspacePanelState,
@@ -59,11 +59,11 @@ import {
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { useActionVisibilityContext } from '@/shared/hooks/useActionVisibilityContext';
 import { PrCommentsDialog } from '@/shared/dialogs/tasks/PrCommentsDialog';
-import type { NormalizedComment } from '@vibe/ui/components/pr-comment-node';
+import type { NormalizedComment } from '@kanbain/ui/components/pr-comment-node';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { sessionsApi } from '@/shared/lib/api';
-import { RenameSessionDialog } from '@vibe/ui/components/RenameSessionDialog';
-import type { TurnNavigationItem } from '@vibe/ui/components/TurnNavigationPopup';
+import { RenameSessionDialog } from '@kanbain/ui/components/RenameSessionDialog';
+import type { TurnNavigationItem } from '@kanbain/ui/components/TurnNavigationPopup';
 
 /** Compute execution status from boolean flags */
 function computeExecutionStatus(params: {

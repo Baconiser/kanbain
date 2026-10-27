@@ -51,26 +51,26 @@ echo "🔨 Building web app..."
 
 echo "🔨 Building Rust binaries..."
 cargo build --release --manifest-path Cargo.toml
-cargo build --release --bin vibe-kanban-mcp --manifest-path Cargo.toml
+cargo build --release --bin kanbain-mcp --manifest-path Cargo.toml
 
 echo "📦 Creating distribution package..."
 
 # Copy the main binary
-cp ${CARGO_TARGET_DIR}/release/server vibe-kanban
-zip -q vibe-kanban.zip vibe-kanban
-rm -f vibe-kanban 
-mv vibe-kanban.zip npx-cli/dist/$PLATFORM/vibe-kanban.zip
+cp ${CARGO_TARGET_DIR}/release/server kanbain
+zip -q kanbain.zip kanbain
+rm -f kanbain 
+mv kanbain.zip npx-cli/dist/$PLATFORM/kanbain.zip
 
 # Copy the MCP binary
-cp ${CARGO_TARGET_DIR}/release/vibe-kanban-mcp vibe-kanban-mcp
-zip -q vibe-kanban-mcp.zip vibe-kanban-mcp
-rm -f vibe-kanban-mcp
-mv vibe-kanban-mcp.zip npx-cli/dist/$PLATFORM/vibe-kanban-mcp.zip
+cp ${CARGO_TARGET_DIR}/release/kanbain-mcp kanbain-mcp
+zip -q kanbain-mcp.zip kanbain-mcp
+rm -f kanbain-mcp
+mv kanbain-mcp.zip npx-cli/dist/$PLATFORM/kanbain-mcp.zip
 
 echo "✅ CLI build complete!"
 echo "📁 Files created:"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban.zip"
-echo "   - npx-cli/dist/$PLATFORM/vibe-kanban-mcp.zip"
+echo "   - npx-cli/dist/$PLATFORM/kanbain.zip"
+echo "   - npx-cli/dist/$PLATFORM/kanbain-mcp.zip"
 
 # Optionally build the Tauri desktop app
 if [[ "$1" == "--desktop" || "$1" == "--all" ]]; then

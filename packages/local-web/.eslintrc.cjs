@@ -22,9 +22,9 @@ const baseRestrictedImportPaths = [
       'Do not import showModal/hideModal/removeModal. Use DialogName.show(props) and DialogName.hide() instead.',
   },
   {
-    name: '@vibe/ui',
+    name: '@kanbain/ui',
     message:
-      'Do not import from @vibe/ui root. Use @vibe/ui/components/* subpaths.',
+      'Do not import from @kanbain/ui root. Use @kanbain/ui/components/* subpaths.',
   },
 ];
 
@@ -477,9 +477,9 @@ module.exports = {
           {
             paths: [
               {
-                name: '@vibe/ui',
+                name: '@kanbain/ui',
                 message:
-                  'Do not import from @vibe/ui root. Use @vibe/ui/components/* subpaths.',
+                  'Do not import from @kanbain/ui root. Use @kanbain/ui/components/* subpaths.',
               },
               {
                 name: 'lucide-react',
@@ -568,9 +568,9 @@ module.exports = {
           {
             paths: [
               {
-                name: '@vibe/ui',
+                name: '@kanbain/ui',
                 message:
-                  'Do not import from @vibe/ui root. Use @vibe/ui/components/* subpaths.',
+                  'Do not import from @kanbain/ui root. Use @kanbain/ui/components/* subpaths.',
               },
               {
                 name: '@/lib/api',

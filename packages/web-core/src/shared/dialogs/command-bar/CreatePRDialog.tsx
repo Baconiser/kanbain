@@ -5,13 +5,17 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@vibe/ui/components/KeyboardDialog';
+} from '@kanbain/ui/components/KeyboardDialog';
 import { Label } from '@radix-ui/react-label';
-import { Textarea } from '@vibe/ui/components/Textarea';
-import { Button } from '@vibe/ui/components/Button';
-import { Input } from '@vibe/ui/components/Input';
-import { Checkbox } from '@vibe/ui/components/Checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@vibe/ui/components/Alert';
+import { Textarea } from '@kanbain/ui/components/Textarea';
+import { Button } from '@kanbain/ui/components/Button';
+import { Input } from '@kanbain/ui/components/Input';
+import { Checkbox } from '@kanbain/ui/components/Checkbox';
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@kanbain/ui/components/Alert';
 import BranchSelector from '@/shared/components/tasks/BranchSelector';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { workspacesApi } from '@/shared/lib/api';
@@ -46,7 +50,7 @@ export type CreatePRDialogResult = {
   error?: string;
 };
 
-const PR_TITLE_SUFFIX = ' (vibe-kanban)';
+const PR_TITLE_SUFFIX = ' (kanbain)';
 
 const appendPrTitleSuffix = (title: string): string => {
   const trimmedTitle = title.trim();

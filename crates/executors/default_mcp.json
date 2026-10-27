@@ -1,9 +1,9 @@
 {
-  "vibe_kanban": {
+  "kanbain": {
     "command": "npx",
     "args": [
       "-y",
-      "vibe-kanban@latest",
+      "kanbain@latest",
       "--mcp"
     ]
   },
@@ -45,11 +45,11 @@
     ]
   },
   "meta": {
-    "vibe_kanban": {
-      "name": "Vibe Kanban",
-      "description": "Create, update and delete Vibe Kanban tasks",
-      "url": "https://www.vibekanban.com/docs/integrations/vibe-kanban-mcp-server",
-      "icon": "favicon-vk-light.svg"
+    "kanbain": {
+      "name": "KanbAIn",
+      "description": "Create, update and delete KanbAIn tasks",
+      "url": "https://github.com/Baconiser/kanbain/blob/main/docs/integrations/kanbain-mcp-server.mdx",
+      "icon": "favicon-kanbain-light.svg"
     },
     "context7": {
       "name": "Context7",

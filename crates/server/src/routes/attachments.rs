@@ -56,7 +56,7 @@ pub struct AttachmentResponse {
 
 impl AttachmentResponse {
     pub fn from_file(file: File) -> Self {
-        let markdown_path = format!("{}/{}", utils::path::VIBE_ATTACHMENTS_DIR, file.file_path);
+        let markdown_path = format!("{}/{}", utils::path::ATTACHMENTS_DIR, file.file_path);
         Self {
             id: file.id,
             file_path: markdown_path,

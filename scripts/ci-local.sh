@@ -91,17 +91,17 @@ job_backend_clippy() {
   local failed=0
   log_job "backend-clippy" "cargo fmt + clippy (excludes tauri)"
   run_step "cargo fmt check" cargo fmt --all -- --check                                                        || failed=1
-  run_step "cargo clippy"    cargo clippy --workspace --all-targets --exclude vibe-kanban-tauri -- -D warnings || failed=1
+  run_step "cargo clippy"    cargo clippy --workspace --all-targets --exclude kanbain-tauri -- -D warnings || failed=1
   return $failed
 }
 
 job_backend_test() {
   log_job "backend-test" "cargo nextest (or cargo test)"
   if cargo nextest --version &>/dev/null 2>&1; then
-    run_step "cargo nextest run" cargo nextest run --workspace --exclude vibe-kanban-tauri
+    run_step "cargo nextest run" cargo nextest run --workspace --exclude kanbain-tauri
   else
     echo -e "${YELLOW}  ! cargo-nextest not found, falling back to cargo test${RESET}"
-    run_step "cargo test" cargo test --workspace --exclude vibe-kanban-tauri
+    run_step "cargo test" cargo test --workspace --exclude kanbain-tauri
   fi
 }
 
@@ -113,7 +113,7 @@ job_tauri() {
   fi
   run_step "cargo fmt check (tauri)" cargo fmt --all --manifest-path crates/tauri-app/Cargo.toml -- --check       || failed=1
   run_step "cargo clippy (tauri)"    cargo clippy --all-targets --manifest-path crates/tauri-app/Cargo.toml -- -D warnings || failed=1
-  run_step "cargo check (tauri)"     cargo check -p vibe-kanban-tauri                                              || failed=1
+  run_step "cargo check (tauri)"     cargo check -p kanbain-tauri                                              || failed=1
   return $failed
 }
 

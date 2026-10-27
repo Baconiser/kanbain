@@ -132,7 +132,7 @@ function useImageMetadata(
   src: string,
   localAttachments: LocalAttachmentMetadata[]
 ) {
-  const isVibeImage = src.startsWith('.vibe-attachments/');
+  const isAttachmentImage = src.startsWith('.kanbain-attachments/');
 
   const localImage = useMemo(
     () => localAttachments.find((attachment) => attachment.path === src),
@@ -144,7 +144,7 @@ function useImageMetadata(
     [localImage]
   );
 
-  const shouldFetch = isVibeImage && !!workspaceId && !localImage;
+  const shouldFetch = isAttachmentImage && !!workspaceId && !localImage;
 
   const query = useQuery({
     queryKey: ['image-metadata', workspaceId, sessionId, src],
@@ -202,7 +202,7 @@ export function createImageNode(options: CreateImageNodeOptions) {
     const localAttachments = useLocalAttachments();
     const [editor] = useLexicalComposerContext();
 
-    const isVibeImage = src.startsWith('.vibe-attachments/');
+    const isAttachmentImage = src.startsWith('.kanbain-attachments/');
     const isPendingAttachment = src.startsWith('pending-attachment://');
     const isAttachment = isPendingAttachment || src.startsWith('attachment://');
     const attachmentId =
@@ -238,7 +238,7 @@ export function createImageNode(options: CreateImageNodeOptions) {
     const workspaceDisplayName =
       metadata?.file_name || localAttachment?.file_name || altText || src;
     const isWorkspaceImage =
-      isVibeImage &&
+      isAttachmentImage &&
       ((localAttachment?.mime_type?.startsWith('image/') ?? false) ||
         isImageLikeFileName(workspaceDisplayName));
     const showDownloadButton = Boolean(
@@ -386,7 +386,7 @@ export function createImageNode(options: CreateImageNodeOptions) {
         const format = altText.split('.').pop()?.trim();
         metadataLine = format ? format.toUpperCase() : null;
       }
-    } else if (isVibeImage && (hasLocalImage || hasContext)) {
+    } else if (isAttachmentImage && (hasLocalImage || hasContext)) {
       if (!isWorkspaceImage) {
         thumbnailContent = (
           <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
@@ -440,7 +440,7 @@ export function createImageNode(options: CreateImageNodeOptions) {
         );
         displayName = truncatePath(src);
       }
-    } else if (!isVibeImage) {
+    } else if (!isAttachmentImage) {
       thumbnailContent = (
         <div className="w-10 h-10 flex items-center justify-center bg-muted rounded flex-shrink-0">
           <HelpCircle className="w-5 h-5 text-muted-foreground" />

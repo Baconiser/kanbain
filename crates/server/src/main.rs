@@ -12,7 +12,7 @@ use tracing_subscriber::{EnvFilter, prelude::*};
 use utils::port_file::write_port_file_with_proxy;
 
 #[derive(Debug, Error)]
-pub enum VibeKanbanError {
+pub enum KanbainError {
     #[error(transparent)]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -24,7 +24,7 @@ pub enum VibeKanbanError {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), VibeKanbanError> {
+async fn main() -> Result<(), KanbainError> {
     // Install rustls crypto provider before any TLS operations
     rustls::crypto::aws_lc_rs::default_provider()
         .install_default()

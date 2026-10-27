@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@vibe/ui/components/Button';
+import { Button } from '@kanbain/ui/components/Button';
 import {
   Dialog,
   DialogContent,
@@ -7,14 +7,14 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@vibe/ui/components/KeyboardDialog';
+} from '@kanbain/ui/components/KeyboardDialog';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@vibe/ui/components/Select';
+} from '@kanbain/ui/components/Select';
 import { EditorType } from 'shared/types';
 import { useOpenInEditor } from '@/shared/hooks/useOpenInEditor';
 import { create, useModal } from '@ebay/nice-modal-react';

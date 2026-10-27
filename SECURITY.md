@@ -12,7 +12,7 @@ receive fixes on a best-effort basis.
 ## Reporting a Vulnerability
 
 Please report security vulnerabilities by opening a **private** GitHub Security
-Advisory at `https://github.com/BloopAI/vibe-kanban/security/advisories/new`.
+Advisory at `https://github.com/Baconiser/kanbain/security/advisories/new`.
 
 Include a description of the issue, steps to reproduce, and your assessment of
 impact. You will receive an acknowledgement within 72 hours. If the report is

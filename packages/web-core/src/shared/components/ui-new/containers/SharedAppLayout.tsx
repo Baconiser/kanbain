@@ -7,8 +7,8 @@ import { cn } from '@/shared/lib/utils';
 import { isTauriMac } from '@/shared/lib/platform';
 
 import { NavbarContainer } from './NavbarContainer';
-import { AppBar } from '@vibe/ui/components/AppBar';
-import { MobileDrawer } from '@vibe/ui/components/MobileDrawer';
+import { AppBar } from '@kanbain/ui/components/AppBar';
+import { MobileDrawer } from '@kanbain/ui/components/MobileDrawer';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useCurrentAppDestination } from '@/shared/hooks/useCurrentAppDestination';
@@ -17,7 +17,7 @@ import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog'
 import { useCommandBarShortcut } from '@/shared/hooks/useCommandBarShortcut';
 import { useWorkspaceSidebarPreviewController } from '@/shared/hooks/useWorkspaceSidebarPreviewController';
 import { WorkspacesSidebarContainer } from '@/pages/workspaces/WorkspacesSidebarContainer';
-import { WorkspacesSidebarReopenTag } from '@vibe/ui/components/WorkspacesSidebar';
+import { WorkspacesSidebarReopenTag } from '@kanbain/ui/components/WorkspacesSidebar';
 
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();

@@ -1,163 +1,90 @@
 <p align="center">
-  <a href="https://vibekanban.com">
-    <picture>
-      <source srcset="packages/public/vibe-kanban-logo-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/public/vibe-kanban-logo.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/public/vibe-kanban-logo.svg" alt="Vibe Kanban Logo">
-    </picture>
-  </a>
+  <picture>
+    <source srcset="packages/public/kanbain-logo-dark.svg" media="(prefers-color-scheme: dark)">
+    <source srcset="packages/public/kanbain-logo.svg" media="(prefers-color-scheme: light)">
+    <img src="packages/public/kanbain-logo.svg" alt="KanbAIn Logo">
+  </picture>
 </p>
 
-<p align="center">Get 10X more out of Claude Code, Gemini CLI, Codex, Amp and other coding agents...</p>
-<p align="center">
-  <a href="https://www.npmjs.com/package/vibe-kanban"><img alt="npm" src="https://img.shields.io/npm/v/vibe-kanban?style=flat-square" /></a>
-  <a href="https://github.com/BloopAI/vibe-kanban/blob/main/.github/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/BloopAI/vibe-kanban/.github%2Fworkflows%2Fpublish.yml" /></a>
-  <a href="https://deepwiki.com/BloopAI/vibe-kanban"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
-</p>
+KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a
+local desktop app for Windows. You drop in Jira tickets, an LLM enhances them,
+and sandboxed AI agents plan, code, test and document the work until it is
+ready for your review. Nothing reaches `main` without your approval.
 
-<h1 align="center">
-  <strong>Vibe Kanban is sunsetting.</strong>
-  <a href="https://www.vibekanban.com/blog/shutdown">Read the announcement.</a>
-</h1>
+KanbAIn is a hard fork of [Vibe Kanban](https://github.com/BloopAI/vibe-kanban)
+(Apache-2.0). It is local only: the cloud, relay and analytics features are
+removed, and only the LLM APIs are remote. Supported agent runtimes are
+**Claude Code** and **OpenCode**.
 
-![](packages/public/vibe-kanban-screenshot-overview.png)
-
-## Overview
-
-In a world where software engineers spend most of their time planning and reviewing coding agents, the most impactful way to ship more is to get faster at planning and review.
-
-Vibe Kanban is built for this. Use kanban issues to plan work, either privately or with your team. When you're ready to begin, create workspaces where coding agents can execute.
-
-- **Plan with kanban issues** — create, prioritise, and assign issues on a kanban board
-- **Run coding agents in workspaces** — each workspace gives an agent a branch, a terminal, and a dev server
-- **Review diffs and leave inline comments** — send feedback directly to the agent without leaving the UI
-- **Preview your app** — built-in browser with devtools, inspect mode, and device emulation
-- **Switch between 10+ coding agents** — Claude Code, Codex, Gemini CLI, GitHub Copilot, Amp, Cursor, OpenCode, Droid, CCR, and Qwen Code
-- **Create pull requests and merge** — open PRs with AI-generated descriptions, review on GitHub, and merge
-
-![](packages/public/vibe-kanban-screenshot-workspace.png)
-
-One command. Describe the work, review the diff, ship it.
-
-```bash
-npx vibe-kanban
-```
-
-
-## Installation
-
-Make sure you have authenticated with your favourite coding agent. A full list of supported coding agents can be found in the [docs](https://vibekanban.com/docs/supported-coding-agents). Then in your terminal run:
-
-```bash
-npx vibe-kanban
-```
-
-## Documentation
-
-Head to the [website](https://vibekanban.com/docs) for the latest documentation and user guides.
-
-## Self-Hosting
-
-Want to host your own Vibe Kanban Cloud instance? See our [self-hosting guide](https://vibekanban.com/docs/self-hosting/deploy-docker).
-
-## Support
-
-We use [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) for feature requests. Please open a discussion to create a feature request. For bugs please open an issue on this repo.
-
-## Contributing
-
-We would prefer that ideas and changes are first raised with the core team via [GitHub Discussions](https://github.com/BloopAI/vibe-kanban/discussions) or [Discord](https://discord.gg/AC4nwVtJM3), where we can discuss implementation details and alignment with the existing roadmap. Please do not open PRs without first discussing your proposal with the team.
+> KanbAIn is under construction. See [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md)
+> for the phases and [`docs/kanbain-changelog.md`](docs/kanbain-changelog.md)
+> for what has landed.
 
 ## Development
 
 ### Prerequisites
 
-- [Rust](https://rustup.rs/) (latest stable)
-- [Node.js](https://nodejs.org/) (>=20)
-- [pnpm](https://pnpm.io/) (>=8)
+- Rust via [rustup](https://rustup.rs/). The toolchain is pinned to a
+  **nightly** in `rust-toolchain.toml`; rustup installs it automatically.
+- [Node.js](https://nodejs.org/) 20 or newer
+- [pnpm](https://pnpm.io/) 10.13.1 (via `corepack enable`)
 
-Additional development tools:
+Additional tools:
+
 ```bash
 cargo install cargo-watch
-cargo install sqlx-cli
+cargo install sqlx-cli --no-default-features --features sqlite,rustls
 ```
 
 Install dependencies:
+
 ```bash
 pnpm i
 ```
 
-### Running the dev server
+### Running
 
 ```bash
-pnpm run dev
+pnpm run dev        # backend + web app in the browser (development only)
+pnpm run tauri:dev  # desktop app
 ```
 
-This will start the backend and web app. A blank DB will be copied from the `dev_assets_seed` folder.
+`pnpm run dev` copies a blank database from `dev_assets_seed`. Users run the
+Tauri app; the browser setup is for development and agent testing.
 
-### Building the web app
-
-To build just the web app:
+### Checks
 
 ```bash
-cd packages/local-web
-pnpm run build
+pnpm run check   # TypeScript + cargo check
+pnpm run lint    # ESLint + clippy + unused i18n keys
+cargo test --workspace
+pnpm run format
 ```
 
-### Build from source (macOS)
-
-1. Run `./local-build.sh`
-2. Test with `cd npx-cli && node bin/cli.js`
-
-### Environment Variables
-
-The following environment variables can be configured at build time or runtime:
-
-| Variable | Type | Default | Description |
-|----------|------|---------|-------------|
-| `POSTHOG_API_KEY` | Build-time | Empty | PostHog analytics API key (disables analytics if empty) |
-| `POSTHOG_API_ENDPOINT` | Build-time | Empty | PostHog analytics endpoint (disables analytics if empty) |
-| `PORT` | Runtime | Auto-assign | **Production**: Server port. **Dev**: Frontend port (backend uses PORT+1) |
-| `BACKEND_PORT` | Runtime | `0` (auto-assign) | Backend server port (dev mode only, overrides PORT+1) |
-| `FRONTEND_PORT` | Runtime | `3000` | Frontend dev server port (dev mode only, overrides PORT) |
-| `HOST` | Runtime | `127.0.0.1` | Backend server host |
-| `MCP_HOST` | Runtime | Value of `HOST` | MCP server connection host (use `127.0.0.1` when `HOST=0.0.0.0` on Windows) |
-| `MCP_PORT` | Runtime | Value of `BACKEND_PORT` | MCP server connection port |
-| `DISABLE_WORKTREE_CLEANUP` | Runtime | Not set | Disable all git worktree cleanup including orphan and expired workspace cleanup (for debugging) |
-| `VK_ALLOWED_ORIGINS` | Runtime | Not set | Comma-separated list of origins that are allowed to make backend API requests (e.g., `https://my-vibekanban-frontend.com`) |
-| `VK_SHARED_API_BASE` | Runtime | Not set | Base URL for the remote/cloud API used by the local desktop app |
-| `VK_SHARED_RELAY_API_BASE` | Runtime | Not set | Base URL for the relay API used by tunnel-mode connections |
-| `VK_TUNNEL` | Runtime | Not set | Enable relay tunnel mode when set (requires relay API base URL) |
-
-**Build-time variables** must be set when running `pnpm run build`. **Runtime variables** are read when the application starts.
-
-#### Self-Hosting with a Reverse Proxy or Custom Domain
-
-When running Vibe Kanban behind a reverse proxy (e.g., nginx, Caddy, Traefik) or on a custom domain, you must set the `VK_ALLOWED_ORIGINS` environment variable. Without this, the browser's Origin header won't match the backend's expected host, and API requests will be rejected with a 403 Forbidden error.
-
-Set it to the full origin URL(s) where your frontend is accessible:
+### Building
 
 ```bash
-# Single origin
-VK_ALLOWED_ORIGINS=https://vk.example.com
-
-# Multiple origins (comma-separated)
-VK_ALLOWED_ORIGINS=https://vk.example.com,https://vk-staging.example.com
+pnpm run tauri:build   # desktop installer for the current platform
 ```
 
-### Remote Deployment
+The `Windows build` GitHub Actions workflow builds the Windows installers on
+`windows-latest` and uploads them as an artifact.
 
-When running Vibe Kanban on a remote server (e.g., via systemctl, Docker, or cloud hosting), you can configure your editor to open projects via SSH:
+### Environment variables
 
-1. **Access via tunnel**: Use Cloudflare Tunnel, ngrok, or similar to expose the web UI
-2. **Configure remote SSH** in Settings → Editor Integration:
-   - Set **Remote SSH Host** to your server hostname or IP
-   - Set **Remote SSH User** to your SSH username (optional)
-3. **Prerequisites**:
-   - SSH access from your local machine to the remote server
-   - SSH keys configured (passwordless authentication)
-   - VSCode Remote-SSH extension
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | auto | **Production**: server port. **Dev**: frontend port (backend uses PORT+1) |
+| `BACKEND_PORT` | auto | Backend server port (dev only, overrides PORT+1) |
+| `FRONTEND_PORT` | `3000` | Frontend dev server port (dev only) |
+| `PREVIEW_PROXY_PORT` | auto | Port of the preview proxy for workspace dev servers |
+| `HOST` | `127.0.0.1` | Backend server host |
+| `MCP_HOST` | value of `HOST` | Host the MCP server connects to |
+| `MCP_PORT` | value of `BACKEND_PORT` | Port the MCP server connects to |
+| `KANBAIN_BACKEND_URL` | not set | Full backend URL for the MCP server (overrides host and port) |
+| `KANBAIN_ALLOWED_ORIGINS` | not set | Comma-separated extra origins allowed to call the backend API |
+| `DISABLE_WORKTREE_CLEANUP` | not set | Disable git worktree cleanup (for debugging) |
 
-When configured, the "Open in VSCode" buttons will generate URLs like `vscode://vscode-remote/ssh-remote+user@host/path` that open your local editor and connect to the remote server.
+## License
 
-See the [documentation](https://vibekanban.com/docs/settings/general) for detailed setup instructions.
+Apache-2.0, as inherited from Vibe Kanban. See [LICENSE](LICENSE).

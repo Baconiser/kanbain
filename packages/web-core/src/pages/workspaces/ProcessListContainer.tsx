@@ -2,8 +2,8 @@ import { useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useExecutionProcessesContext } from '@/shared/hooks/useExecutionProcessesContext';
 import { useLogsPanel } from '@/shared/hooks/useLogsPanel';
-import { ProcessListItem } from '@vibe/ui/components/ProcessListItem';
-import { InputField } from '@vibe/ui/components/InputField';
+import { ProcessListItem } from '@kanbain/ui/components/ProcessListItem';
+import { InputField } from '@kanbain/ui/components/InputField';
 import {
   CaretUpIcon,
   CaretDownIcon,

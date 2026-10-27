@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ClickToComponent } from 'click-to-react-component';
 import { QueryClientProvider } from '@tanstack/react-query';
 import App from '@web/app/entry/App';
-import { CrashScreen } from '@vibe/ui/components/CrashScreen';
+import { CrashScreen } from '@kanbain/ui/components/CrashScreen';
 import '@/i18n';
 import '@/shared/types/modals';
 import { queryClient } from '@/shared/lib/queryClient';

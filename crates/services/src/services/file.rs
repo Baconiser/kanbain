@@ -224,7 +224,7 @@ impl FileService {
             return Ok(());
         }
 
-        let attachments_dir = worktree_path.join(utils::path::VIBE_ATTACHMENTS_DIR);
+        let attachments_dir = worktree_path.join(utils::path::ATTACHMENTS_DIR);
 
         // Fast path: check if all files exist before doing anything
         let all_exist = files

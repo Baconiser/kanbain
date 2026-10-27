@@ -4,7 +4,7 @@ import type { Icon } from '@phosphor-icons/react';
 import { CaretDownIcon } from '@phosphor-icons/react';
 import { cn } from '../lib/cn';
 
-const STORAGE_KEY_PREFIX = 'vibe.ui.collapsible.';
+const STORAGE_KEY_PREFIX = 'kanbain.ui.collapsible.';
 
 function getInitialExpanded(
   persistKey: string | undefined,

@@ -1,17 +1,17 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button } from '@vibe/ui/components/Button';
-import { Input } from '@vibe/ui/components/Input';
-import { Label } from '@vibe/ui/components/Label';
-import { Textarea } from '@vibe/ui/components/Textarea';
-import { Alert } from '@vibe/ui/components/Alert';
+import { Button } from '@kanbain/ui/components/Button';
+import { Input } from '@kanbain/ui/components/Input';
+import { Label } from '@kanbain/ui/components/Label';
+import { Textarea } from '@kanbain/ui/components/Textarea';
+import { Alert } from '@kanbain/ui/components/Alert';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-} from '@vibe/ui/components/KeyboardDialog';
+} from '@kanbain/ui/components/KeyboardDialog';
 import { Loader2 } from 'lucide-react';
 import { tagsApi } from '@/shared/lib/api';
 import type { Tag, CreateTag, UpdateTag } from 'shared/types';

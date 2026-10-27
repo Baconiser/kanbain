@@ -11,7 +11,7 @@ import {
   MOBILE_WIDTH,
   MOBILE_HEIGHT,
   PHONE_FRAME_PADDING,
-} from '@vibe/ui/components/PreviewBrowser';
+} from '@kanbain/ui/components/PreviewBrowser';
 import { usePreviewDevServer } from '@/features/workspace/model/hooks/usePreviewDevServer';
 import { usePreviewUrl } from '@/shared/hooks/usePreviewUrl';
 import { useIsMobile } from '@/shared/hooks/useIsMobile';
@@ -284,11 +284,11 @@ export function PreviewBrowserContainer({
     // Loopback URLs need the preview proxy for origin isolation
     if (!previewProxyPort) return undefined;
 
-    // Don't proxy to Vibe Kanban's own ports (would create infinite loop)
-    const vibeKanbanPort = window.location.port || '80';
-    if (devServerPort === vibeKanbanPort) {
+    // Don't proxy to KanbAIn's own ports (would create infinite loop)
+    const appPort = window.location.port || '80';
+    if (devServerPort === appPort) {
       console.warn(
-        `[Preview] Ignoring dev server URL with same port as Vibe Kanban (${devServerPort}). ` +
+        `[Preview] Ignoring dev server URL with same port as KanbAIn (${devServerPort}). ` +
           'This usually means the dev server failed to start or reported the wrong port.'
       );
       return undefined;
@@ -803,7 +803,7 @@ export function PreviewBrowserContainer({
 
     iframe.contentWindow.postMessage(
       {
-        source: 'vibe-kanban',
+        source: 'kanbain',
         command: visible ? 'show-eruda' : 'hide-eruda',
       },
       '*'

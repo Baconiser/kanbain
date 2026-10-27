@@ -32,7 +32,7 @@ use crate::{
 
 #[derive(Debug, Deserialize)]
 pub struct AttachmentMetadataQuery {
-    /// Path relative to worktree root, e.g., ".vibe-attachments/screenshot.png"
+    /// Path relative to worktree root, e.g., ".kanbain-attachments/screenshot.png"
     pub path: String,
     pub session_id: Uuid,
 }
@@ -98,8 +98,8 @@ pub async fn get_attachment_metadata(
     State(deployment): State<DeploymentImpl>,
     Query(query): Query<AttachmentMetadataQuery>,
 ) -> Result<ResponseJson<ApiResponse<AttachmentMetadata>>, ApiError> {
-    let vibe_attachments_prefix = format!("{}/", utils::path::VIBE_ATTACHMENTS_DIR);
-    if !query.path.starts_with(&vibe_attachments_prefix) {
+    let attachments_prefix = format!("{}/", utils::path::ATTACHMENTS_DIR);
+    if !query.path.starts_with(&attachments_prefix) {
         return Ok(ResponseJson(ApiResponse::success(AttachmentMetadata {
             exists: false,
             file_name: None,
@@ -122,10 +122,7 @@ pub async fn get_attachment_metadata(
     }
 
     let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
-    let file_path = query
-        .path
-        .strip_prefix(&vibe_attachments_prefix)
-        .unwrap_or("");
+    let file_path = query.path.strip_prefix(&attachments_prefix).unwrap_or("");
     ensure_workspace_attachment_exists(&deployment, &base_path, file_path).await?;
     let full_path = base_path.join(&query.path);
 
@@ -177,18 +174,18 @@ pub async fn serve_file(
     }
     let base_path = resolve_session_base_path(&deployment, &workspace, query.session_id).await?;
     ensure_workspace_attachment_exists(&deployment, &base_path, &path).await?;
-    let vibe_attachments_dir = base_path.join(utils::path::VIBE_ATTACHMENTS_DIR);
-    let full_path = vibe_attachments_dir.join(&path);
+    let attachments_dir = base_path.join(utils::path::ATTACHMENTS_DIR);
+    let full_path = attachments_dir.join(&path);
 
     let canonical_path = tokio::fs::canonicalize(&full_path)
         .await
         .map_err(|_| ApiError::File(FileError::NotFound))?;
 
-    let canonical_vibe_attachments = tokio::fs::canonicalize(&vibe_attachments_dir)
+    let canonical_attachments_dir = tokio::fs::canonicalize(&attachments_dir)
         .await
         .map_err(|_| ApiError::File(FileError::NotFound))?;
 
-    if !canonical_path.starts_with(&canonical_vibe_attachments) {
+    if !canonical_path.starts_with(&canonical_attachments_dir) {
         return Err(ApiError::File(FileError::NotFound));
     }
 
@@ -231,7 +228,7 @@ async fn ensure_workspace_attachment_exists(
     base_path: &Path,
     file_path: &str,
 ) -> Result<(), ApiError> {
-    let attachment_dir = base_path.join(utils::path::VIBE_ATTACHMENTS_DIR);
+    let attachment_dir = base_path.join(utils::path::ATTACHMENTS_DIR);
     let full_path = attachment_dir.join(file_path);
     if full_path.exists() {
         return Ok(());

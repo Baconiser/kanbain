@@ -9,19 +9,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@vibe/ui/components/KeyboardDialog';
-import { Button } from '@vibe/ui/components/Button';
-import { Label } from '@vibe/ui/components/Label';
+} from '@kanbain/ui/components/KeyboardDialog';
+import { Button } from '@kanbain/ui/components/Button';
+import { Label } from '@kanbain/ui/components/Label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@vibe/ui/components/Select';
-import { AutoExpandingTextarea } from '@vibe/ui/components/AutoExpandingTextarea';
+} from '@kanbain/ui/components/Select';
+import { AutoExpandingTextarea } from '@kanbain/ui/components/AutoExpandingTextarea';
 import { VirtualizedProcessLogs } from '@/shared/components/VirtualizedProcessLogs';
-import { RunningDots } from '@vibe/ui/components/RunningDots';
+import { RunningDots } from '@kanbain/ui/components/RunningDots';
 import { defineModal } from '@/shared/lib/modals';
 import { repoApi, workspacesApi } from '@/shared/lib/api';
 import { useLogStream } from '@/shared/hooks/useLogStream';

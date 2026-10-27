@@ -1,5 +1,5 @@
 {
-  "name": "@vibe/web-core",
+  "name": "@kanbain/web-core",
   "private": true,
   "version": "0.1.18",
   "type": "module",
@@ -47,7 +47,7 @@
     "@tanstack/react-virtual": "^3.14.13",
     "@tanstack/zod-adapter": "^1.167.0",
     "@uiw/react-codemirror": "^4.25.11",
-    "@vibe/ui": "workspace:*",
+    "@kanbain/ui": "workspace:*",
     "@virtuoso.dev/message-list": "^1.18.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
@@ -82,7 +82,6 @@
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "rfc6902": "^5.3.0",
-    "simple-icons": "^15.22.0",
     "tailwind-merge": "^2.6.1",
     "tailwind-scrollbar": "^3.1.0",
     "tailwindcss-animate": "^1.0.7",

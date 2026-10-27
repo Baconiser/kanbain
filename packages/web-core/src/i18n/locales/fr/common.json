@@ -204,7 +204,7 @@
   "workspacesGuide": {
     "welcome": {
       "title": "Bienvenue",
-      "content": "Bienvenue dans les Espaces de travail, une interface repensée pour Vibe Kanban. Nous la déployons auprès d'utilisateurs sélectionnés pour recueillir leurs premiers retours. Partagez vos impressions à tout moment en utilisant l'icône de feedback dans la barre de navigation."
+      "content": "Bienvenue dans les Espaces de travail, une interface repensée pour KanbAIn. Nous la déployons auprès d'utilisateurs sélectionnés pour recueillir leurs premiers retours. Partagez vos impressions à tout moment en utilisant l'icône de feedback dans la barre de navigation."
     },
     "commandBar": {
       "title": "Barre de commandes",

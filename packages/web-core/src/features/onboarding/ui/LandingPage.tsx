@@ -1,4 +1,4 @@
-import { forwardRef, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpenIcon,
   BirdIcon,
@@ -14,8 +14,6 @@ import {
   WaveformIcon,
   type Icon,
 } from '@phosphor-icons/react';
-import type { IconProps } from '@phosphor-icons/react';
-import { siDiscord } from 'simple-icons';
 import {
   BaseCodingAgent,
   EditorType,
@@ -31,7 +29,7 @@ import { getIdeName } from '@/shared/lib/ideName';
 import { cn, playSound } from '@/shared/lib/utils';
 import { isTauriApp } from '@/shared/lib/platform';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
-import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
+import { PrimaryButton } from '@kanbain/ui/components/PrimaryButton';
 
 type SoundOption = {
   value: SoundFile;
@@ -82,35 +80,15 @@ const AGENT_PRIORITY: BaseCodingAgent[] = [
   BaseCodingAgent.OPENCODE,
 ];
 
-const DiscordIcon: Icon = forwardRef<SVGSVGElement, IconProps>(
-  ({ className, color = 'currentColor' }, ref) => (
-    <svg
-      ref={ref}
-      className={className}
-      viewBox="0 0 24 24"
-      fill={color}
-      aria-hidden="true"
-    >
-      <path d={siDiscord.path} />
-    </svg>
-  )
-);
-DiscordIcon.displayName = 'DiscordIcon';
-
 const SOCIAL_LINKS = [
   {
-    label: 'Discord',
-    href: 'https://discord.gg/AC4nwVtJM3',
-    icon: DiscordIcon,
-  },
-  {
     label: 'GitHub',
-    href: 'https://github.com/BloopAI/vibe-kanban',
+    href: 'https://github.com/Baconiser/kanbain',
     icon: GithubLogoIcon,
   },
   {
     label: 'Docs',
-    href: 'https://www.vibekanban.com/docs',
+    href: 'https://github.com/Baconiser/kanbain/tree/main/docs',
     icon: BookOpenIcon,
   },
 ];
@@ -147,8 +125,8 @@ export function LandingPage() {
 
   const logoSrc =
     resolveTheme(theme) === 'dark'
-      ? '/vibe-kanban-logo-dark.svg'
-      : '/vibe-kanban-logo.svg';
+      ? '/kanbain-logo-dark.svg'
+      : '/kanbain-logo.svg';
 
   useEffect(() => {
     if (!config || initialized) return;
@@ -276,7 +254,7 @@ export function LandingPage() {
         {/* Header */}
         <header className="shrink-0 space-y-base p-double pb-base">
           <div className="flex items-center justify-between">
-            <img src={logoSrc} alt="Vibe Kanban" className="h-8 w-auto logo" />
+            <img src={logoSrc} alt="KanbAIn" className="h-8 w-auto logo" />
             <div className="flex flex-wrap items-center gap-2">
               {SOCIAL_LINKS.map((link) => (
                 <PrimaryButton
@@ -296,12 +274,12 @@ export function LandingPage() {
                 weight="fill"
               />
               <p className="text-sm text-normal">
-                Vibe Kanban runs AI coding agents with{' '}
+                KanbAIn runs AI coding agents with{' '}
                 <code>--dangerously-skip-permissions</code> /{' '}
                 <code>--yolo</code> by default. Always review what agents are
                 doing.{' '}
                 <a
-                  href="https://www.vibekanban.com/docs/getting-started#safety-notice"
+                  href="https://github.com/Baconiser/kanbain/blob/main/docs/getting-started.mdx#safety-notice"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-brand hover:underline"
@@ -488,27 +466,7 @@ export function LandingPage() {
 
         {/* Footer */}
         <div className="shrink-0 border-t border-border p-double pt-base flex items-center justify-between gap-base">
-          <p className="text-xs text-low">
-            By continuing you agree to the{' '}
-            <a
-              href="https://www.vibekanban.com/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand hover:underline"
-            >
-              terms and conditions
-            </a>{' '}
-            and{' '}
-            <a
-              href="https://www.vibekanban.com/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-brand hover:underline"
-            >
-              privacy policy
-            </a>
-            .
-          </p>
+          <span />
           <PrimaryButton
             value={saving ? 'Saving...' : 'Continue'}
             onClick={handleContinue}

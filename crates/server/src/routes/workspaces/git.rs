@@ -204,7 +204,7 @@ pub async fn merge_workspace(
 
     let workspace_label = workspace.name.as_deref().unwrap_or(&workspace.branch);
     let vk_id = workspace.id;
-    let commit_message = format!("{} (vibe-kanban {})", workspace_label, vk_id);
+    let commit_message = format!("{} (kanbain {})", workspace_label, vk_id);
 
     let merge_commit_id = deployment.git().merge_changes(
         &repo.path,

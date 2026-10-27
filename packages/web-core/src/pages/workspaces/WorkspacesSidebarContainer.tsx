@@ -19,21 +19,21 @@ import { CommandBarDialog } from '@/shared/dialogs/command-bar/CommandBarDialog'
 import {
   WorkspacesSidebar,
   type WorkspacesSidebarPersistKeys,
-} from '@vibe/ui/components/WorkspacesSidebar';
-import { PropertyDropdown } from '@vibe/ui/components/PropertyDropdown';
-import { PrimaryButton } from '@vibe/ui/components/PrimaryButton';
-import { IconButton } from '@vibe/ui/components/IconButton';
+} from '@kanbain/ui/components/WorkspacesSidebar';
+import { PropertyDropdown } from '@kanbain/ui/components/PropertyDropdown';
+import { PrimaryButton } from '@kanbain/ui/components/PrimaryButton';
+import { IconButton } from '@kanbain/ui/components/IconButton';
 import {
   ButtonGroup,
   ButtonGroupItem,
-} from '@vibe/ui/components/IconButtonGroup';
+} from '@kanbain/ui/components/IconButtonGroup';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-} from '@vibe/ui/components/Dialog';
+} from '@kanbain/ui/components/Dialog';
 import {
   FunnelIcon,
   GitPullRequestIcon,

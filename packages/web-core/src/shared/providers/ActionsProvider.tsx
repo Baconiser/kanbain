@@ -1,7 +1,7 @@
 import { useCallback, useMemo, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Workspace } from 'shared/types';
-import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
+import { ConfirmDialog } from '@kanbain/ui/components/ConfirmDialog';
 import {
   type ActionDefinition,
   type ActionExecutorContext,

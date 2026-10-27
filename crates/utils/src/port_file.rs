@@ -14,8 +14,8 @@ pub async fn write_port_file_with_proxy(
     main_port: u16,
     preview_proxy_port: Option<u16>,
 ) -> std::io::Result<PathBuf> {
-    let dir = env::temp_dir().join("vibe-kanban");
-    let path = dir.join("vibe-kanban.port");
+    let dir = env::temp_dir().join("kanbain");
+    let path = dir.join("kanbain.port");
     let port_info = PortInfo {
         main_port,
         preview_proxy_port,

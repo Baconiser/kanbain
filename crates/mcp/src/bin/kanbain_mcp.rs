@@ -26,9 +26,9 @@ fn main() -> anyhow::Result<()> {
         .unwrap()
         .block_on(async move {
             let version = env!("CARGO_PKG_VERSION");
-            init_process_logging("vibe-kanban-mcp", version);
+            init_process_logging("kanbain-mcp", version);
 
-            let base_url = resolve_base_url("vibe-kanban-mcp").await?;
+            let base_url = resolve_base_url("kanbain-mcp").await?;
             let LaunchConfig { mode } = launch_config;
 
             let server = match mode {
@@ -64,12 +64,12 @@ where
                 })?);
             }
             "-h" | "--help" => {
-                println!("Usage: vibe-kanban-mcp --mode <global|orchestrator>");
+                println!("Usage: kanbain-mcp --mode <global|orchestrator>");
                 std::process::exit(0);
             }
             _ => {
                 return Err(anyhow::anyhow!(
-                    "Unknown argument '{arg}'. Usage: vibe-kanban-mcp --mode <global|orchestrator>"
+                    "Unknown argument '{arg}'. Usage: kanbain-mcp --mode <global|orchestrator>"
                 ));
             }
         }
@@ -95,9 +95,9 @@ where
 }
 
 async fn resolve_base_url(log_prefix: &str) -> anyhow::Result<String> {
-    if let Ok(url) = std::env::var("VIBE_BACKEND_URL") {
+    if let Ok(url) = std::env::var("KANBAIN_BACKEND_URL") {
         tracing::info!(
-            "[{}] Using backend URL from VIBE_BACKEND_URL: {}",
+            "[{}] Using backend URL from KANBAIN_BACKEND_URL: {}",
             log_prefix,
             url
         );
@@ -119,7 +119,7 @@ async fn resolve_base_url(log_prefix: &str) -> anyhow::Result<String> {
                 .map_err(|error| anyhow::anyhow!("Invalid port value '{}': {}", port_str, error))?
         }
         Err(_) => {
-            let port = read_port_file("vibe-kanban").await?;
+            let port = read_port_file("kanbain").await?;
             tracing::info!("[{}] Using port from port file: {}", log_prefix, port);
             port
         }
@@ -144,7 +144,7 @@ fn init_process_logging(log_prefix: &str, version: &str) {
         .init();
 
     tracing::debug!(
-        "[{}] Starting Vibe Kanban MCP server version {}...",
+        "[{}] Starting KanbAIn MCP server version {}...",
         log_prefix,
         version
     );

@@ -1,7 +1,7 @@
 (function() {
   'use strict';
 
-  var SOURCE = 'vibe-devtools';
+  var SOURCE = 'kanbain-devtools';
   var NAV_SESSION_POINTER_KEY = '__vk_nav_session';
   var NAV_SESSION_PREFIX = '__vk_nav_';
   var DOC_ID = Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);

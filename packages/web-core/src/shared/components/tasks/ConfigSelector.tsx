@@ -1,12 +1,12 @@
 import { Settings2, ArrowDown } from 'lucide-react';
-import { Button } from '@vibe/ui/components/Button';
+import { Button } from '@kanbain/ui/components/Button';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@vibe/ui/components/DropdownMenu';
-import { Label } from '@vibe/ui/components/Label';
+} from '@kanbain/ui/components/DropdownMenu';
+import { Label } from '@kanbain/ui/components/Label';
 import { getSortedExecutorVariantKeys } from '@/shared/lib/executor';
 import type { ExecutorProfileId } from 'shared/types';
 
