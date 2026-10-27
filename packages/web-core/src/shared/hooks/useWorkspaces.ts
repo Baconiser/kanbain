@@ -3,7 +3,6 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 import type {
   WorkspaceWithStatus,
   WorkspaceSummary,
@@ -92,19 +91,14 @@ export const workspaceKeys = {
 
 // Fetch workspace summaries from the API by archived status
 async function fetchWorkspaceSummariesByArchived(
-  archived: boolean,
-  hostId: string | null
+  archived: boolean
 ): Promise<Map<string, WorkspaceSummary>> {
   try {
-    const basePath = hostId ? `/api/host/${hostId}` : '/api';
-    const response = await makeLocalApiRequest(
-      `${basePath}/workspaces/summaries`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ archived }),
-      }
-    );
+    const response = await makeLocalApiRequest(`/api/workspaces/summaries`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived }),
+    });
 
     if (!response.ok) {
       console.warn('Failed to fetch workspace summaries:', response.status);
@@ -128,13 +122,10 @@ async function fetchWorkspaceSummariesByArchived(
 }
 
 export function useWorkspaces(): UseWorkspacesResult {
-  const hostId = useHostId();
-
   // Two separate WebSocket connections: one for active, one for archived
   // No limit param - we fetch all and slice on frontend so backfill works when archiving
-  const apiBasePath = hostId ? `/api/host/${hostId}` : '/api';
-  const activeEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=false`;
-  const archivedEndpoint = `${apiBasePath}/workspaces/streams/ws?archived=true`;
+  const activeEndpoint = '/api/workspaces/streams/ws?archived=false';
+  const archivedEndpoint = '/api/workspaces/streams/ws?archived=true';
 
   const initialData = useCallback(
     (): WorkspacesState => ({ workspaces: {} }),
@@ -163,8 +154,8 @@ export function useWorkspaces(): UseWorkspacesResult {
   // Fetch summaries for active workspaces
   const { data: activeSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
-      queryKey: workspaceSummaryKeys.byArchived(false, hostId),
-      queryFn: () => fetchWorkspaceSummariesByArchived(false, hostId),
+      queryKey: workspaceSummaryKeys.byArchived(false),
+      queryFn: () => fetchWorkspaceSummariesByArchived(false),
       enabled: activeIsInitialized,
       staleTime: 1000,
       refetchInterval: 15000,
@@ -176,8 +167,8 @@ export function useWorkspaces(): UseWorkspacesResult {
   // Fetch summaries for archived workspaces
   const { data: archivedSummaries = new Map<string, WorkspaceSummary>() } =
     useQuery({
-      queryKey: workspaceSummaryKeys.byArchived(true, hostId),
-      queryFn: () => fetchWorkspaceSummariesByArchived(true, hostId),
+      queryKey: workspaceSummaryKeys.byArchived(true),
+      queryFn: () => fetchWorkspaceSummariesByArchived(true),
       enabled: archivedIsInitialized,
       staleTime: 1000,
       refetchInterval: 15000,

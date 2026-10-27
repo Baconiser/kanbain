@@ -2,7 +2,6 @@ import { useCallback, useMemo, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { Workspace } from 'shared/types';
 import { ConfirmDialog } from '@vibe/ui/components/ConfirmDialog';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 import {
   type ActionDefinition,
   type ActionExecutorContext,
@@ -17,16 +16,13 @@ import { useLogsPanel } from '@/shared/hooks/useLogsPanel';
 import { useLogStream } from '@/shared/hooks/useLogStream';
 import { ActionsContext } from '@/shared/hooks/useActions';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
-import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
 
 interface ActionsProviderProps {
   children: ReactNode;
 }
 
 export function ActionsProvider({ children }: ActionsProviderProps) {
-  const appRuntime = useAppRuntime();
   const appNavigation = useAppNavigation();
-  const hostId = useHostId();
   const queryClient = useQueryClient();
   // Get workspace context (ActionsProvider is nested inside WorkspaceProvider)
   const { selectWorkspace, activeWorkspaces, workspaceId, workspace } =
@@ -56,8 +52,6 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
   // Build executor context from hooks
   const executorContext = useMemo<ActionExecutorContext>(() => {
     return {
-      appRuntime,
-      currentHostId: hostId,
       appNavigation,
       queryClient,
       selectWorkspace,
@@ -71,8 +65,6 @@ export function ActionsProvider({ children }: ActionsProviderProps) {
       logsPanelContent,
     };
   }, [
-    appRuntime,
-    hostId,
     queryClient,
     selectWorkspace,
     activeWorkspaces,

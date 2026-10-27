@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from 'react';
 import type { Diff, PatchType } from 'shared/types';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 
 interface RepoDiffEntries {
   [filePath: string]: PatchType;
@@ -30,11 +29,9 @@ export const useDiffStream = (
   enabled: boolean,
   options?: UseDiffStreamOptions
 ): UseDiffStreamResult => {
-  const hostId = useHostId();
   const endpoint = (() => {
     if (!workspaceId) return undefined;
-    const apiBasePath = hostId ? `/api/host/${hostId}` : '/api';
-    const query = `${apiBasePath}/workspaces/${workspaceId}/git/diff/ws`;
+    const query = `/api/workspaces/${workspaceId}/git/diff/ws`;
     if (typeof options?.statsOnly === 'boolean') {
       const params = new URLSearchParams();
       params.set('stats_only', String(options.statsOnly));

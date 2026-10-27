@@ -1,7 +1,6 @@
 import { useQuery, useQueries } from '@tanstack/react-query';
 import { useMemo } from 'react';
 import { repoApi } from '@/shared/lib/api';
-import { getHostRequestScopeQueryKey } from '@/shared/lib/hostRequestScope';
 import type { MachineClient } from '@/shared/lib/machineClient';
 import type { GitBranch } from 'shared/types';
 
@@ -12,19 +11,14 @@ export const repoBranchKeys = {
 
 type Options = {
   enabled?: boolean;
-  hostId?: string | null;
 };
 
 export function useRepoBranches(repoId?: string | null, opts?: Options) {
   const enabled = (opts?.enabled ?? true) && !!repoId;
-  const hostId = opts?.hostId;
 
   return useQuery<GitBranch[]>({
-    queryKey: [
-      ...repoBranchKeys.byRepo(repoId ?? undefined),
-      getHostRequestScopeQueryKey(hostId),
-    ],
-    queryFn: () => repoApi.getBranches(repoId!, hostId),
+    queryKey: repoBranchKeys.byRepo(repoId ?? undefined),
+    queryFn: () => repoApi.getBranches(repoId!),
     enabled,
     staleTime: 60_000,
     refetchOnWindowFocus: true,

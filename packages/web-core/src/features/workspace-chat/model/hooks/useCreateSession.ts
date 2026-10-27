@@ -1,6 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { sessionsApi } from '@/shared/lib/api';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 import { workspaceSessionKeys } from '@/shared/hooks/workspaceSessionKeys';
 import type {
   Session,
@@ -20,7 +19,6 @@ interface CreateSessionParams {
  */
 export function useCreateSession() {
   const queryClient = useQueryClient();
-  const hostId = useHostId();
 
   return useMutation({
     mutationFn: async ({
@@ -46,10 +44,7 @@ export function useCreateSession() {
     onSuccess: (session) => {
       // Invalidate session queries to refresh the list
       queryClient.invalidateQueries({
-        queryKey: workspaceSessionKeys.byWorkspace(
-          session.workspace_id,
-          hostId
-        ),
+        queryKey: workspaceSessionKeys.byWorkspace(session.workspace_id),
       });
     },
   });

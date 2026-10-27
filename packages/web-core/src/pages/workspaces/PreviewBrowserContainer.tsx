@@ -23,7 +23,6 @@ import { useLogStream } from '@/shared/hooks/useLogStream';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 import { ScriptFixerDialog } from '@/shared/dialogs/scripts/ScriptFixerDialog';
 import { usePreviewNavigation } from '@/shared/hooks/usePreviewNavigation';
 import { PreviewDevToolsBridge } from '@/shared/lib/previewDevToolsBridge';
@@ -187,7 +186,6 @@ export function PreviewBrowserContainer({
   );
   const { repos, workspaceId: activeWorkspaceId } = useWorkspaceContext();
   const { previewProxyPort } = useUserSystem();
-  const hostId = useHostId();
 
   const {
     start,
@@ -307,10 +305,8 @@ export function PreviewBrowserContainer({
     const path = effectiveParsedUrl.pathname + effectiveParsedUrl.search;
 
     // Subdomain-based routing: the proxy extracts the port from the Host header
-    const hostToken =
-      hostId != null ? `${devServerPort}--${hostId}` : devServerPort;
     const proxyUrl = new URL(
-      `http://${hostToken}.localhost:${previewProxyPort}${path}`
+      `http://${devServerPort}.localhost:${previewProxyPort}${path}`
     );
     proxyUrl.searchParams.set('_refresh', String(previewRefreshKey));
 
@@ -318,7 +314,6 @@ export function PreviewBrowserContainer({
   }, [
     devServerPort,
     effectiveParsedUrl,
-    hostId,
     isLoopbackPreview,
     previewProxyPort,
     previewRefreshKey,
@@ -371,9 +366,6 @@ export function PreviewBrowserContainer({
       if (!isLoopbackPreview) {
         return stripPreviewRefreshParam(navigation.url) ?? navigation.url;
       }
-      if (hostId != null) {
-        return stripPreviewRefreshParam(navigation.url) ?? navigation.url;
-      }
       if (devServerPort) {
         const transformed = transformProxyUrlToDevUrl(
           navigation.url,
@@ -385,19 +377,8 @@ export function PreviewBrowserContainer({
       }
     }
 
-    if (hostId != null && iframeUrl) {
-      return stripPreviewRefreshParam(iframeUrl) ?? iframeUrl;
-    }
-
     return effectiveUrl ?? null;
-  }, [
-    devServerPort,
-    effectiveUrl,
-    hostId,
-    iframeUrl,
-    isLoopbackPreview,
-    navigation?.url,
-  ]);
+  }, [devServerPort, effectiveUrl, isLoopbackPreview, navigation?.url]);
 
   const handleBridgeMessage = useCallback(
     (message: PreviewDevToolsMessage) => {
@@ -752,11 +733,7 @@ export function PreviewBrowserContainer({
         normalizedInputDevParsed.pathname +
         normalizedInputDevParsed.search +
         normalizedInputDevParsed.hash;
-      const hostToken =
-        hostId != null
-          ? `${normalizedInputDevPort}--${hostId}`
-          : normalizedInputDevPort;
-      const proxyUrl = `http://${hostToken}.localhost:${previewProxyPort}${proxyPath}`;
+      const proxyUrl = `http://${normalizedInputDevPort}.localhost:${previewProxyPort}${proxyPath}`;
       bridgeRef.current?.navigateTo(proxyUrl);
       return;
     }
@@ -767,7 +744,6 @@ export function PreviewBrowserContainer({
     devServerPort,
     urlInputValue,
     displayedPreviewUrl,
-    hostId,
     isLoopbackPreview,
     hasOverride,
     showIframe,

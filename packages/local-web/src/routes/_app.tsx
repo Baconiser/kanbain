@@ -7,7 +7,6 @@ import { useWorkspaceShortcuts } from '@/shared/keyboard/useWorkspaceShortcuts';
 import { useKeyShowHelp, Scope } from '@/shared/keyboard';
 import { KeyboardShortcutsDialog } from '@/shared/dialogs/shared/KeyboardShortcutsDialog';
 import { TerminalProvider } from '@/shared/providers/TerminalProvider';
-import { HostIdProvider } from '@/shared/providers/HostIdProvider';
 import { WorkspaceProvider } from '@/shared/providers/WorkspaceProvider';
 import { ExecutionProcessesProvider } from '@/shared/providers/ExecutionProcessesProvider';
 import { LogsPanelProvider } from '@/shared/providers/LogsPanelProvider';
@@ -42,20 +41,18 @@ function ExecutionProcessesProviderWrapper({
 
 function AppRouteProviders({ children }: { children: ReactNode }) {
   return (
-    <HostIdProvider>
-      <WorkspaceProvider>
-        <ExecutionProcessesProviderWrapper>
-          <LogsPanelProvider>
-            <ActionsProvider>
-              {/* NiceModal renders dialogs as siblings of children at the
-                  Provider level, so it must be inside all providers that
-                  dialogs depend on (Workspace, Actions, etc.). */}
-              <NiceModalProvider>{children}</NiceModalProvider>
-            </ActionsProvider>
-          </LogsPanelProvider>
-        </ExecutionProcessesProviderWrapper>
-      </WorkspaceProvider>
-    </HostIdProvider>
+    <WorkspaceProvider>
+      <ExecutionProcessesProviderWrapper>
+        <LogsPanelProvider>
+          <ActionsProvider>
+            {/* NiceModal renders dialogs as siblings of children at the
+                Provider level, so it must be inside all providers that
+                dialogs depend on (Workspace, Actions, etc.). */}
+            <NiceModalProvider>{children}</NiceModalProvider>
+          </ActionsProvider>
+        </LogsPanelProvider>
+      </ExecutionProcessesProviderWrapper>
+    </WorkspaceProvider>
   );
 }
 

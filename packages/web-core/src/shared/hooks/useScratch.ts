@@ -1,7 +1,5 @@
 import { useCallback } from 'react';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
-import { useAppRuntime } from '@/shared/hooks/useAppRuntime';
-import { useLocalStorageScratch } from '@/shared/hooks/useLocalStorageScratch';
 import { scratchApi } from '@/shared/lib/api';
 import { ScratchType, type Scratch, type UpdateScratch } from 'shared/types';
 
@@ -24,29 +22,15 @@ interface UseScratchOptions {
 }
 
 /**
- * Runtime-aware scratch storage hook.
- *
- * - Local runtime: streams a single scratch item via WebSocket (JSON Patch)
- *   backed by the server-side SQLite scratch table.
- * - Remote runtime: persists scratch data in localStorage for the stable
- *   cloud domain (cloud.vibekanban.com).
+ * Streams a single scratch item via WebSocket (JSON Patch), backed by the
+ * server-side SQLite scratch table.
  */
 export const useScratch = (
   scratchType: ScratchType,
   id: string,
   options?: UseScratchOptions
 ): UseScratchResult => {
-  const runtime = useAppRuntime();
-  const isRemote = runtime === 'remote';
-
-  // --- localStorage path (remote-web) ---
-  const localResult = useLocalStorageScratch(scratchType, id, {
-    enabled: isRemote && (options?.enabled ?? true),
-  });
-
-  // --- WebSocket/API path (local-web) ---
-  const serverEnabled =
-    !isRemote && (options?.enabled ?? true) && id.length > 0;
+  const serverEnabled = (options?.enabled ?? true) && id.length > 0;
   const endpoint = serverEnabled
     ? scratchApi.getStreamUrl(scratchType, id)
     : undefined;
@@ -73,7 +57,7 @@ export const useScratch = (
 
   const isLoading = !isInitialized && !error;
 
-  const serverResult: UseScratchResult = {
+  return {
     scratch,
     isLoading,
     isConnected,
@@ -81,6 +65,4 @@ export const useScratch = (
     updateScratch,
     deleteScratch,
   };
-
-  return isRemote ? localResult : serverResult;
 };

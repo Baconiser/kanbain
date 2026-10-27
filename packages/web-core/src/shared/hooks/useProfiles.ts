@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { profilesApi } from '@/shared/lib/api';
-import { getHostRequestScopeQueryKey } from '@/shared/lib/hostRequestScope';
 import type { MachineClient } from '@/shared/lib/machineClient';
 import type { JsonValue } from 'shared/types';
 import { presetOptionsKeys } from '@/shared/hooks/usePresetOptions';
@@ -24,18 +23,18 @@ export type UseProfilesReturn = {
   saveParsed: (obj: unknown) => Promise<void>;
 };
 
-export function useProfiles(hostId?: string | null): UseProfilesReturn {
+export function useProfiles(): UseProfilesReturn {
   const queryClient = useQueryClient();
-  const queryKey = ['profiles', getHostRequestScopeQueryKey(hostId)] as const;
+  const queryKey = ['profiles', 'local'] as const;
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey,
-    queryFn: () => profilesApi.load(hostId),
+    queryFn: () => profilesApi.load(),
     staleTime: 1000 * 60, // 1 minute cache
   });
 
   const { mutateAsync: saveMutation, isPending: isSaving } = useMutation({
-    mutationFn: (content: string) => profilesApi.save(content, hostId),
+    mutationFn: (content: string) => profilesApi.save(content),
     onSuccess: (_, content) => {
       // Optimistically update cache with new content
       queryClient.setQueryData<{ content: string; path: string }>(

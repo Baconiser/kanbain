@@ -9,7 +9,6 @@ import type {
 import type { DiffViewMode } from '@/shared/stores/useDiffViewStore';
 import { RIGHT_MAIN_PANEL_MODES } from '@/shared/stores/useUiPreferencesStore';
 import type { AppNavigation } from '@/shared/lib/routes/appNavigation';
-import type { AppRuntime } from '@/shared/hooks/useAppRuntime';
 
 // Portable type aliases (avoid importing from component containers)
 export type LogEntry = Extract<
@@ -42,8 +41,6 @@ interface SidebarWorkspace {
 
 // Context provided to action executors (from React hooks)
 export interface ActionExecutorContext {
-  appRuntime: AppRuntime;
-  currentHostId: string | null;
   appNavigation: AppNavigation;
   queryClient: QueryClient;
   selectWorkspace: (workspaceId: string) => void;

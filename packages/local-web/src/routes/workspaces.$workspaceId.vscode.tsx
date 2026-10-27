@@ -1,7 +1,6 @@
 import { type ReactNode } from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { Provider as NiceModalProvider } from '@ebay/nice-modal-react';
-import { HostIdProvider } from '@/shared/providers/HostIdProvider';
 import { WorkspaceProvider } from '@/shared/providers/WorkspaceProvider';
 import { ExecutionProcessesProvider } from '@/shared/providers/ExecutionProcessesProvider';
 import { ActionsProvider } from '@/shared/providers/ActionsProvider';
@@ -25,19 +24,17 @@ function ExecutionProcessesProviderWrapper({
 
 function VSCodeWorkspaceRouteComponent() {
   return (
-    <HostIdProvider>
-      <WorkspaceProvider>
-        <ExecutionProcessesProviderWrapper>
-          <ActionsProvider>
-            <NiceModalProvider>
-              <TerminalProvider>
-                <VSCodeWorkspacePage />
-              </TerminalProvider>
-            </NiceModalProvider>
-          </ActionsProvider>
-        </ExecutionProcessesProviderWrapper>
-      </WorkspaceProvider>
-    </HostIdProvider>
+    <WorkspaceProvider>
+      <ExecutionProcessesProviderWrapper>
+        <ActionsProvider>
+          <NiceModalProvider>
+            <TerminalProvider>
+              <VSCodeWorkspacePage />
+            </TerminalProvider>
+          </NiceModalProvider>
+        </ActionsProvider>
+      </ExecutionProcessesProviderWrapper>
+    </WorkspaceProvider>
   );
 }
 

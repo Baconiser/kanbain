@@ -17,7 +17,6 @@ import { AgentSelector } from '@/shared/components/tasks/AgentSelector';
 import { ConfigSelector } from '@/shared/components/tasks/ConfigSelector';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
-import { useHostId } from '@/shared/providers/HostIdProvider';
 import { workspaceSessionKeys } from '@/shared/hooks/workspaceSessionKeys';
 import { sessionsApi } from '@/shared/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
@@ -37,7 +36,6 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
   ({ sessionId, workspaceId, reviewMarkdown, defaultProfile, onSuccess }) => {
     const modal = useModal();
     const queryClient = useQueryClient();
-    const hostId = useHostId();
     const { profiles, config } = useUserSystem();
     const { sessions, selectedSession, selectedSessionId, selectSession } =
       useWorkspaceContext();
@@ -98,7 +96,7 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
           targetSessionId = session.id;
 
           queryClient.invalidateQueries({
-            queryKey: workspaceSessionKeys.byWorkspace(workspaceId, hostId),
+            queryKey: workspaceSessionKeys.byWorkspace(workspaceId),
           });
         }
 
@@ -143,7 +141,6 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
       effectiveProfile,
       resolvedSessionId,
       workspaceId,
-      hostId,
       createNewSession,
       includeGitContext,
       reviewMarkdown,
