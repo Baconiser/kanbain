@@ -113,14 +113,6 @@ async fn subdomain_proxy_request(
     State(deployment): State<DeploymentImpl>,
     request: Request,
 ) -> Response {
-    let Some(server_addr) = deployment.client_info().get_server_addr() else {
-        return (
-            StatusCode::BAD_REQUEST,
-            "Local server address is not available",
-        )
-            .into_response();
-    };
-
     let Some(proxy_port) = deployment.client_info().get_preview_proxy_port() else {
         return (
             StatusCode::BAD_REQUEST,
@@ -129,11 +121,5 @@ async fn subdomain_proxy_request(
             .into_response();
     };
 
-    preview_proxy::proxy_subdomain_request(
-        deployment.preview_proxy(),
-        server_addr,
-        proxy_port,
-        request,
-    )
-    .await
+    preview_proxy::proxy_subdomain_request(deployment.preview_proxy(), proxy_port, request).await
 }
