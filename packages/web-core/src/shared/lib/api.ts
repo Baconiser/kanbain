@@ -311,11 +311,6 @@ export const workspacesApi = {
     return handleApiResponse<CreateAndStartWorkspaceResponse>(response);
   },
 
-  getAll: async (taskId: string): Promise<Workspace[]> => {
-    const response = await makeRequest(`/api/workspaces?task_id=${taskId}`);
-    return handleApiResponse<Workspace[]>(response);
-  },
-
   /** Get all workspaces across all tasks (newest first) */
   getAllWorkspaces: async (): Promise<Workspace[]> => {
     const response = await makeRequest('/api/workspaces');
@@ -955,34 +950,6 @@ export const attachmentsApi = {
     return handleApiResponse<AttachmentResponse>(response);
   },
 
-  uploadForTask: async (
-    taskId: string,
-    attachment: File
-  ): Promise<AttachmentResponse> => {
-    const formData = new FormData();
-    formData.append('image', attachment);
-
-    const response = await makeLocalApiRequest(
-      `/api/attachments/task/${taskId}/upload`,
-      {
-        method: 'POST',
-        body: formData,
-        credentials: 'include',
-      }
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new ApiError(
-        `Failed to upload attachment: ${errorText}`,
-        response.status,
-        response
-      );
-    }
-
-    return handleApiResponse<AttachmentResponse>(response);
-  },
-
   uploadForAttempt: async (
     workspaceId: string,
     sessionId: string,
@@ -1017,11 +984,6 @@ export const attachmentsApi = {
       method: 'DELETE',
     });
     return handleApiResponse<void>(response);
-  },
-
-  getTaskAttachments: async (taskId: string): Promise<AttachmentResponse[]> => {
-    const response = await makeRequest(`/api/attachments/task/${taskId}`);
-    return handleApiResponse<AttachmentResponse[]>(response);
   },
 
   getAttachmentUrl: (attachmentId: string): string => {

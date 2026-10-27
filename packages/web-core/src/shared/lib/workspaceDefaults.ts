@@ -31,7 +31,7 @@ export async function getWorkspaceDefaults(
         return {
           preferredRepos: scratchDefaults.map((r) => ({
             repo_id: r.repo_id,
-            target_branch: r.target_branch,
+            target_branch: r.target_branch || null,
           })),
         };
       }

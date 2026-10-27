@@ -286,7 +286,7 @@ export function KanbanCardContent<TTag extends KanbanTag = KanbanTag>({
             <KanbanAssignee assignees={assignees} />
           </button>
         ) : (
-          <KanbanAssignee assignees={assignees} />
+          assignees.length > 0 && <KanbanAssignee assignees={assignees} />
         )}
       </div>
 

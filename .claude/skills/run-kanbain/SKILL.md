@@ -67,9 +67,14 @@ node .claude/skills/run-kanbain/driver/smoke.mjs http://localhost:$FRONTEND_PORT
 `smoke.mjs` does the following:
 
 1. Clicks through onboarding if it appears.
-2. Screenshots `/workspaces` and the `/tickets` placeholder.
+2. Screenshots `/workspaces` and the `/tickets` board.
 3. Opens Settings → Agents and reports which agents are listed.
 4. Prints console errors and failed `/api/*` calls.
+
+For the ticket board, `tickets.mjs` (same arguments) creates a project and a
+ticket, edits it, comments, drags it to In progress, checks the change
+arrives live in a second window and survives a reload, and prints PASS/FAIL
+lines.
 
 **Read the screenshots.** A shell that renders while API calls fail still
 shows up in the printed failures. Extend `smoke.mjs`, or copy it, for

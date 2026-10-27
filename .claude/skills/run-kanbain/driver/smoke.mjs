@@ -45,7 +45,10 @@ await page.waitForTimeout(2_000);
 await shot('02-workspaces');
 
 await page.goto(`${base}/tickets`);
-await page.getByText('Local tickets are coming').waitFor({ timeout: 60_000 });
+await page
+  .getByRole('button', { name: /^(New ticket|New project)$/ })
+  .first()
+  .waitFor({ timeout: 60_000 });
 await shot('03-tickets');
 
 await page.goto(`${base}/workspaces`);

@@ -70,7 +70,7 @@ import { useDiffPaths } from '@/shared/stores/useWorkspaceDiffStore';
 import { useSlashCommands } from '@/shared/hooks/useExecutorDiscovery';
 import { useUiPreferencesStore } from '@/shared/stores/useUiPreferencesStore';
 import { cn } from '@/shared/lib/utils';
-import { repoApi } from '@/shared/lib/api';
+import { attachmentsApi, repoApi } from '@/shared/lib/api';
 import { searchTagsAndFiles } from '@/shared/lib/searchTagsAndFiles';
 import { Button } from '@kanbain/ui/components/Button';
 import { Check, Clipboard, Pencil, Trash2 } from 'lucide-react';
@@ -91,10 +91,9 @@ import type { BaseCodingAgent } from 'shared/types';
 
 /** Markdown string representing the editor content */
 
-// Attachment references pointed at cloud storage, which is gone. Local
-// attachments arrive with the SQLite ticket store.
-function fetchAttachmentUrl(): Promise<string> {
-  return Promise.reject(new Error('Attachments are not available yet'));
+// `attachment://<id>` references resolve to the locally stored file.
+function fetchAttachmentUrl(attachmentId: string): Promise<string> {
+  return Promise.resolve(attachmentsApi.getAttachmentUrl(attachmentId));
 }
 
 export type SerializedEditorState = string;

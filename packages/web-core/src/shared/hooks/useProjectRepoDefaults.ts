@@ -1,54 +1,45 @@
-import { scratchApi, ApiError } from '@/shared/lib/api';
-import {
-  ScratchType,
-  type DraftWorkspaceRepo,
-  type ScratchPayload,
-} from 'shared/types';
-
-const SCRATCH_TYPE = ScratchType.PROJECT_REPO_DEFAULTS;
+import type { DraftWorkspaceRepo } from 'shared/types';
+import { projectsApi } from '@/shared/lib/ticketsApi';
 
 /**
- * Read project repo defaults from scratch storage.
- * Returns null if no defaults have been saved for this project.
+ * Read a project's repositories as workspace defaults. The target branch is
+ * left empty so the create screen picks each repo's default branch.
+ * Returns null if the project has no repositories.
  */
 export async function getProjectRepoDefaults(
   projectId: string
 ): Promise<DraftWorkspaceRepo[] | null> {
   try {
-    const scratch = await scratchApi.get(SCRATCH_TYPE, projectId);
-    const payload = scratch.payload as ScratchPayload;
-    if (payload?.type === 'PROJECT_REPO_DEFAULTS') {
-      return payload.data.repos;
-    }
-    return null;
+    const repos = await projectsApi.listRepos(projectId);
+    if (repos.length === 0) return null;
+    return repos.map((repo) => ({ repo_id: repo.id, target_branch: '' }));
   } catch (error) {
-    // 404 means no defaults saved yet — not an error
-    if (error instanceof ApiError && error.status === 404) {
-      return null;
-    }
     console.error('[useProjectRepoDefaults] Failed to read defaults:', error);
     return null;
   }
 }
 
 /**
- * Save project repo defaults to scratch storage (upsert).
+ * Link the repositories chosen for a ticket's workspace to its project, so
+ * the next workspace for that project starts with them.
  */
 export async function saveProjectRepoDefaults(
   projectId: string,
   repos: DraftWorkspaceRepo[]
 ): Promise<void> {
-  await scratchApi.update(SCRATCH_TYPE, projectId, {
-    payload: {
-      type: 'PROJECT_REPO_DEFAULTS',
-      data: { repos },
-    },
-  });
+  const linked = new Set(
+    (await projectsApi.listRepos(projectId)).map((repo) => repo.id)
+  );
+  for (const repo of repos) {
+    if (!linked.has(repo.repo_id)) {
+      await projectsApi.linkRepo(projectId, repo.repo_id);
+    }
+  }
 }
 
 /**
  * Read project repo defaults and filter out repos that no longer exist.
- * Returns an empty array if no defaults are saved or all saved repos are stale.
+ * Returns an empty array if the project has no usable repositories.
  */
 export async function getValidProjectRepoDefaults(
   projectId: string,
