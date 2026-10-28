@@ -297,3 +297,132 @@ available here; Claude Code 2.1.119 itself ran unmodified in the container.
   into containers (Phase 2, per-container MCP).
 - Automated runs (and deleting their container at run end) arrive with the
   orchestrator in Phase 5; today every run is a workspace run.
+
+## Phase 2: Agent profiles, styles, skills, both adapters (2026-10-28)
+
+**Goal:** neutral agent definitions drive both runtimes.
+
+### What changed
+
+- **Agent library (D13).** Agent definitions (`agents/<name>.yaml`, the
+  D31 format plus an optional test-command allowlist and MCP servers),
+  style blocks (`styles/<name>.md`) and skills (`skills/<name>/SKILL.md`
+  plus supporting files) live in the data folder. SQLite indexes them
+  (`agent_definitions`, `style_blocks`, `skills`, including files that fail
+  to parse), and a file watcher re-syncs edits made outside KanbAIn. The
+  planner (Opus), coder and tester (Sonnet), scribe, intake and history
+  (Haiku) agents are seeded on first start. Import takes zips, files or a
+  folder; export gives one agent with its styles and skills, or everything.
+- **Adapters (`crates/executors/src/adapters`).** A `RuntimeAdapter` turns
+  an agent with its styles and skills into arguments, environment and
+  files. Role and styles are appended to each runtime's own system prompt,
+  and the task stays the first message.
+  - **Claude Code:** `--append-system-prompt`, `--tools` from the
+    capabilities, `--max-turns`, `--max-budget-usd` as a second limit, a
+    `PreToolUse` hook (passed with `--settings`) that only lets the test
+    allowlist through for the `test` capability, and `--strict-mcp-config`
+    with the agent's own MCP servers, so the host's MCP config is never used.
+  - **OpenCode:** everything goes in `OPENCODE_CONFIG_CONTENT`: providers
+    pointing at the model proxy, a primary agent with `steps` and the
+    fine-grained `permission` map (deny only, so supervised runs still ask),
+    `instructions` with role and styles, and `provider/model-id` models
+    (`openai/<model>` uses an OpenAI-compatible provider).
+- **CLI drift check.** `--max-turns` is hidden in Claude Code 2.1.119's
+  help but exists. Snapshots of both pinned CLIs' interfaces (help text,
+  `--agents` fields, OpenCode agent, permission and provider keys) are
+  checked in; a test fails when a pinned version changes without a new
+  snapshot, or when an adapter emits a flag or key the CLI doesn't have.
+  `scripts/snapshot-agent-clis.sh` regenerates them from the agent image.
+- **Runs.** A coding run whose executor config names an agent definition
+  resolves it and runs its adapter. Follow-ups and reviews inherit the
+  session's agent. The generated files and skills go read-only under
+  `/kanbain` in the container (`~/.claude/skills` links there, and both
+  runtimes scan it). The run records `agent_def_id`. The agent's budget
+  caps the proxy budget and its `wall_minutes` the time limit. Agent
+  definitions require the sandbox.
+- **OpenCode in the sandbox.** `opencode serve` runs in the container and
+  the backend reaches it through a tunnelled host port; it sees container
+  paths. models.dev fetching and update checks are off.
+- **Claude account (D33).** Settings → Sandbox → "Connect Claude account"
+  runs `claude setup-token` in a throwaway container that can reach only
+  the Anthropic login hosts. It shows the sign-in link, takes the pasted
+  code, and stores the token AES-256-GCM encrypted. When connected, the
+  proxy sends it as a Bearer token with the `oauth-2025-04-20` beta
+  (merged with the client's betas) instead of the API key. Costs are still
+  API-equivalent estimates and budgets apply to them.
+- **UI.**
+  - Settings → Agents replaces the executor profile editor: an agent list
+    and editor, a test run that opens a workspace on a scratch repo,
+    style blocks showing their users, a skills manager with a file list
+    and editor, and import/export.
+  - The create-workspace chat box can pick an agent definition, which then
+    decides executor and model.
+  - Translated into all locales.
+
+### Demo (Linux dev container)
+
+The model upstream was the scripted mock again (no API key or Claude
+account here). Claude Code 2.1.119 and OpenCode 1.4.7 ran unmodified in
+the container.
+
+- **One ticket, one agent, both runtimes** (`agent-demo.mjs`):
+  `demo-coder` with a style block and a skill imported from a zip ran the
+  same ticket on Claude Code, on OpenCode with Anthropic through the
+  proxy, and on OpenCode with `openai/gpt-4.1-mini` through the
+  OpenAI-compatible proxy route.
+  - Every run completed and recorded `demo-coder`.
+  - The upstream saw the real keys, never the run token.
+  - The role and style text were in the system prompt, and the skill was
+    listed and readable inside the container.
+  - The commit came back to the host branch.
+- **Editing the style block** changed the next Claude Code and OpenCode
+  runs' system prompts (V1 gone, V2 present).
+- **Tools follow the capabilities.**
+  - The coder got Read/Glob/Grep/Agent/Edit/Write/NotebookEdit/Bash plus
+    Skill on Claude Code, and no web tools on OpenCode.
+  - A tester limited to `git status*` and `ls*` had `rm -rf /tmp/x` and
+    `ls && curl …` refused by the hook while the allowed commands ran.
+  - The skills folder is root-owned and not writable by the agent.
+- **Claude account:** the sign-in link appears in the UI. A wrong code
+  reaches `platform.claude.com` through the egress proxy and comes back
+  as "Claude sign-in failed: Request failed with status code 400", and
+  the login container is removed.
+- `agents.mjs` (UI) passed:
+  - Settings → Agents: the defaults are listed; a style created,
+    attached to `coder` and edited; a skill created and its `SKILL.md`
+    edited; a skill zip imported.
+  - Test run opens a workspace named after the agent.
+  - The chat-box picker switches the executor.
+  - The Claude sign-in link is shown and cancelling works.
+  - No console errors or failed API calls.
+- `cargo test --workspace` (new library, adapter, drift, proxy OAuth and
+  login parser tests), `pnpm run check`, `pnpm run lint` and the i18n
+  checks pass; `smoke.mjs` and `tickets.mjs` still pass.
+
+### Not verified here
+
+- **A real Claude account.** Neither the token exchange with a real code
+  nor subscription runs through the proxy could be checked. OpenCode's
+  requests may be rejected for subscription tokens, because they lack
+  Claude Code's system prompt; the API key path is the fallback (plan
+  risk).
+- **Windows.** The login PTY (ConPTY + `docker exec -it`) and the
+  OpenCode tunnel need the user's check on Windows.
+
+### Known leftovers
+
+- **OS keychain.** The encryption key still lives in `<data>/secret.key`.
+  Moving it to the OS keychain through Tauri was left out because it
+  can't be tested here and could lock out existing secrets.
+- **Model prices.** `prices.json` has no OpenAI-compatible models, so
+  their runs cost $0 and their budgets aren't enforced until prices are
+  added there.
+- **Follow-ups.** The follow-up chat box still shows the model selector,
+  although an agent session's follow-ups run the session's agent, and a
+  follow-up can't drop the agent.
+- **MCP settings.** Settings → MCP Servers edits the host config, which
+  sandboxed agent runs no longer use. MCP servers for agents come from
+  their definitions only.
+- **Profiles.** `default_profiles.json` and a user `profiles.json` still
+  configure runs without an agent definition, but have no UI any more.
+  The `@rjsf` packages are unused and can be removed from `package.json`.

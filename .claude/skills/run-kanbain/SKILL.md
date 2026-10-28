@@ -112,7 +112,38 @@ Sandbox and the run summary in the Logs panel.
 Start long-running helpers with `setsid nohup … &` so a stopped tool call
 does not take them down, and stop them by port (`lsof -ti:<port>`).
 
-## 6. Stop
+## 6. Agent definitions (Phase 2)
+
+Agents, style blocks and skills live in `dev_assets/agents`, `styles` and
+`skills` (seeded with the six default agents on first start) and are
+served under `/api/agent-library`. Agent runs need the sandbox.
+
+The mock upstream logs, per request, the tool names and which of the
+script's `markers` appear in the system prompt (`system_markers`) or
+anywhere in the request (`markers`, which includes tool results). It also
+answers OpenAI-compatible `/v1/chat/completions`; start the backend with
+`KANBAIN_OPENAI_BASE_URL=http://127.0.0.1:18555 OPENAI_API_KEY=mock-openai-key`
+as well to route OpenCode's `openai/<model>` agents to it.
+
+- `sandbox-run.mjs … <label> - <agent>` runs one ticket with an agent
+  definition (`-` skips the budget argument).
+- `agent-demo.mjs <backendPort> <token> <repoDir> <mockLog> <skillZip>`
+  with `mock-script-agent-demo.json`: imports the zip's skill, creates
+  `demo-coder` and runs one ticket on Claude Code, on OpenCode (Anthropic)
+  and on OpenCode with `openai/gpt-4.1-mini`, then edits the style block
+  and runs both runtimes again, checking prompts, the skill in the
+  container, keys and the host branch. The zip needs a skill whose
+  description contains "Imported from a zip in the agent demo".
+- `agents.mjs <frontendUrl> <shotsDir> <backendPort> <token> [skillZip]`
+  drives Settings → Agents (styles, skills, zip import, test run), the
+  agent picker in the create chat box and the Claude account sign-in link
+  in Settings → Sandbox.
+
+`scripts/snapshot-agent-clis.sh kanbain-agent:<tag>` regenerates the CLI
+interface snapshots the adapter drift tests use; run it after bumping a
+version in `crates/executors/src/versions.rs`.
+
+## 7. Stop
 
 ```bash
 lsof -ti:$FRONTEND_PORT -sTCP:LISTEN | xargs -r kill

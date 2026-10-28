@@ -1,0 +1,5 @@
+{"commands": [
+  "ls ~/.claude/skills && cat ~/.claude/skills/zipped-skill/SKILL.md",
+  "echo demo >> demo.txt && git add demo.txt && git commit -qm 'AGD: agent demo run' && git log --oneline -1"
+], "output_tokens": 300,
+ "markers": ["ROLE-DEMO", "STYLE-DEMO-V1", "STYLE-DEMO-V2", "Imported from a zip in the agent demo"]}
