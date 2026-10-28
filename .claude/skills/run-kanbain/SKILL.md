@@ -83,11 +83,43 @@ lines.
 shows up in the printed failures. Extend `smoke.mjs`, or copy it, for
 feature-specific paths.
 
-## 5. Stop
+## 5. Sandboxed agent runs (Phase 1)
+
+Agents run in Docker (docker-in-docker in this dev container). The first
+backend start builds `kanbain-agent:<ver>-<hash>` in the background, which
+takes about 8 minutes; `GET /api/sandbox/status` shows `image_building`.
+
+Without a real API key, point the model proxy at the scripted mock
+upstream. It answers Claude Code with Bash tool calls from a JSON script,
+then an end_turn, and reports usage so costs are recorded:
+
+```bash
+D=.claude/skills/run-kanbain/driver
+python3 $D/mock_anthropic.py 18555 $D/mock-script-commit.json /tmp/mock.log &
+# start the backend with these two extra variables:
+#   KANBAIN_ANTHROPIC_BASE_URL=http://127.0.0.1:18555 ANTHROPIC_API_KEY=mock-upstream-key
+node $D/sandbox-run.mjs $BACKEND_PORT $KANBAIN_LAUNCH_TOKEN /tmp/repos/demo demo
+```
+
+`sandbox-run.mjs` creates a repo, project and ticket, starts a Claude Code
+workspace run and prints the run's status, tokens, cost, events (model
+calls, blocked egress, sync, harvest) and the host branch. Pass a budget
+as the fifth argument and use `mock-script-budget.json` (a long streamed
+answer) to see the budget cut-off and the ticket move to Blocked.
+`sandbox.mjs` (frontend URL, shots dir, workspace id) checks Settings →
+Sandbox and the run summary in the Logs panel.
+
+Start long-running helpers with `setsid nohup … &` so a stopped tool call
+does not take them down, and stop them by port (`lsof -ti:<port>`).
+
+## 6. Stop
 
 ```bash
 lsof -ti:$FRONTEND_PORT -sTCP:LISTEN | xargs -r kill
 lsof -ti:$BACKEND_PORT -sTCP:LISTEN | xargs -r kill
 ```
+
+The backend removes its sandbox containers on the next start. To remove
+them now: `docker ps -aq --filter label=dev.kanbain.managed=true | xargs -r docker rm -f`.
 
 Don't use a broad `pkill -f`; it can match the agent's own shell.

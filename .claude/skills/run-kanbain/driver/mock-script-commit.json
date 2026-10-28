@@ -1,0 +1,6 @@
+{"commands": [
+  "echo 'hello from the sandbox' > sandbox.txt && git add sandbox.txt && git commit -qm 'DEMO-1: add sandbox.txt' && git log --oneline -1",
+  "curl -sS --max-time 10 https://example.com; echo curl_exit=$?",
+  "curl -sS --max-time 20 -o /dev/null -w 'npm=%{http_code}\\n' https://registry.npmjs.org/",
+  "cat /kanbain/context/ticket.md; echo '{\"ok\": true}' > /kanbain/out/result.json; touch /kanbain/context/x 2>&1; echo leftover > uncommitted.txt"
+], "output_tokens": 300}

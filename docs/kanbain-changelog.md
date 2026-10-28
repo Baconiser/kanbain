@@ -171,3 +171,129 @@ and runs.
   gets 401s.
 - **No frontend unit tests.** Vitest is not installed in this repo; the
   board logic is covered by the Playwright driver instead.
+
+## Phase 1: Docker sandbox and model proxy (2026-10-28)
+
+**Goal:** one agent (Claude Code, API key) works on one ticket inside a
+container, every model call is logged and budgeted, and nothing on the host
+is reachable.
+
+### What changed
+
+- **`crates/sandbox`.** A `Sandbox` trait with a Docker implementation on
+  `bollard`: CPU, memory and pids limits, no capabilities,
+  `no-new-privileges`, no bind mounts, labels per instance, workspace and
+  kind. Orphaned containers of this data folder are removed at startup.
+- **Base image.** `docker/agent/Dockerfile` (Node 22, git, Python, Rust,
+  socat, ripgrep) with the Claude Code and OpenCode versions from
+  `executors::versions`, which is now the one place they are pinned. The
+  backend builds `kanbain-agent:<app version>-<hash>` in the background on
+  first start. A project can name its own Dockerfile, built with
+  `KANBAIN_BASE_IMAGE` as a build arg.
+- **Network (D38).** Agents sit on an `internal` Docker network with no
+  route anywhere. A gateway sidecar on that network and a normal bridge
+  forwards two ports to the backend's model proxy and egress proxy. On
+  native Linux the proxies listen on the bridge gateway address; on Docker
+  Desktop they listen on 127.0.0.1 and the sidecar dials
+  `host.docker.internal`.
+- **Egress proxy.** `CONNECT host:443` only, for allowlisted hosts (package
+  registries, GitHub release downloads, plus global and per-project extras),
+  never to private addresses. Credentials are per run. Refusals are stored
+  as `egress_block` events.
+- **`crates/model-proxy` (D40).** Anthropic Messages and OpenAI-compatible
+  pass-through with SSE streaming. Per-run tokens, real credentials added by
+  the proxy, usage parsed including cache reads and 5m/1h cache writes,
+  cost from an editable `<data>/prices.json`. Budgets are checked before a
+  call and during the stream (estimating output from the streamed text); at
+  the limit the stream ends with an error event and the token is revoked.
+- **Credentials.** API keys for Anthropic and an OpenAI-compatible provider
+  are stored AES-256-GCM encrypted in the data folder (Settings → Sandbox),
+  falling back to the backend's `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`.
+- **Code transfer (D36).** The branch goes into `/workspace/<repo>` as a git
+  bundle. After each run, leftover changes are committed in the container
+  and the branch is fetched back into the host worktree (fast-forward, or
+  `reset --keep`). If the container is ahead (commits made in its terminal),
+  those are pulled first instead of being overwritten.
+- **Context dirs (D10).** `/kanbain` is an anonymous volume. The ticket goes
+  to `/kanbain/context/ticket.md` (read-only for the agent); files the agent
+  writes to `/kanbain/out/` are stored as a `sandbox` event at run end.
+- **Executor integration.** `ExecutionEnv` carries a `SandboxTarget`, so
+  Claude Code, scripts and dev servers become `docker exec` processes and
+  the existing log, approval and normalization pipeline is unchanged. Only
+  explicit variables reach the container. Stopping a run kills its process
+  group inside the container. OpenCode refuses to run sandboxed until its
+  adapter lands in Phase 2.
+- **Run tracking (D41).** `execution_processes` gains ticket, sub-ticket,
+  agent definition, container, branch, token, cost and budget columns.
+  `execution_process_events` stores model calls, blocked egress, budget
+  stops and sandbox steps.
+- **Limits (D28).** Per-run budget (default $2), per-ticket budget (default
+  $5; the run gets the smaller of the two remainders), 30-minute time limit,
+  and at most 3 agent runs at once, the rest queued. A ticket over budget
+  moves to its Blocked status with a comment.
+- **Containers.** One container per workspace, kept between runs and
+  removed with the workspace's worktree. The workspace terminal opens in it
+  (with egress but no model access). A sandboxed dev server's announced
+  port is forwarded to the same port on 127.0.0.1 through `docker exec` and
+  `socat`, so the preview proxy reaches it on every platform.
+- **UI.** Settings → Sandbox (Docker and image status, API keys, enable
+  switch, limits, extra hosts), a banner while Docker or a key is missing,
+  run cost in the Logs panel and a summary of the selected run (cost against
+  budget, tokens, cache, model calls, blocked hosts). Project settings take
+  extra hosts and a Dockerfile. Translated into all locales.
+
+### Demo (Linux dev container)
+
+The model upstream was the scripted mock in
+`.claude/skills/run-kanbain/driver/mock_anthropic.py`, since no API key is
+available here; Claude Code 2.1.119 itself ran unmodified in the container.
+
+- **A run makes a commit that reaches the host branch.** `sandbox-run.mjs`:
+  ticket `DEMO-1` → workspace → Claude Code in the container ran four Bash
+  steps, including `git commit -m 'DEMO-1: add sandbox.txt'`. After the run
+  the host worktree's branch has that commit plus a commit of the leftover
+  uncommitted file, and `/kanbain/out/result.json` was harvested. 13 seconds
+  end to end.
+- **Every model call shows tokens and cost.** 5 `model_call` events
+  (1500 in / 300 out each, $0.009 each); the run totals 7.5k → 1.5k tokens
+  and $0.045 against a $2.00 budget. The upstream received the real key;
+  the container only ever had its run token.
+- **`curl https://example.com` is blocked and logged** (curl exit 56, an
+  `egress_block` event); `registry.npmjs.org` returns 200 through the proxy.
+  The agent can read `/kanbain/context/ticket.md` but not write to it.
+- **A $0.05 budget cuts the run off.** A ticket budget of $0.05 and a
+  50k-token streamed answer: the proxy ended the stream at $0.053, the run
+  was killed, and the ticket moved to Blocked with a comment.
+- **`docker inspect`** of the workspace container: no binds, one volume
+  (`/kanbain`), the internal network, all capabilities dropped, 2 CPUs,
+  4 GB, 1024 pids.
+- **Terminal and preview:** the terminal opens as `node` in
+  `/workspace/<repo>` (npm reachable, example.com blocked); a dev server in
+  the container is served through the preview proxy, and stopping it
+  removes the forward and its processes.
+- `cargo test --workspace` (plus the Docker test with
+  `KANBAIN_DOCKER_TESTS=1`), `pnpm run check`, `pnpm run lint` and the i18n
+  check pass. `sandbox.mjs` checked Settings → Sandbox and the run summary
+  with no console errors or failed API calls.
+
+### Not verified here
+
+- **A real Anthropic API key.** All runs used the mock upstream.
+- **Docker Desktop on Windows.** The 127.0.0.1 + `host.docker.internal`
+  path, the named pipe connection and `docker exec` piping need the user's
+  check on Windows (risk noted in the plan).
+
+### Known leftovers
+
+- Starting a run waits inside the request while the first image build runs
+  (about 8 minutes with the classic builder) or while all slots are busy.
+- Paths in agent logs are container paths (`/workspace/...`); the commit
+  reminder hook still looks at the host worktree.
+- The concurrency limit applies after a restart. Run events in the UI poll
+  every 3 seconds instead of streaming.
+- Run tokens are passed as `docker exec -e` arguments, so they are visible
+  in the host process list while a run lasts.
+- MCP config is still the host's `~/.claude.json` concept and is not copied
+  into containers (Phase 2, per-container MCP).
+- Automated runs (and deleting their container at run end) arrive with the
+  orchestrator in Phase 5; today every run is a workspace run.
