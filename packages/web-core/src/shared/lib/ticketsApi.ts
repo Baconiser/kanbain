@@ -15,6 +15,7 @@ import type {
   IssueEvent,
   IssueRelationship,
   IntakeView,
+  IssueHistoryView,
   IssueTag,
   Project,
   ProjectStatus,
@@ -97,6 +98,17 @@ export const intakeApi = {
   accept: (id: string, data: AcceptIntake) =>
     request<Issue>(`/api/intakes/${id}/accept`, 'POST', data),
   discard: (id: string) => request<void>(`/api/intakes/${id}/discard`, 'POST'),
+};
+
+export const historyApi = {
+  get: (issueId: string) =>
+    request<IssueHistoryView>(`/api/issues/${issueId}/history`),
+  check: (issueId: string) =>
+    request<IssueHistoryView>(`/api/issues/${issueId}/history/check`, 'POST'),
+  allow: (issueId: string) =>
+    request<IssueHistoryView>(`/api/issues/${issueId}/history/allow`, 'POST'),
+  deny: (issueId: string) =>
+    request<IssueHistoryView>(`/api/issues/${issueId}/history/deny`, 'POST'),
 };
 
 export const textDiff = (oldText: string, newText: string) =>

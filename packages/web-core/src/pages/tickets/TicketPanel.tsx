@@ -33,6 +33,7 @@ import { setCreateModeSeedState } from '@/features/create-mode/model/createModeS
 import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketComments } from './TicketComments';
+import { TicketHistory } from './TicketHistory';
 import { TicketTimeline } from './TicketTimeline';
 import { internalTicketId, ticketDisplayId } from './ticketIds';
 
@@ -149,6 +150,12 @@ export function TicketPanel({
   const timeline = useIssueTimeline(issue.id);
   const attachmentEvents = timeline.events.filter(
     (e) => e.event_type === 'attachment_added'
+  ).length;
+  const historyEvents = timeline.events.filter(
+    (e) =>
+      e.event_type === 'history_check' ||
+      e.event_type === 'history_analysis' ||
+      e.event_type === 'prior_commit'
   ).length;
 
   const update = useCallback(
@@ -706,6 +713,12 @@ export function TicketPanel({
             </button>
           ))}
         </Section>
+
+        <TicketHistory
+          issueId={issue.id}
+          refreshKey={historyEvents}
+          onError={onError}
+        />
 
         <TicketAttachments
           issueId={issue.id}
