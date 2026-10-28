@@ -1,4 +1,6 @@
+pub mod agent_job;
 pub mod agent_library;
+pub mod attachment_text;
 pub mod coding_agent_turn;
 pub mod execution_process;
 pub mod execution_process_event;
@@ -7,6 +9,8 @@ pub mod execution_process_repo_state;
 pub mod file;
 pub mod issue;
 pub mod issue_comment;
+pub mod issue_description;
+pub mod issue_event;
 pub mod issue_relationship;
 pub mod merge;
 pub mod project;
@@ -18,6 +22,7 @@ pub mod requests;
 pub mod scratch;
 pub mod session;
 pub mod tag;
+pub mod ticket_intake;
 pub mod workspace;
 pub mod workspace_repo;
 

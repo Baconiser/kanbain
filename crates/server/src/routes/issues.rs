@@ -5,16 +5,22 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use db::models::{
+    attachment_text::AttachmentText,
     file::{File, IssueAttachment},
     issue::{Issue, UpdateIssue},
     issue_comment::{CreateIssueComment, IssueComment, USER_AUTHOR, UpdateIssueComment},
+    issue_description::IssueDescription,
+    issue_event::IssueEvent,
     issue_relationship::{CreateIssueRelationship, IssueRelationship},
     project_tag::{IssueTag, ProjectTag},
 };
 use deployment::Deployment;
 use serde::Deserialize;
 use ts_rs::TS;
-use utils::response::ApiResponse;
+use utils::{
+    diff::{TextDiffLine, text_diff_lines},
+    response::ApiResponse,
+};
 use uuid::Uuid;
 
 use super::{attachments::AttachmentResponse, projects::forward_patch_stream};
@@ -220,6 +226,15 @@ async fn associate_attachments(
     }
     IssueAttachment::associate_many(pool, issue_id, &payload.attachment_ids).await?;
     let files = File::find_by_issue_id(pool, issue_id).await?;
+    // Extract text now so the ticket shows it and search can index it.
+    for file in files
+        .iter()
+        .filter(|f| payload.attachment_ids.contains(&f.id))
+    {
+        if let Err(e) = deployment.file().ensure_text(file).await {
+            tracing::warn!("Extracting {} failed: {e}", file.original_name);
+        }
+    }
     Ok(ResponseJson(ApiResponse::success(
         files
             .into_iter()
@@ -236,6 +251,65 @@ async fn remove_attachment(
     Ok(ResponseJson(ApiResponse::success(())))
 }
 
+async fn list_attachment_texts(
+    Path(issue_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<AttachmentText>>>, ApiError> {
+    let texts = AttachmentText::find_by_issue(&deployment.db().pool, issue_id).await?;
+    Ok(ResponseJson(ApiResponse::success(texts)))
+}
+
+// --- Description versions and timeline ---------------------------------------
+
+async fn list_descriptions(
+    Path(issue_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<IssueDescription>>>, ApiError> {
+    let versions = IssueDescription::find_by_issue(&deployment.db().pool, issue_id).await?;
+    Ok(ResponseJson(ApiResponse::success(versions)))
+}
+
+async fn list_timeline(
+    Path(issue_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<IssueEvent>>>, ApiError> {
+    let events = IssueEvent::find_by_issue(&deployment.db().pool, issue_id).await?;
+    Ok(ResponseJson(ApiResponse::success(events)))
+}
+
+async fn stream_timeline_ws(
+    ws: WsUpgrade,
+    Path(issue_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| async move {
+        match deployment
+            .events()
+            .stream_issue_timeline_raw(issue_id)
+            .await
+        {
+            Ok(stream) => forward_patch_stream(socket, stream).await,
+            Err(e) => tracing::warn!("issue timeline WS failed: {}", e),
+        }
+    })
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct TextDiffRequest {
+    pub old: String,
+    pub new: String,
+}
+
+/// Line diff of two texts (description versions, intake updates).
+async fn text_diff(
+    Json(payload): Json<TextDiffRequest>,
+) -> ResponseJson<ApiResponse<Vec<TextDiffLine>>> {
+    ResponseJson(ApiResponse::success(text_diff_lines(
+        &payload.old,
+        &payload.new,
+    )))
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     let issue = Router::new()
         .route("/", get(get_issue).put(update_issue).delete(delete_issue))
@@ -250,10 +324,15 @@ pub fn router() -> Router<DeploymentImpl> {
             "/attachments",
             get(list_attachments).post(associate_attachments),
         )
-        .route("/attachments/{attachment_id}", delete(remove_attachment));
+        .route("/attachments/{attachment_id}", delete(remove_attachment))
+        .route("/attachment-texts", get(list_attachment_texts))
+        .route("/descriptions", get(list_descriptions))
+        .route("/timeline", get(list_timeline))
+        .route("/timeline/stream/ws", get(stream_timeline_ws));
 
     Router::new()
         .nest("/issues/{issue_id}", issue)
+        .route("/text-diff", post(text_diff))
         .route(
             "/issue-relationships/{relationship_id}",
             delete(delete_relationship),

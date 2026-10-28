@@ -30,6 +30,8 @@ pub mod claude_login;
 mod command;
 pub mod container;
 mod copy;
+pub mod intake;
+pub mod jobs;
 pub mod pty;
 pub mod sandbox;
 
@@ -54,6 +56,8 @@ pub struct LocalDeployment {
     secrets: Arc<services::services::secrets::SecretStore>,
     agent_library: Arc<services::services::agent_library::AgentLibrary>,
     claude_login: claude_login::ClaudeLogin,
+    jobs: jobs::AgentJobs,
+    intake: intake::IntakeService,
 }
 
 #[async_trait]
@@ -167,6 +171,21 @@ impl Deployment for LocalDeployment {
         }
 
         let claude_login = claude_login::ClaudeLogin::new(sandbox.clone(), secrets.clone());
+        let jobs = jobs::AgentJobs::new(db.clone(), sandbox.clone(), agent_library.clone());
+        let intake = intake::IntakeService::new(db.clone(), file.clone(), jobs.clone());
+        // Jobs and intakes of a previous launch can never finish.
+        if let Err(e) = db::models::agent_job::AgentJob::fail_interrupted(&db.pool).await {
+            tracing::warn!("Closing interrupted agent jobs failed: {e}");
+        }
+        if let Err(e) = sqlx::query(
+            "UPDATE ticket_intakes SET status = 'failed', \
+             error = 'Interrupted by an app restart' WHERE status = 'enhancing'",
+        )
+        .execute(&db.pool)
+        .await
+        {
+            tracing::warn!("Closing interrupted intakes failed: {e}");
+        }
 
         let workspace_manager = WorkspaceManager::new(db.clone());
         let container = LocalContainerService::new(
@@ -216,6 +235,8 @@ impl Deployment for LocalDeployment {
             secrets,
             agent_library,
             claude_login,
+            jobs,
+            intake,
         };
 
         Ok(deployment)
@@ -297,6 +318,14 @@ impl LocalDeployment {
 
     pub fn claude_login(&self) -> &claude_login::ClaudeLogin {
         &self.claude_login
+    }
+
+    pub fn jobs(&self) -> &jobs::AgentJobs {
+        &self.jobs
+    }
+
+    pub fn intake(&self) -> &intake::IntakeService {
+        &self.intake
     }
 
     pub fn trigger_pr_sync(&self) {

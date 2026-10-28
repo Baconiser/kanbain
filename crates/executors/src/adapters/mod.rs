@@ -16,6 +16,7 @@ pub mod claude;
 #[cfg(test)]
 mod cli_drift;
 pub mod definition;
+pub mod headless;
 pub mod opencode;
 
 pub use definition::{

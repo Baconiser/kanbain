@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_jobs\n               SET status = 'running', container_id = $2,\n                   started_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "983be0612200c8101fef3e4977d524c841cac335ba2b95aa91b685739480f09d"
+}

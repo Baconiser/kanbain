@@ -18,3 +18,4 @@ pub mod qa_repos;
 pub mod queued_message;
 pub mod repo;
 pub mod secrets;
+pub mod text_extract;

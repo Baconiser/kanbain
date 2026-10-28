@@ -323,3 +323,146 @@ async fn project_update_normalizes_fields() {
     assert_eq!(updated.external_id_key, None);
     assert_eq!(updated.name, "Demo");
 }
+
+#[tokio::test]
+async fn description_versions_and_timeline() {
+    use super::{
+        issue_description::{DescriptionKind, IssueDescription, NewDescriptionVersion},
+        issue_event::{IssueEvent, IssueEventType},
+    };
+
+    let pool = pool().await;
+    let project = project(&pool, None).await;
+    let mut data = new_issue("Login");
+    data.description = Some("First".to_string());
+    let issue = Issue::create(&pool, project.id, &data).await.unwrap();
+
+    // Title-only and status changes add events but no version.
+    let statuses = ProjectStatus::find_by_project(&pool, project.id)
+        .await
+        .unwrap();
+    let in_progress = statuses
+        .iter()
+        .find(|s| s.kind == ProjectStatusKind::InProgress)
+        .unwrap();
+    Issue::update(
+        &pool,
+        issue.id,
+        &UpdateIssue {
+            title: Some("Login fails".to_string()),
+            status_id: Some(in_progress.id),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // A sort-order move changes nothing on the timeline.
+    Issue::update(
+        &pool,
+        issue.id,
+        &UpdateIssue {
+            sort_order: Some(5.0),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // A description edit becomes version 2.
+    Issue::update(
+        &pool,
+        issue.id,
+        &UpdateIssue {
+            description: Some(Some("Second".to_string())),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    // An intake update forces version 3 with its texts.
+    Issue::update_with_version(
+        &pool,
+        issue.id,
+        &UpdateIssue::default(),
+        Some(&NewDescriptionVersion {
+            kind: DescriptionKind::Enhanced,
+            original_text: Some("raw".to_string()),
+            enhanced_text: Some("Second".to_string()),
+            intake_id: None,
+        }),
+    )
+    .await
+    .unwrap();
+
+    let versions = IssueDescription::find_by_issue(&pool, issue.id)
+        .await
+        .unwrap();
+    let summary: Vec<_> = versions
+        .iter()
+        .map(|v| (v.version, v.kind, v.description.as_deref()))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (3, DescriptionKind::Enhanced, Some("Second")),
+            (2, DescriptionKind::Edited, Some("Second")),
+            (1, DescriptionKind::Original, Some("First")),
+        ]
+    );
+    assert_eq!(versions[0].original_text.as_deref(), Some("raw"));
+
+    IssueComment::create(
+        &pool,
+        issue.id,
+        USER_AUTHOR,
+        &CreateIssueComment {
+            message: "Looks bad".to_string(),
+            parent_id: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    let events = IssueEvent::find_by_issue(&pool, issue.id).await.unwrap();
+    let types: Vec<_> = events.iter().map(|e| e.event_type).collect();
+    assert_eq!(
+        types,
+        vec![
+            IssueEventType::Created,
+            IssueEventType::DescriptionVersion,
+            IssueEventType::TitleChanged,
+            IssueEventType::StatusChanged,
+            IssueEventType::DescriptionVersion,
+            IssueEventType::DescriptionVersion,
+            IssueEventType::Comment,
+        ]
+    );
+    let status = &events[3].payload.0;
+    assert_eq!(status["from"], "Backlog");
+    assert_eq!(status["to_kind"], "in_progress");
+    assert_eq!(events[0].payload.0["title"], "Login");
+    assert_eq!(events[6].payload.0["excerpt"], "Looks bad");
+    // Ids in trigger payloads are canonical UUIDs.
+    let comment_id = events[6].payload.0["comment_id"].as_str().unwrap();
+    assert!(uuid::Uuid::parse_str(comment_id).is_ok(), "{comment_id}");
+    assert!(comment_id.contains('-'));
+
+    // An event from before the ticket existed sorts first.
+    let old = chrono::Utc::now() - chrono::Duration::days(400);
+    IssueEvent::create(
+        &pool,
+        issue.id,
+        IssueEventType::PriorCommit,
+        "system",
+        &serde_json::json!({"sha": "abc"}),
+        Some(old),
+    )
+    .await
+    .unwrap();
+    let events = IssueEvent::find_by_issue(&pool, issue.id).await.unwrap();
+    assert_eq!(events[0].event_type, IssueEventType::PriorCommit);
+    assert!(
+        IssueEvent::exists_with(&pool, issue.id, IssueEventType::PriorCommit, "sha", "abc")
+            .await
+            .unwrap()
+    );
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_jobs\n               SET tokens_in = tokens_in + $2,\n                   tokens_out = tokens_out + $3,\n                   tokens_cache_read = tokens_cache_read + $4,\n                   tokens_cache_write = tokens_cache_write + $5,\n                   cost_usd = cost_usd + $6,\n                   model_calls = model_calls + 1\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "118248b9cf21cd00d4f86191891273008356455ccf99787166602c6ae71abad4"
+}

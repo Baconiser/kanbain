@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COUNT(*) as \"count!: i64\" FROM issue_events\n               WHERE issue_id = $1 AND event_type = $2 AND json_extract(payload, $3) = $4",
+  "describe": {
+    "columns": [
+      {
+        "name": "count!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bc61ad9fa3fc5c4e3d075125adb7bfd2399680a32b5c15a22c99f664e5008890"
+}

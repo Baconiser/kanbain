@@ -51,6 +51,10 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 fst = "0.4"
 moka = { version = "0.12", features = ["future"] }
 mime_guess = "2.0"
+pdf-extract = "0.12.1"
+html2text = "0.17.4"
+quick-xml = "0.38"
+regex = "1.11.1"
 
 [dev-dependencies]
 tempfile = "3"

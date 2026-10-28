@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_descriptions\n                   (id, issue_id, version, kind, title, description, original_text,\n                    enhanced_text, intake_id)\n               VALUES ($1, $2,\n                       (SELECT COALESCE(MAX(version), 0) + 1 FROM issue_descriptions\n                        WHERE issue_id = $2),\n                       $3, $4, $5, $6, $7, $8)\n               RETURNING version as \"version!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "version!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a7a85865fb102d4fa0e59481ae49bd6c1b0021a9753e0624f51bb285d371ed2c"
+}

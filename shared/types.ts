@@ -78,6 +78,77 @@ export type CreateIssueComment = { message: string, parent_id?: string, };
 
 export type UpdateIssueComment = { message: string, };
 
+export type IssueDescription = { id: string, issue_id: string, version: number, kind: DescriptionKind, title: string, description: string | null, original_text: string | null, enhanced_text: string | null, intake_id: string | null, created_at: string, };
+
+export type DescriptionKind = "original" | "enhanced" | "edited";
+
+export type IssueEvent = { id: string, issue_id: string, event_type: IssueEventType, 
+/**
+ * `user`, `agent:<job or run id>` or `system`.
+ */
+actor: string, payload: Record<string, unknown>, 
+/**
+ * When it happened; before the ticket existed for prior commits.
+ */
+occurred_at: string, created_at: string, };
+
+export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", run_started = "run_started", run_finished = "run_finished" }
+
+export type AgentJob = { id: string, project_id: string | null, issue_id: string | null, kind: string, agent_def_id: string | null, model: string | null, status: AgentJobStatus, container_id: string | null, output: string | null, error: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, cost_usd: number, model_calls: number, budget_usd: number | null, started_at: string | null, completed_at: string | null, created_at: string, };
+
+export type AgentJobStatus = "queued" | "running" | "completed" | "failed";
+
+export type AttachmentText = { attachment_id: string, 
+/**
+ * `pdf`, `html`, `docx`, `xml` or `text`.
+ */
+format: string, text: string, 
+/**
+ * Why extraction failed, when it did.
+ */
+error: string | null, created_at: string, };
+
+export type TicketIntake = { id: string, project_id: string, raw_text: string, status: IntakeStatus, job_id: string | null, enhanced: EnhancedTicket | null, detected_external_id: string | null, error: string | null, issue_id: string | null, created_at: string, updated_at: string, };
+
+export type IntakeStatus = "enhancing" | "ready" | "failed" | "accepted" | "discarded";
+
+export type EnhancedTicket = { title: string, description: string, acceptance_criteria: Array<string>, open_questions: Array<string>, external_id: string | null, priority: IssuePriority | null, };
+
+export type AcceptIntake = { title: string, description: string, external_id?: string, priority?: IssuePriority, mode?: IssueMode, status_id?: string, 
+/**
+ * Add a new description version to this ticket instead of creating one
+ * (D17).
+ */
+update_issue_id?: string, };
+
+export type StartIntake = { text: string, attachment_ids: Array<string>, };
+
+export type IntakeAttachment = { attachment: AttachmentResponse, 
+/**
+ * Extracted text; `None` for images.
+ */
+text: AttachmentText | null, };
+
+export type IntakeView = { intake: TicketIntake, job: AgentJob | null, attachments: Array<IntakeAttachment>, 
+/**
+ * The External ID to match: the agent's, else the detected one.
+ */
+external_id: string | null, 
+/**
+ * The ticket that already has this External ID (D17).
+ */
+existing_issue: Issue | null, 
+/**
+ * Its internal id, e.g. `KAN-12`.
+ */
+existing_internal_id: string | null, };
+
+export type TextDiffRequest = { old: string, new: string, };
+
+export type ExternalIdQuery = { external_id: string, };
+
+export type DetectExternalIdRequest = { text: string, };
+
 export type LinkProjectRepoRequest = { repo_id: string, };
 
 export type DeleteStatusQuery = { 
@@ -310,6 +381,10 @@ contentOmitted: boolean,
 additions: number | null, deletions: number | null, repoId: string | null, };
 
 export type DiffChangeKind = "added" | "deleted" | "modified" | "renamed" | "copied" | "permissionChange";
+
+export type TextDiffLine = { kind: TextDiffKind, text: string, };
+
+export type TextDiffKind = "equal" | "insert" | "delete";
 
 export type ApiResponse<T, E = T> = { success: boolean, data: T | null, error_data: E | null, message: string | null, };
 

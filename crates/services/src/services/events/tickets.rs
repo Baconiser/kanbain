@@ -9,6 +9,7 @@ use std::sync::Arc;
 use db::models::{
     issue::Issue,
     issue_comment::IssueComment,
+    issue_event::IssueEvent,
     issue_relationship::IssueRelationship,
     project::Project,
     project_status::ProjectStatus,
@@ -35,6 +36,7 @@ pub enum TicketTable {
     IssueTags,
     IssueRelationships,
     IssueComments,
+    IssueEvents,
 }
 
 impl TicketTable {
@@ -47,6 +49,7 @@ impl TicketTable {
             "issue_tags" => Self::IssueTags,
             "issue_relationships" => Self::IssueRelationships,
             "issue_comments" => Self::IssueComments,
+            "issue_events" => Self::IssueEvents,
             _ => return None,
         })
     }
@@ -61,6 +64,7 @@ impl TicketTable {
             Self::IssueTags => "issue_tags",
             Self::IssueRelationships => "relationships",
             Self::IssueComments => "comments",
+            Self::IssueEvents => "events",
         }
     }
 }
@@ -182,6 +186,9 @@ async fn push_row_change(
             .await?
             .map(|r| upsert_patch(table, r.id, &r, insert)),
         TicketTable::IssueComments => IssueComment::find_by_rowid(pool, rowid)
+            .await?
+            .map(|r| upsert_patch(table, r.id, &r, insert)),
+        TicketTable::IssueEvents => IssueEvent::find_by_rowid(pool, rowid)
             .await?
             .map(|r| upsert_patch(table, r.id, &r, insert)),
     };
@@ -309,6 +316,23 @@ impl EventService {
         Ok(self.filtered_ticket_stream(
             initial,
             &[TicketTable::IssueComments],
+            Some(("issue_id", issue_id)),
+        ))
+    }
+}
+
+impl EventService {
+    /// One issue's timeline, as `{ events: { <id>: IssueEvent } }`.
+    pub async fn stream_issue_timeline_raw(
+        &self,
+        issue_id: Uuid,
+    ) -> Result<futures::stream::BoxStream<'static, Result<LogMsg, std::io::Error>>, EventError>
+    {
+        let events = IssueEvent::find_by_issue(&self.db.pool, issue_id).await?;
+        let initial = json!({ "events": to_map(events, |e| e.id) });
+        Ok(self.filtered_ticket_stream(
+            initial,
+            &[TicketTable::IssueEvents],
             Some(("issue_id", issue_id)),
         ))
     }

@@ -3,7 +3,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use db::models::file::{CreateFile, File};
+use db::models::{
+    attachment_text::AttachmentText,
+    file::{CreateFile, File},
+};
 use mime_guess::MimeGuess;
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
@@ -166,6 +169,39 @@ impl FileService {
     pub fn get_absolute_path(&self, file: &File) -> PathBuf {
         self.resolve_cached_path(&file.file_path)
             .unwrap_or_else(|| self.cache_dir.join(&file.file_path))
+    }
+
+    /// The attachment's extracted text, extracting it on first use. `None`
+    /// for images and other files without text.
+    pub async fn ensure_text(&self, file: &File) -> Result<Option<AttachmentText>, FileError> {
+        if let Some(text) = AttachmentText::find(&self.pool, file.id).await? {
+            return Ok(Some(text));
+        }
+        let bytes = tokio::fs::read(self.get_absolute_path(file)).await?;
+        let name = file.original_name.clone();
+        let mime = file.mime_type.clone();
+        let extracted = tokio::task::spawn_blocking(move || {
+            super::text_extract::extract(&name, mime.as_deref(), &bytes)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("Extraction failed: {e}")));
+        let stored = match extracted {
+            Ok(None) => return Ok(None),
+            Ok(Some((format, text))) => {
+                AttachmentText::upsert(&self.pool, file.id, format.as_str(), &text, None).await?
+            }
+            Err(error) => {
+                let format = super::text_extract::detect_format(
+                    &file.original_name,
+                    file.mime_type.as_deref(),
+                    &[],
+                )
+                .map(|f| f.as_str())
+                .unwrap_or("unknown");
+                AttachmentText::upsert(&self.pool, file.id, format, "", Some(&error)).await?
+            }
+        };
+        Ok(Some(stored))
     }
 
     pub async fn get_file(&self, id: Uuid) -> Result<Option<File>, FileError> {

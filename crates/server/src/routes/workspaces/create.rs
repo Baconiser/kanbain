@@ -9,7 +9,7 @@ use db::models::{
 };
 use deployment::Deployment;
 use services::services::container::ContainerService;
-use utils::response::ApiResponse;
+use utils::{response::ApiResponse, ticket_id::ticket_branch_name};
 use uuid::Uuid;
 
 use crate::{DeploymentImpl, error::ApiError};
@@ -22,8 +22,9 @@ pub(crate) async fn create_workspace_record(
     let pool = &deployment.db().pool;
     let workspace_id = Uuid::new_v4();
 
-    // A workspace started from a ticket is branched after the ticket's ID.
-    let issue_label = match issue_id {
+    // A workspace started from a ticket gets the ticket branch,
+    // `kanbain/<ID>-<slug>` (D16), numbered when another workspace has it.
+    let git_branch_name = match issue_id {
         Some(issue_id) => {
             let issue = Issue::find_by_id(pool, issue_id)
                 .await?
@@ -31,23 +32,26 @@ pub(crate) async fn create_workspace_record(
             let project = Project::find_by_id(pool, issue.project_id)
                 .await?
                 .ok_or_else(|| ApiError::BadRequest("Ticket project not found".to_string()))?;
-            Some(format!(
-                "{} {}",
-                issue.display_id(&project.id_prefix),
-                issue.title
-            ))
+            let base = ticket_branch_name(&issue.display_id(&project.id_prefix), &issue.title);
+            let mut branch = base.clone();
+            let mut n = 2;
+            while Workspace::branch_in_use(pool, &branch).await? {
+                branch = format!("{base}-{n}");
+                n += 1;
+            }
+            branch
         }
-        None => None,
+        None => {
+            let branch_label = name
+                .as_deref()
+                .filter(|branch_label| !branch_label.is_empty())
+                .unwrap_or("workspace");
+            deployment
+                .container()
+                .git_branch_from_workspace(&workspace_id, branch_label)
+                .await
+        }
     };
-    let branch_label = issue_label
-        .as_deref()
-        .or(name.as_deref())
-        .filter(|branch_label| !branch_label.is_empty())
-        .unwrap_or("workspace");
-    let git_branch_name = deployment
-        .container()
-        .git_branch_from_workspace(&workspace_id, branch_label)
-        .await;
 
     let workspace = Workspace::create(
         pool,

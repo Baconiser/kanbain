@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agent_jobs (id, project_id, issue_id, kind, agent_def_id, model,\n                                       budget_usd)\n               VALUES ($1, $2, $3, $4, $5, $6, $7)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "81c53e56b2bc1cbe676058e035a4448d841a05d6b235cb71e8ae0c492724b419"
+}

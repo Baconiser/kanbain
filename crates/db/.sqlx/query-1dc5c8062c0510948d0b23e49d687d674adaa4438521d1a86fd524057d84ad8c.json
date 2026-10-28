@@ -1,0 +1,74 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      issue_id as \"issue_id!: Uuid\",\n                      version,\n                      kind as \"kind!: DescriptionKind\",\n                      title,\n                      description,\n                      original_text,\n                      enhanced_text,\n                      intake_id as \"intake_id: Uuid\",\n                      created_at as \"created_at!: DateTime<Utc>\"\n               FROM issue_descriptions\n               WHERE issue_id = $1\n               ORDER BY version DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "version",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "kind!: DescriptionKind",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "title",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "original_text",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "enhanced_text",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "intake_id: Uuid",
+        "ordinal": 8,
+        "type_info": "Blob"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 9,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "1dc5c8062c0510948d0b23e49d687d674adaa4438521d1a86fd524057d84ad8c"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO ticket_intakes (id, project_id, raw_text, detected_external_id)\n               VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "865c04e446b8bceaddd42b54e2dd5ffa6a161559bec72debe69b1090db7af8b5"
+}

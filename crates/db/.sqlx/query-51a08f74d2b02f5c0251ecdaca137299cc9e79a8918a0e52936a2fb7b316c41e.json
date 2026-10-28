@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO attachment_texts (attachment_id, format, text, error)\n               VALUES ($1, $2, $3, $4)\n               ON CONFLICT (attachment_id) DO UPDATE\n                   SET format = excluded.format, text = excluded.text, error = excluded.error,\n                       created_at = datetime('now', 'subsec')\n               RETURNING attachment_id as \"attachment_id!: Uuid\",\n                         format,\n                         text,\n                         error,\n                         created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "attachment_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "format",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "text",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "51a08f74d2b02f5c0251ecdaca137299cc9e79a8918a0e52936a2fb7b316c41e"
+}

@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      project_id as \"project_id: Uuid\",\n                      issue_id as \"issue_id: Uuid\",\n                      kind,\n                      agent_def_id,\n                      model,\n                      status as \"status!: AgentJobStatus\",\n                      container_id,\n                      output,\n                      error,\n                      tokens_in,\n                      tokens_out,\n                      tokens_cache_read,\n                      tokens_cache_write,\n                      cost_usd,\n                      model_calls,\n                      budget_usd,\n                      started_at as \"started_at: DateTime<Utc>\",\n                      completed_at as \"completed_at: DateTime<Utc>\",\n                      created_at as \"created_at!: DateTime<Utc>\"\n               FROM agent_jobs\n               WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "issue_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "kind",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "agent_def_id",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "model",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: AgentJobStatus",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "container_id",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "output",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "tokens_in",
+        "ordinal": 10,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tokens_out",
+        "ordinal": 11,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tokens_cache_read",
+        "ordinal": 12,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tokens_cache_write",
+        "ordinal": 13,
+        "type_info": "Integer"
+      },
+      {
+        "name": "cost_usd",
+        "ordinal": 14,
+        "type_info": "Float"
+      },
+      {
+        "name": "model_calls",
+        "ordinal": 15,
+        "type_info": "Integer"
+      },
+      {
+        "name": "budget_usd",
+        "ordinal": 16,
+        "type_info": "Float"
+      },
+      {
+        "name": "started_at: DateTime<Utc>",
+        "ordinal": 17,
+        "type_info": "Text"
+      },
+      {
+        "name": "completed_at: DateTime<Utc>",
+        "ordinal": 18,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 19,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "8d2bf788f4bc9cf0b597f1943a528ceadbbad1d4aa1cbbf58accb25bd1d92995"
+}

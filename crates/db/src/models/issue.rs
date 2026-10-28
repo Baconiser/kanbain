@@ -6,7 +6,10 @@ use strum_macros::{Display, EnumString};
 use ts_rs::TS;
 use uuid::Uuid;
 
-use super::project_status::{ProjectStatus, ProjectStatusKind};
+use super::{
+    issue_description::{DescriptionKind, IssueDescription, NewDescriptionVersion},
+    project_status::{ProjectStatus, ProjectStatusKind},
+};
 
 #[derive(
     Debug, Clone, Copy, Type, Serialize, Deserialize, PartialEq, Eq, TS, EnumString, Display,
@@ -348,6 +351,23 @@ impl Issue {
         project_id: Uuid,
         data: &CreateIssue,
     ) -> Result<Self, IssueError> {
+        Self::create_with_version(
+            pool,
+            project_id,
+            data,
+            &NewDescriptionVersion::plain(DescriptionKind::Original),
+        )
+        .await
+    }
+
+    /// Creates a ticket whose first description version is described by
+    /// `version` (intake stores the dropped and enhanced texts with it).
+    pub async fn create_with_version(
+        pool: &SqlitePool,
+        project_id: Uuid,
+        data: &CreateIssue,
+        version: &NewDescriptionVersion,
+    ) -> Result<Self, IssueError> {
         let status = match data.status_id {
             Some(status_id) => Self::validate_status(pool, project_id, status_id).await?,
             None => {
@@ -406,6 +426,7 @@ impl Issue {
         )
         .execute(&mut *tx)
         .await?;
+        IssueDescription::insert_next(&mut tx, id, &title, description.as_deref(), version).await?;
         tx.commit().await?;
 
         Ok(Self::find_by_id(pool, id)
@@ -417,6 +438,18 @@ impl Issue {
         pool: &SqlitePool,
         id: Uuid,
         data: &UpdateIssue,
+    ) -> Result<Self, IssueError> {
+        Self::update_with_version(pool, id, data, None).await
+    }
+
+    /// Updates a ticket. A changed description becomes a new `edited`
+    /// description version; `version` forces a new version described by it
+    /// (an intake update of an existing ticket).
+    pub async fn update_with_version(
+        pool: &SqlitePool,
+        id: Uuid,
+        data: &UpdateIssue,
+        version: Option<&NewDescriptionVersion>,
     ) -> Result<Self, IssueError> {
         let existing = Self::find_by_id(pool, id)
             .await?
@@ -464,6 +497,9 @@ impl Issue {
         let mode = data.mode.unwrap_or(existing.mode);
         let budget_usd = data.budget_usd.unwrap_or(existing.budget_usd);
 
+        let description_changed = description != existing.description;
+
+        let mut tx = pool.begin().await?;
         sqlx::query!(
             r#"UPDATE issues
                SET title = $2, description = $3, status_id = $4, priority = $5,
@@ -484,8 +520,19 @@ impl Issue {
             budget_usd,
             completed_at
         )
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+        match version {
+            Some(meta) => {
+                IssueDescription::insert_next(&mut tx, id, &title, description.as_deref(), meta)
+                    .await?;
+            }
+            None if description_changed => {
+                IssueDescription::record_edit(&mut tx, id, &title, description.as_deref()).await?;
+            }
+            None => {}
+        }
+        tx.commit().await?;
 
         Ok(Self::find_by_id(pool, id)
             .await?

@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT i.id as \"id!: Uuid\",\n                      i.file_path as \"file_path!\",\n                      i.original_name as \"original_name!\",\n                      i.mime_type,\n                      i.size_bytes as \"size_bytes!\",\n                      i.hash as \"hash!\",\n                      i.created_at as \"created_at!: DateTime<Utc>\",\n                      i.updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM attachments i\n               LEFT JOIN workspace_attachments wa ON i.id = wa.attachment_id\n               LEFT JOIN issue_attachments ia ON i.id = ia.attachment_id\n               WHERE wa.workspace_id IS NULL AND ia.issue_id IS NULL",
+  "query": "SELECT i.id as \"id!: Uuid\",\n                      i.file_path as \"file_path!\",\n                      i.original_name as \"original_name!\",\n                      i.mime_type,\n                      i.size_bytes as \"size_bytes!\",\n                      i.hash as \"hash!\",\n                      i.created_at as \"created_at!: DateTime<Utc>\",\n                      i.updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM attachments i\n               LEFT JOIN workspace_attachments wa ON i.id = wa.attachment_id\n               LEFT JOIN issue_attachments ia ON i.id = ia.attachment_id\n               LEFT JOIN intake_attachments ka ON i.id = ka.attachment_id\n               WHERE wa.workspace_id IS NULL AND ia.issue_id IS NULL\n                 AND ka.intake_id IS NULL",
   "describe": {
     "columns": [
       {
@@ -58,5 +58,5 @@
       false
     ]
   },
-  "hash": "f28362cc6e42fe839bfb1d6136d51e32590bd6b32ceeba4c7eab67d14ae182a5"
+  "hash": "0e21998312219ed10e260e8917972c01e031327ace3d8d754c3b9ffd9cc9ebaf"
 }

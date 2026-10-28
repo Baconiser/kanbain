@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT attachment_id as \"attachment_id!: Uuid\"\n               FROM intake_attachments WHERE intake_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "attachment_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "15dddd3d0e2e823acc21c95a895e1d217aedeeae25ce0d3e9574e7f244cea82e"
+}

@@ -316,6 +316,40 @@ async fn create_issue(
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 
+#[derive(Debug, Deserialize, TS)]
+pub struct ExternalIdQuery {
+    pub external_id: String,
+}
+
+/// The ticket with this External ID, if any (D17).
+async fn find_issue_by_external_id(
+    Path(project_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<ExternalIdQuery>,
+) -> Result<ResponseJson<ApiResponse<Option<Issue>>>, ApiError> {
+    let issue =
+        Issue::find_by_external_id(&deployment.db().pool, project_id, query.external_id.trim())
+            .await?;
+    Ok(ResponseJson(ApiResponse::success(issue)))
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct DetectExternalIdRequest {
+    pub text: String,
+}
+
+/// The External ID the project's pattern finds in `text` (D16).
+async fn detect_external_id(
+    Path(project_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<DetectExternalIdRequest>,
+) -> Result<ResponseJson<ApiResponse<Option<String>>>, ApiError> {
+    let project = load_project(&deployment, project_id).await?;
+    Ok(ResponseJson(ApiResponse::success(
+        local_deployment::intake::detect_for_project(&project, &payload.text),
+    )))
+}
+
 async fn bulk_update_issues(
     Path(project_id): Path<Uuid>,
     State(deployment): State<DeploymentImpl>,
@@ -345,7 +379,9 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/statuses", post(create_status))
         .route("/tags", post(create_tag))
         .route("/issues", get(list_issues).post(create_issue))
-        .route("/issues/bulk", post(bulk_update_issues));
+        .route("/issues/bulk", post(bulk_update_issues))
+        .route("/issues/by-external-id", get(find_issue_by_external_id))
+        .route("/detect-external-id", post(detect_external_id));
 
     Router::new()
         .route("/projects", get(list_projects).post(create_project))

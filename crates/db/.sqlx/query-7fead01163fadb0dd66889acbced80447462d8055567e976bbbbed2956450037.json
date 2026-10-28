@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      issue_id as \"issue_id!: Uuid\",\n                      event_type as \"event_type!: IssueEventType\",\n                      actor,\n                      payload as \"payload!: sqlx::types::Json<Value>\",\n                      occurred_at as \"occurred_at!: DateTime<Utc>\",\n                      created_at as \"created_at!: DateTime<Utc>\"\n               FROM issue_events\n               WHERE issue_id = $1\n               ORDER BY julianday(occurred_at) ASC, rowid ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "event_type!: IssueEventType",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "actor",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "payload!: sqlx::types::Json<Value>",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "occurred_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7fead01163fadb0dd66889acbced80447462d8055567e976bbbbed2956450037"
+}

@@ -223,3 +223,64 @@ pub fn normalize_unified_diff(file_path: &str, unified_diff: &str) -> String {
     let hunks = extract_unified_diff_hunks(unified_diff);
     concatenate_diff_hunks(file_path, &hunks)
 }
+
+/// One line of a text comparison (description versions, D17).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TextDiffLine {
+    pub kind: TextDiffKind,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+pub enum TextDiffKind {
+    Equal,
+    Insert,
+    Delete,
+}
+
+/// A line diff of two texts, every line included.
+pub fn text_diff_lines(old: &str, new: &str) -> Vec<TextDiffLine> {
+    // A missing final newline is not a change.
+    let terminated = |text: &str| {
+        let text = text.replace("\r\n", "\n");
+        if text.is_empty() || text.ends_with('\n') {
+            text
+        } else {
+            format!("{text}\n")
+        }
+    };
+    let (old, new) = (terminated(old), terminated(new));
+    TextDiff::from_lines(&old, &new)
+        .iter_all_changes()
+        .map(|change| TextDiffLine {
+            kind: match change.tag() {
+                similar::ChangeTag::Equal => TextDiffKind::Equal,
+                similar::ChangeTag::Insert => TextDiffKind::Insert,
+                similar::ChangeTag::Delete => TextDiffKind::Delete,
+            },
+            text: change.value().trim_end_matches(['\r', '\n']).to_string(),
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod text_diff_tests {
+    use super::*;
+
+    #[test]
+    fn line_diff() {
+        let lines = text_diff_lines("a\nb\nc", "a\nB\nc\nd");
+        let kinds: Vec<_> = lines.iter().map(|l| (l.kind, l.text.as_str())).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                (TextDiffKind::Equal, "a"),
+                (TextDiffKind::Delete, "b"),
+                (TextDiffKind::Insert, "B"),
+                (TextDiffKind::Equal, "c"),
+                (TextDiffKind::Insert, "d"),
+            ]
+        );
+    }
+}

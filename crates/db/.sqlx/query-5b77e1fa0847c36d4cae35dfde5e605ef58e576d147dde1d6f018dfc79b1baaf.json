@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_jobs\n               SET status = 'failed', error = 'Interrupted by an app restart',\n                   completed_at = datetime('now', 'subsec')\n               WHERE status IN ('queued', 'running')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "5b77e1fa0847c36d4cae35dfde5e605ef58e576d147dde1d6f018dfc79b1baaf"
+}

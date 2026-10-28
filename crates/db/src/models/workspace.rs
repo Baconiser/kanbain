@@ -192,6 +192,17 @@ impl Workspace {
         Ok(())
     }
 
+    /// Whether any workspace already uses `branch`.
+    pub async fn branch_in_use(pool: &SqlitePool, branch: &str) -> Result<bool, sqlx::Error> {
+        let count = sqlx::query_scalar!(
+            r#"SELECT COUNT(*) as "count!: i64" FROM workspaces WHERE branch = $1"#,
+            branch
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(count > 0)
+    }
+
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
         sqlx::query_as!(
             Workspace,

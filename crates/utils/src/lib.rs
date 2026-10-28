@@ -19,6 +19,7 @@ pub mod response;
 pub mod shell;
 pub mod stream_lines;
 pub mod text;
+pub mod ticket_id;
 pub mod tokio;
 pub mod version;
 

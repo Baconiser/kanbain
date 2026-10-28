@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use db::{
     DBService,
     models::{
+        agent_job::AgentJob,
         execution_process::{ExecutionProcess, RunUsageDelta},
         execution_process_event::{ExecutionProcessEvent, ExecutionProcessEventType},
         issue::Issue,
@@ -20,7 +21,7 @@ use db::{
     },
 };
 use executors::{
-    adapters::{AGENT_DIR, AgentLaunch, SKILLS_DIR},
+    adapters::{AGENT_DIR, AgentLaunch, SKILLS_DIR, headless},
     env::{SANDBOX_PID_DIR, SandboxTarget},
     versions::{CLAUDE_CODE_PACKAGE, CLAUDE_CODE_VERSION, OPENCODE_PACKAGE, OPENCODE_VERSION},
 };
@@ -30,8 +31,8 @@ use model_proxy::{
 use rand::{Rng, distr::Alphanumeric};
 use sandbox::{
     AGENT_USER, CONTEXT_DIR, ContainerSpec, DockerSandbox, ExecOptions, FileEntry, KANBAIN_DIR,
-    LABEL_INSTANCE, LABEL_KIND, LABEL_MANAGED, LABEL_WORKSPACE, Limits, OUT_DIR, Sandbox,
-    WORKSPACE_DIR,
+    LABEL_EXECUTION, LABEL_INSTANCE, LABEL_KIND, LABEL_MANAGED, LABEL_WORKSPACE, Limits, OUT_DIR,
+    Sandbox, WORKSPACE_DIR,
     docker::DockerInfo,
     egress::{self, Allowlist, EgressPolicy, EgressVerdict},
     image::{BaseImageArgs, base_image_tag, project_image_tag, stable_hash},
@@ -150,6 +151,24 @@ pub struct LoginContainer {
     pub container: String,
     pub env: Vec<(String, String)>,
     egress_token: String,
+}
+
+/// File the task message of a headless job is written to, in
+/// `/kanbain/context`.
+pub const JOB_TASK_FILE: &str = "task.md";
+
+/// One headless job to run (see [`SandboxRuntime::run_job`]).
+pub struct JobRun<'a> {
+    pub job_id: Uuid,
+    pub launch: &'a AgentLaunch,
+    /// Files for `/kanbain/context`, by relative path.
+    pub context: Vec<(String, String)>,
+    /// The first message.
+    pub task: String,
+    /// For a project's own sandbox image.
+    pub project: Option<&'a Project>,
+    pub budget_usd: Option<f64>,
+    pub timeout: std::time::Duration,
 }
 
 /// One run to prepare in a workspace container.
@@ -569,9 +588,9 @@ impl SandboxRuntime {
 
         if let Some(issue) = run.issue {
             let prefix = run.project.map(|p| p.id_prefix.as_str()).unwrap_or("KAN");
+            let id = issue.display_id(prefix);
             let ticket = format!(
-                "# {}: {}\n\n{}\n",
-                issue.display_id(prefix),
+                "# {id}: {}\n\n{}\n\n---\nStart every commit message with `{id}: `.\n",
                 issue.title,
                 issue.description.as_deref().unwrap_or("")
             );
@@ -665,6 +684,168 @@ impl SandboxRuntime {
             vars,
             process_key: run.execution.id.to_string(),
         })
+    }
+
+    /// Run a headless job (D34): a throwaway container with no repo, the
+    /// agent's files, `context` under `/kanbain/context` and the task as
+    /// `task.md`. The container takes a concurrency slot, reaches only the
+    /// model proxy (and package registries through the egress proxy), and is
+    /// removed afterwards. Returns the agent's final message.
+    pub async fn run_job(&self, job: JobRun<'_>) -> Result<String, SandboxRunError> {
+        let base_tag = self.ensure_image_and_gateway(&|_| {}).await?;
+        let image = self.image_for(job.project, &base_tag, &|_| {}).await?;
+        let ready = self.ready()?;
+        let _permit = self
+            .inner
+            .slots
+            .clone()
+            .acquire_owned()
+            .await
+            .map_err(|e| sandbox::SandboxError::Other(e.to_string()))?;
+
+        let spec = ContainerSpec {
+            name: format!(
+                "kanbain-job-{}-{}",
+                &job.job_id.simple().to_string()[..12],
+                self.inner.instance
+            ),
+            image,
+            labels: HashMap::from([
+                (LABEL_MANAGED.to_string(), "true".to_string()),
+                (LABEL_INSTANCE.to_string(), self.inner.instance.clone()),
+                (LABEL_KIND.to_string(), "job".to_string()),
+                (LABEL_EXECUTION.to_string(), job.job_id.to_string()),
+            ]),
+            limits: Limits {
+                cpus: 1.0,
+                memory_mb: 2048,
+                pids: 512,
+            },
+            networks: vec![(ready.network.internal_network.clone(), vec![])],
+            volumes: vec![KANBAIN_DIR.to_string()],
+            working_dir: Some(OUT_DIR.to_string()),
+            user: Some(AGENT_USER.to_string()),
+            ..Default::default()
+        };
+        ready.docker.remove(&spec.name).await?;
+        let container = ready.docker.create(&spec).await?;
+        AgentJob::set_running(&self.inner.db.pool, job.job_id, &container).await?;
+
+        let model_token = self
+            .inner
+            .proxy
+            .issue_token(job.job_id, job.budget_usd, 0.0);
+        let egress_token = random_token("kbj-");
+        self.inner.egress_grants.write().unwrap().insert(
+            egress_token.clone(),
+            EgressGrant {
+                run_id: job.job_id,
+                allowlist: Allowlist::with_defaults(Vec::<String>::new()),
+            },
+        );
+
+        let result: Result<String, SandboxRunError> = async {
+            self.install_agent(&container, job.launch).await?;
+            let mut files: Vec<FileEntry> = job
+                .context
+                .iter()
+                .map(|(path, contents)| FileEntry::new(path, contents.clone()).owned_by_root())
+                .collect();
+            files.push(FileEntry::new(JOB_TASK_FILE, job.task.clone()).owned_by_root());
+            ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
+
+            let task_path = format!("{CONTEXT_DIR}/{JOB_TASK_FILE}");
+            let argv = headless::stdin_from(
+                job.launch,
+                headless::headless_command(job.launch, &task_path),
+                &task_path,
+            );
+            let proxy_url = ready
+                .network
+                .egress_proxy_url(&job.job_id.simple().to_string(), &egress_token);
+            let no_proxy = format!("{GATEWAY_HOST},localhost,127.0.0.1");
+            let mut env: Vec<(String, String)> = vec![
+                ("ANTHROPIC_BASE_URL".into(), ready.network.model_proxy_url()),
+                ("ANTHROPIC_AUTH_TOKEN".into(), model_token.clone()),
+                (
+                    "OPENAI_BASE_URL".into(),
+                    format!("{}/openai/v1", ready.network.model_proxy_url()),
+                ),
+                ("OPENAI_API_KEY".into(), model_token.clone()),
+                ("HTTPS_PROXY".into(), proxy_url.clone()),
+                ("https_proxy".into(), proxy_url.clone()),
+                ("HTTP_PROXY".into(), proxy_url.clone()),
+                ("http_proxy".into(), proxy_url),
+                ("NO_PROXY".into(), no_proxy.clone()),
+                ("no_proxy".into(), no_proxy),
+                (
+                    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
+                    "1".into(),
+                ),
+                ("DISABLE_AUTOUPDATER".into(), "1".into()),
+                ("KANBAIN_RUN_ID".into(), job.job_id.to_string()),
+            ];
+            env.extend(job.launch.env.iter().map(|(k, v)| (k.clone(), v.clone())));
+            let argv_refs: Vec<&str> = argv.iter().map(String::as_str).collect();
+            let output = tokio::time::timeout(
+                job.timeout,
+                ready.docker.exec(
+                    &container,
+                    &argv_refs,
+                    &ExecOptions {
+                        user: Some(AGENT_USER.into()),
+                        working_dir: Some(OUT_DIR.into()),
+                        env,
+                    },
+                ),
+            )
+            .await
+            .map_err(|_| {
+                sandbox::SandboxError::Other(format!(
+                    "The agent did not finish within {} minutes",
+                    job.timeout.as_secs() / 60
+                ))
+            })??;
+            let stdout = output.stdout_str();
+            match headless::parse_headless_output(job.launch.executor, &stdout) {
+                Ok(text) => Ok(text),
+                Err(e) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    let tail: String = stderr
+                        .lines()
+                        .rev()
+                        .take(5)
+                        .collect::<Vec<_>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    tracing::warn!(
+                        "Job {} exited with {}: {e}\n{tail}",
+                        job.job_id,
+                        output.exit_code
+                    );
+                    Err(sandbox::SandboxError::Other(if tail.trim().is_empty() {
+                        e
+                    } else {
+                        format!("{e} ({})", tail.trim())
+                    })
+                    .into())
+                }
+            }
+        }
+        .await;
+
+        self.inner.proxy.revoke_run(job.job_id);
+        self.inner
+            .egress_grants
+            .write()
+            .unwrap()
+            .remove(&egress_token);
+        if let Err(e) = ready.docker.remove(&container).await {
+            tracing::warn!("Removing job container {container} failed: {e}");
+        }
+        result
     }
 
     /// A throwaway container for `claude setup-token` (D33). It reaches
@@ -1213,6 +1394,12 @@ impl ProxyEvents for RunEvents {
             tokens_cache_write: usage.cache_write_tokens() as i64,
             cost_usd: record.cost_usd.unwrap_or(0.0),
         };
+        // Headless jobs (intake, history) keep their usage on the job.
+        match AgentJob::add_usage(pool, record.run_id, &delta).await {
+            Ok(true) => return,
+            Ok(false) => {}
+            Err(e) => tracing::warn!("Recording usage for job {} failed: {e}", record.run_id),
+        }
         if let Err(e) = ExecutionProcess::add_usage(pool, record.run_id, delta).await {
             tracing::warn!("Recording usage for run {} failed: {e}", record.run_id);
         }

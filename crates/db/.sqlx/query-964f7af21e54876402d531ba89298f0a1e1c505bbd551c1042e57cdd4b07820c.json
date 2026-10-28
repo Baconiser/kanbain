@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\" FROM issue_descriptions\n               WHERE issue_id = $1\n                 AND version = (SELECT MAX(version) FROM issue_descriptions WHERE issue_id = $1)\n                 AND kind = 'edited' AND intake_id IS NULL\n                 AND julianday(created_at) > julianday('now', '-10 minutes')",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "964f7af21e54876402d531ba89298f0a1e1c505bbd551c1042e57cdd4b07820c"
+}

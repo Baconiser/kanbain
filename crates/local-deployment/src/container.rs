@@ -570,8 +570,27 @@ impl LocalContainerService {
         }
     }
 
-    /// Get the commit message based on the execution run reason.
+    /// Get the commit message based on the execution run reason, starting
+    /// with the ticket's id when the workspace belongs to a ticket (D16).
     async fn get_commit_message(&self, ctx: &ExecutionContext) -> String {
+        let message = self.base_commit_message(ctx).await;
+        let pool = &self.db().pool;
+        let Some(issue_id) = ctx.workspace.issue_id else {
+            return message;
+        };
+        match Issue::find_by_id(pool, issue_id).await {
+            Ok(Some(issue)) => {
+                let prefix = match Project::find_by_id(pool, issue.project_id).await {
+                    Ok(Some(project)) => project.id_prefix,
+                    _ => "KAN".to_string(),
+                };
+                utils::ticket_id::ticket_commit_message(&issue.display_id(&prefix), &message)
+            }
+            _ => message,
+        }
+    }
+
+    async fn base_commit_message(&self, ctx: &ExecutionContext) -> String {
         match ctx.execution_process.run_reason {
             ExecutionProcessRunReason::CodingAgent => {
                 // Try to retrieve the task summary from the coding agent turn

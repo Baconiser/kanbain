@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_events (id, issue_id, event_type, actor, payload, occurred_at)\n               VALUES ($1, $2, $3, $4, $5, COALESCE($6, datetime('now', 'subsec')))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "01bb7e190e5e74102186a24ace322f224c13c20b74ef0a8430e963d6323b3334"
+}

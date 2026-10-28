@@ -180,7 +180,9 @@ impl File {
                FROM attachments i
                LEFT JOIN workspace_attachments wa ON i.id = wa.attachment_id
                LEFT JOIN issue_attachments ia ON i.id = ia.attachment_id
-               WHERE wa.workspace_id IS NULL AND ia.issue_id IS NULL"#
+               LEFT JOIN intake_attachments ka ON i.id = ka.attachment_id
+               WHERE wa.workspace_id IS NULL AND ia.issue_id IS NULL
+                 AND ka.intake_id IS NULL"#
         )
         .fetch_all(pool)
         .await

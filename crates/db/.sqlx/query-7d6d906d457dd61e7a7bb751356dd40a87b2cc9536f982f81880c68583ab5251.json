@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE agent_jobs\n               SET status = $2, output = $3, error = $4,\n                   completed_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "7d6d906d457dd61e7a7bb751356dd40a87b2cc9536f982f81880c68583ab5251"
+}

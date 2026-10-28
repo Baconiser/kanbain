@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE ticket_intakes\n               SET status = $2, issue_id = $3, updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "456d70419994d05f4e3e7d37a48ea1efae6d93fc38afc207594f9dd23c129f64"
+}

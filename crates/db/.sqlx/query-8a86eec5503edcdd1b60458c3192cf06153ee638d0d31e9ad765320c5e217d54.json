@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_descriptions SET title = $2, description = $3\n                   WHERE id = $1 RETURNING version as \"version!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "version!: i64",
+        "ordinal": 0,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8a86eec5503edcdd1b60458c3192cf06153ee638d0d31e9ad765320c5e217d54"
+}

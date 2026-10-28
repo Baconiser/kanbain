@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT t.attachment_id as \"attachment_id!: Uuid\",\n                      t.format,\n                      t.text,\n                      t.error,\n                      t.created_at as \"created_at!: DateTime<Utc>\"\n               FROM attachment_texts t\n               JOIN issue_attachments ia ON ia.attachment_id = t.attachment_id\n               WHERE ia.issue_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "attachment_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "format",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "text",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "b6747f4529f8bb2c9a20f616cd83665f1d3b7f66ca3638d2ea7381cf2c4e02a0"
+}
