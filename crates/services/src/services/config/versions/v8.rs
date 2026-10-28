@@ -68,6 +68,13 @@ pub struct Config {
     pub relay_enabled: bool,
     #[serde(default)]
     pub host_nickname: Option<String>,
+    /// Number of daily database backups to keep.
+    #[serde(default = "default_backup_keep")]
+    pub backup_keep: u32,
+}
+
+fn default_backup_keep() -> u32 {
+    db::backup::DEFAULT_DAILY_KEEP
 }
 
 impl Config {
@@ -99,6 +106,7 @@ impl Config {
             send_message_shortcut: SendMessageShortcut::default(),
             relay_enabled: true,
             host_nickname: None,
+            backup_keep: default_backup_keep(),
         }
     }
 
@@ -155,6 +163,7 @@ impl Default for Config {
             send_message_shortcut: SendMessageShortcut::default(),
             relay_enabled: true,
             host_nickname: None,
+            backup_keep: default_backup_keep(),
         }
     }
 }

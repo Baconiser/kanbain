@@ -175,6 +175,20 @@
           "dialogDescription": "Choose a directory. Workspaces will be created in a .kanbain-workspaces subdirectory within it."
         }
       },
+      "data": {
+        "title": "Data",
+        "description": "Tickets, projects and settings are stored in a local SQLite database.",
+        "backupKeep": {
+          "label": "Daily backups to keep",
+          "helper": "A copy is taken once a day and before every database migration. Backups are stored in the backups folder of the KanbAIn data directory."
+        },
+        "export": {
+          "label": "Export all tickets",
+          "helper": "Download every project with its tickets, statuses, tags and comments.",
+          "json": "Export as JSON",
+          "markdown": "Export as Markdown"
+        }
+      },
       "pullRequests": {
         "title": "Pull Requests",
         "description": "Configure PR creation behavior",

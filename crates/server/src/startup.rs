@@ -133,6 +133,11 @@ pub async fn initialize_deployment(
         })?;
     }
 
+    // Publish this launch's API token for local tooling (dev proxy, MCP).
+    if let Err(e) = utils::launch_token::write_token_file() {
+        tracing::warn!("Failed to write launch token file: {}", e);
+    }
+
     // Copy old database to new location for safe downgrades
     let old_db = asset_dir().join("db.sqlite");
     let new_db = asset_dir().join("db.v2.sqlite");

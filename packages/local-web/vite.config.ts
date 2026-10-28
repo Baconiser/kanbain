@@ -6,6 +6,20 @@ import path from "path";
 import fs from "fs";
 import pkg from "./package.json";
 
+// Written by the dev backend on every start (see utils::launch_token).
+const LAUNCH_TOKEN_FILE =
+  process.env.KANBAIN_LAUNCH_TOKEN_FILE ||
+  path.resolve(__dirname, '../../dev_assets/launch-token');
+
+function readLaunchToken(): string | null {
+  if (process.env.KANBAIN_LAUNCH_TOKEN) return process.env.KANBAIN_LAUNCH_TOKEN;
+  try {
+    return fs.readFileSync(LAUNCH_TOKEN_FILE, 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 function createFilteredLogger() {
   const logger = createLogger();
   const originalError = logger.error.bind(logger);
@@ -132,6 +146,17 @@ export default defineConfig({
         target: `http://localhost:${process.env.BACKEND_PORT || '3001'}`,
         changeOrigin: true,
         ws: true,
+        // The dev backend only accepts requests carrying its launch token.
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            const token = readLaunchToken();
+            if (token) proxyReq.setHeader('x-kanbain-token', token);
+          });
+          proxy.on('proxyReqWs', (proxyReq) => {
+            const token = readLaunchToken();
+            if (token) proxyReq.setHeader('x-kanbain-token', token);
+          });
+        },
       },
     },
     fs: {

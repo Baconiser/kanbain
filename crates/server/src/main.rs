@@ -100,8 +100,10 @@ async fn main() -> Result<(), KanbainError> {
         tracing::info!("Opening browser...");
         let browser_port = actual_main_port;
         tokio::spawn(async move {
-            if let Err(e) =
-                utils::browser::open_browser(&format!("http://127.0.0.1:{browser_port}")).await
+            if let Err(e) = utils::browser::open_browser(&server::middleware::auth_session_url(
+                &format!("http://127.0.0.1:{browser_port}"),
+            ))
+            .await
             {
                 tracing::warn!(
                     "Failed to open browser automatically: {}. Please open http://127.0.0.1:{} manually.",

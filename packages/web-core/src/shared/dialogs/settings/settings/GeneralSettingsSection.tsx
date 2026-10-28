@@ -593,6 +593,44 @@ export function GeneralSettingsSection() {
         </SettingsField>
       </SettingsCard>
 
+      {/* Data */}
+      <SettingsCard
+        title={t('settings.general.data.title')}
+        description={t('settings.general.data.description')}
+      >
+        <SettingsField
+          label={t('settings.general.data.backupKeep.label')}
+          description={t('settings.general.data.backupKeep.helper')}
+        >
+          <SettingsInput
+            value={String(draft?.backup_keep ?? 7)}
+            onChange={(value) => {
+              const n = Number.parseInt(value, 10);
+              if (Number.isFinite(n) && n >= 1 && n <= 365) {
+                updateDraft({ backup_keep: n });
+              }
+            }}
+          />
+        </SettingsField>
+        <SettingsField
+          label={t('settings.general.data.export.label')}
+          description={t('settings.general.data.export.helper')}
+        >
+          <div className="flex gap-base text-sm">
+            <a className="underline" href="/api/export?format=json" download>
+              {t('settings.general.data.export.json')}
+            </a>
+            <a
+              className="underline"
+              href="/api/export?format=markdown"
+              download
+            >
+              {t('settings.general.data.export.markdown')}
+            </a>
+          </div>
+        </SettingsField>
+      </SettingsCard>
+
       {/* Pull Requests */}
       <SettingsCard
         title={t('settings.general.pullRequests.title')}

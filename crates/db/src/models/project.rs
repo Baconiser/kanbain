@@ -160,7 +160,7 @@ impl Project {
         )
         .execute(&mut *tx)
         .await?;
-        ProjectStatus::seed_defaults(&mut *tx, id).await?;
+        ProjectStatus::seed_defaults(&mut tx, id).await?;
         for repo_id in &data.repo_ids {
             ProjectRepo::link(&mut *tx, id, *repo_id).await?;
         }

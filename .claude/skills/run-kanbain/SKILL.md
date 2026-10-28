@@ -16,6 +16,9 @@ cd /workspaces/kanbain
 export FRONTEND_PORT=$(node scripts/setup-dev-environment.js frontend)
 export BACKEND_PORT=$(node scripts/setup-dev-environment.js backend)
 export PREVIEW_PROXY_PORT=$(node scripts/setup-dev-environment.js preview_proxy)
+# Every /api call needs the backend's launch token; share one between the
+# backend and the Vite proxy (both read this variable).
+export KANBAIN_LAUNCH_TOKEN=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
 ```
 
 Usually 3000 / 3001 / 3002 (stored in `.dev-ports.json`).

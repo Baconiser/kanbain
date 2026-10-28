@@ -70,3 +70,88 @@ and runs.
   bundles from upstream's storage, which KanbAIn doesn't publish to.
 - **Docs.** The remaining docs pages describe upstream screens in places and
   need a pass once the KanbAIn flows exist.
+
+## Phase 0b: Local tickets in SQLite (2026-10-27)
+
+**Goal:** the kanban board works fully offline on SQLite.
+
+### What changed
+
+- **Schema.** One migration replaces the legacy `tasks` table and the
+  remote-linked `projects` table with local `projects` (ticket prefix,
+  External ID key/pattern, settings JSON, issue counter), `project_repos`,
+  `project_statuses` (with a stable `kind`), `issues` (per-project number,
+  priority, parent, External ID, ask/yolo `mode`, `fix_round`, budget),
+  `project_tags`/`issue_tags`, `issue_relationships`, `issue_comments`
+  (author `user` or `agent:<run>`) and `issue_attachments`. Workspaces link to
+  a ticket through `workspaces.issue_id`. Ticket labels live in
+  `project_tags` because `tags` already holds the chat prompt snippets.
+- **Default statuses** per project: Backlog, Planning, Awaiting approval,
+  In progress, Testing, Review, Done and Blocked, each with its `kind`.
+  Moving a ticket to a `done` status sets `completed_at`.
+- **API.** Local CRUD for projects, repos, statuses, tags, tickets (including
+  a bulk move for drag and drop), ticket tags, relationships, comments and
+  attachments. Parent cycles, foreign statuses and cross-project links are
+  rejected. A missing row is now a 404.
+- **Live updates.** Row changes in the ticket tables are buffered per SQLite
+  connection and pushed as JSON-Patch once their transaction commits, so
+  streams never show uncommitted or rolled-back state. WebSocket streams:
+  all projects, one project's board, one ticket's comments.
+- **Board.** `/tickets` replaces the placeholder: project picker and
+  settings (repos, statuses with pipeline role, hide/reorder, tags, External
+  ID key and pattern, history "always allow"), drag and drop, filter, and a
+  ticket panel (status, priority, mode, External ID, budget, parent, tags,
+  description with pasted attachments, sub-tickets, relationships,
+  workspaces, comments). "Start workspace" opens create mode linked to the
+  ticket, seeded with the project's repos; the branch is named after the
+  ticket's ID.
+- **Attachments** are stored locally and `attachment://` references in the
+  editor resolve to `/api/attachments/<id>/file`.
+- **Backups (D12).** A `VACUUM INTO` copy before any pending migration (last
+  5 kept) and a daily copy (checked hourly, count set in Settings → General
+  → Data, default 7) in `<data>/backups/`. `GET /api/export?format=json|
+  markdown[&project_id=]` exports everything; Settings links to it.
+- **Launch token (D3).** Every `/api` route except `/health` requires the
+  per-launch token as the `x-kanbain-token` header or an HttpOnly,
+  SameSite=Strict cookie. Tauri opens `/api/auth/session?token=…`, which sets
+  the cookie and redirects into the app. The token is written to
+  `<data>/launch-token` (mode 0600) for `kanbain-mcp`. `pnpm run dev`
+  generates one token and hands it to both the backend and the Vite proxy
+  through `KANBAIN_LAUNCH_TOKEN`, so a second backend instance rewriting the
+  file cannot break the dev session.
+- **Cleanup.** `shared/remote-types.ts`, dead selection builders and the
+  issue/kanban keyboard shortcuts are gone.
+
+### Demo (Linux dev container)
+
+- `cargo test --workspace` passes, including new model, backup, export and
+  token tests. `pnpm run check` and `pnpm run lint` pass.
+- `.claude/skills/run-kanbain/driver/tickets.mjs` (new) against the dev
+  setup: creates a project and a ticket with an External ID, adds a tag, a
+  sub-ticket, a comment and a priority, sees a rename live in a second
+  window, drags the ticket to In progress (seen live in the second window),
+  reloads and finds everything persisted. No console or API errors.
+- Without the token the API answers 401; with the header or cookie, 200.
+  The sign-in route refuses bad tokens and off-site redirects.
+- The Tauri path, simulated in Chromium against the backend serving the
+  built frontend: `/api/auth/session` sets the cookie and lands on
+  `/tickets`; the board, panel and all 7 WebSockets work with no failed
+  API calls.
+- A daily backup is written at startup when none is younger than a day.
+
+### Not verified here
+
+- **Windows.** The Tauri sign-in flow, downloads of the export from the
+  WebView2 window and backups under `%APPDATA%` need the user's check.
+- **Manual workspace from a ticket with Claude Code.** Needs an
+  authenticated Claude account.
+
+### Known leftovers
+
+- **i18n.** The new board uses English strings; only the Settings → Data
+  card has (English) translation keys.
+- **VS Code embed.** The `/workspaces/<id>/vscode` page opened by the
+  upstream VS Code extension has no way to get the launch token and now
+  gets 401s.
+- **No frontend unit tests.** Vitest is not installed in this repo; the
+  board logic is covered by the Playwright driver instead.

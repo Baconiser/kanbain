@@ -119,6 +119,28 @@ impl Deployment for LocalDeployment {
             });
         }
 
+        {
+            // Daily SQLite backup (checked hourly), pruned to the configured count.
+            let pool = db.pool.clone();
+            let config = config.clone();
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+                loop {
+                    interval.tick().await;
+                    let keep = config.read().await.backup_keep;
+                    match db::backup::run_daily_backup(&pool, &db::backup::backups_dir(), keep)
+                        .await
+                    {
+                        Ok(Some(path)) => {
+                            tracing::info!("Daily database backup: {}", path.display())
+                        }
+                        Ok(None) => {}
+                        Err(e) => tracing::error!("Daily database backup failed: {}", e),
+                    }
+                }
+            });
+        }
+
         let approvals = Approvals::new();
         let queued_message_service = QueuedMessageService::new();
 

@@ -49,10 +49,26 @@ pub struct McpServer {
     mode: McpMode,
 }
 
+/// HTTP client that sends the backend's launch token with every request.
+fn api_client() -> reqwest::Client {
+    let mut headers = reqwest::header::HeaderMap::new();
+    if let Some(token) = utils::launch_token::read_token()
+        && let Ok(value) = reqwest::header::HeaderValue::from_str(&token)
+    {
+        headers.insert(utils::launch_token::HEADER, value);
+    } else {
+        tracing::warn!("No KanbAIn launch token found; API calls will be rejected");
+    }
+    reqwest::Client::builder()
+        .default_headers(headers)
+        .build()
+        .unwrap_or_default()
+}
+
 impl McpServer {
     pub fn new_global(base_url: &str) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: api_client(),
             base_url: base_url.to_string(),
             tool_router: Self::global_mode_router(),
             context: None,
@@ -62,7 +78,7 @@ impl McpServer {
 
     pub fn new_orchestrator(base_url: &str) -> Self {
         Self {
-            client: reqwest::Client::new(),
+            client: api_client(),
             base_url: base_url.to_string(),
             tool_router: Self::orchestrator_mode_router(),
             context: None,

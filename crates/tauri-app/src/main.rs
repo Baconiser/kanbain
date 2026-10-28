@@ -185,10 +185,12 @@ fn main() {
                     match server::startup::start().await {
                         Ok(server_handle) => {
                             let url = server_handle.url();
+                            // Sign the webview in with this launch's API token.
+                            let webview_target = server::middleware::auth_session_url(&url);
 
                             // Create the window on the main thread — macOS
                             // silently drops windows created from async tasks.
-                            let url_clone = url.clone();
+                            let url_clone = webview_target.clone();
                             let create_handle = app_handle.clone();
                             let _ = app_handle.run_on_main_thread(move || {
                                 let webview_url =

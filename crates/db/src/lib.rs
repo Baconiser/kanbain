@@ -7,6 +7,7 @@ use sqlx::{
 };
 use utils::assets::asset_dir;
 
+pub mod backup;
 pub mod models;
 
 async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), Error> {
@@ -14,6 +15,20 @@ async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), Error> {
 
     let migrator = sqlx::migrate!("./migrations");
     let mut processed_versions: HashSet<i64> = HashSet::new();
+
+    // Keep a copy of the database before changing its schema.
+    if backup::has_pending_migrations(pool, &migrator).await? {
+        let dir = backup::backups_dir();
+        let path = backup::backup_into(pool, &dir, backup::BackupKind::PreMigration).await?;
+        tracing::info!("Backed up database before migrating: {}", path.display());
+        if let Err(e) = backup::prune(
+            &dir,
+            backup::BackupKind::PreMigration,
+            backup::PRE_MIGRATION_KEEP,
+        ) {
+            tracing::warn!("Failed to prune pre-migration backups: {}", e);
+        }
+    }
 
     loop {
         match migrator.run(pool).await {

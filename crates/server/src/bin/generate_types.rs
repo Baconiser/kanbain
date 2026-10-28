@@ -40,6 +40,8 @@ fn generate_types_content() -> String {
         server::routes::projects::LinkProjectRepoRequest::decl(),
         server::routes::projects::DeleteStatusQuery::decl(),
         server::routes::issues::AssociateIssueAttachmentsRequest::decl(),
+        server::routes::export::ExportFormat::decl(),
+        server::routes::export::ExportQuery::decl(),
         db::models::repo::UpdateRepo::decl(),
         db::models::repo::SearchResult::decl(),
         db::models::repo::SearchMatchType::decl(),

@@ -12,6 +12,7 @@ pub mod config;
 pub mod containers;
 pub mod events;
 pub mod execution_processes;
+pub mod export;
 pub mod filesystem;
 pub mod frontend;
 pub mod health;
@@ -29,6 +30,7 @@ pub mod workspaces;
 pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
     let api_routes = Router::new()
         .route("/health", get(health::health_check))
+        .route("/auth/session", get(middleware::auth_session))
         .merge(config::router())
         .merge(containers::router(&deployment))
         .merge(workspaces::router(&deployment))
@@ -36,6 +38,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(tags::router(&deployment))
         .merge(projects::router())
         .merge(issues::router())
+        .merge(export::router())
         .merge(filesystem::router())
         .merge(repo::router())
         .merge(events::router(&deployment))
@@ -46,6 +49,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(sessions::router(&deployment))
         .merge(terminal::router())
         .nest("/attachments", attachments::routes())
+        .layer(axum::middleware::from_fn(middleware::require_launch_token))
         .layer(ValidateRequestHeaderLayer::custom(
             middleware::validate_origin,
         ))
