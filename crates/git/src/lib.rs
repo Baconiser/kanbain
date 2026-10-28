@@ -11,6 +11,7 @@ use ts_rs::TS;
 use utils::diff::{Diff, DiffChangeKind};
 
 mod cli;
+pub mod history;
 mod validation;
 
 use cli::{ChangeType, StatusDiffEntry, StatusDiffOptions};

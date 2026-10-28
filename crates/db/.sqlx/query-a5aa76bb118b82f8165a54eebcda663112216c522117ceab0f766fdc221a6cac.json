@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_history SET status = 'failed', error = $2, job_id = $3\n                       WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "a5aa76bb118b82f8165a54eebcda663112216c522117ceab0f766fdc221a6cac"
+}

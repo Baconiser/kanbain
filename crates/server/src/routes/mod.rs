@@ -17,6 +17,7 @@ pub mod export;
 pub mod filesystem;
 pub mod frontend;
 pub mod health;
+pub mod history;
 pub mod intake;
 pub mod issues;
 pub mod preview;
@@ -43,6 +44,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(projects::router())
         .merge(issues::router())
         .merge(intake::router())
+        .merge(history::router())
         .merge(export::router())
         .merge(filesystem::router())
         .merge(repo::router())

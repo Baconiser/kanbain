@@ -466,3 +466,105 @@ async fn description_versions_and_timeline() {
             .unwrap()
     );
 }
+
+#[tokio::test]
+async fn history_commits_and_file_links() {
+    use super::{
+        issue_history::{
+            HistoryPermission, IssueHistory, NewTicketCommit, TicketCommit, TicketFileLink,
+        },
+        repo::Repo,
+    };
+
+    let pool = pool().await;
+    let project = project(&pool, None).await;
+    let issue = Issue::create(&pool, project.id, &new_issue("Reset"))
+        .await
+        .unwrap();
+    let repo = Repo::find_or_create(&pool, std::path::Path::new("/tmp/shop"), "shop")
+        .await
+        .unwrap();
+    let commit = |sha: &str, days: i64, files: Vec<(&str, i64)>| NewTicketCommit {
+        sha: sha.to_string(),
+        author: "Anna".to_string(),
+        committed_at: chrono::Utc::now() - chrono::Duration::days(days),
+        subject: format!("PROJ-1: {sha}"),
+        branches: vec![],
+        message_match: true,
+        files: files
+            .into_iter()
+            .map(|(p, n)| (p.to_string(), Some(n), Some(1)))
+            .collect(),
+    };
+    TicketCommit::replace_for_repo(
+        &pool,
+        issue.id,
+        repo.id,
+        &[
+            commit("aaa", 3, vec![("mailer.rs", 5), ("README.md", 1)]),
+            commit("bbb", 1, vec![("mailer.rs", 2)]),
+        ],
+    )
+    .await
+    .unwrap();
+
+    let commits = TicketCommit::find_by_issue(&pool, issue.id).await.unwrap();
+    assert_eq!(
+        commits.iter().map(|c| c.sha.as_str()).collect::<Vec<_>>(),
+        vec!["bbb", "aaa"]
+    );
+    assert_eq!(commits[0].repo_name, "shop");
+    let files = TicketFileLink::find_by_issue(&pool, issue.id)
+        .await
+        .unwrap();
+    assert_eq!(files[0].path, "mailer.rs");
+    assert_eq!(
+        (files[0].commits, files[0].additions, files[0].deletions),
+        (2, 7, 2)
+    );
+    assert_eq!(files[0].last_commit_sha, "bbb");
+    assert_eq!(files[1].path, "README.md");
+
+    // A re-scan replaces the repo's rows.
+    TicketCommit::replace_for_repo(&pool, issue.id, repo.id, &[commit("ccc", 0, vec![])])
+        .await
+        .unwrap();
+    assert_eq!(
+        TicketCommit::find_by_issue(&pool, issue.id)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(
+        TicketFileLink::find_by_issue(&pool, issue.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    // Permission and summary survive a new check; new prior work is noticed.
+    let h = IssueHistory::record_check(&pool, issue.id, "PROJ-1", 1, 1, "h1")
+        .await
+        .unwrap();
+    assert_eq!(h.permission, HistoryPermission::Pending);
+    assert!(h.needs_analysis());
+    IssueHistory::set_permission(&pool, issue.id, HistoryPermission::Allowed)
+        .await
+        .unwrap();
+    assert!(IssueHistory::start_analysis(&pool, issue.id).await.unwrap());
+    assert!(!IssueHistory::start_analysis(&pool, issue.id).await.unwrap());
+    IssueHistory::finish_analysis(&pool, issue.id, None, Ok(("summary", "h1")))
+        .await
+        .unwrap();
+    let h = IssueHistory::record_check(&pool, issue.id, "PROJ-1", 1, 1, "h1")
+        .await
+        .unwrap();
+    assert_eq!(h.permission, HistoryPermission::Allowed);
+    assert_eq!(h.prior_work.as_deref(), Some("summary"));
+    assert!(!h.needs_analysis());
+    let h = IssueHistory::record_check(&pool, issue.id, "PROJ-1", 2, 2, "h2")
+        .await
+        .unwrap();
+    assert!(h.needs_analysis());
+}

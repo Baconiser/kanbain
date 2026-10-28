@@ -313,6 +313,7 @@ async fn create_issue(
     }
     load_project(&deployment, project_id).await?;
     let issue = Issue::create(&deployment.db().pool, project_id, &payload).await?;
+    deployment.history().spawn_check(issue.id);
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 

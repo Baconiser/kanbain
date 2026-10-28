@@ -19,6 +19,7 @@ use db::{
         execution_process_repo_state::ExecutionProcessRepoState,
         issue::{Issue, UpdateIssue},
         issue_comment::{CreateIssueComment, IssueComment},
+        issue_history::IssueHistory,
         project::Project,
         project_status::{ProjectStatus, ProjectStatusKind},
         repo::Repo,
@@ -93,6 +94,9 @@ pub struct LocalContainerService {
     notification_service: NotificationService,
     sandbox: SandboxRuntime,
     agent_library: Arc<AgentLibrary>,
+    /// Set once the deployment is built (the history service needs the
+    /// sandbox this service owns).
+    history: Arc<std::sync::OnceLock<crate::history::HistoryService>>,
 }
 
 impl LocalContainerService {
@@ -134,6 +138,7 @@ impl LocalContainerService {
             notification_service,
             sandbox,
             agent_library,
+            history: Arc::default(),
         };
 
         container.spawn_workspace_cleanup();
@@ -282,6 +287,18 @@ impl LocalContainerService {
 
         self.sandbox.remove_workspace_container(workspace.id).await;
         let _ = Workspace::mark_worktree_deleted(&self.db.pool, workspace.id).await;
+    }
+
+    pub fn set_history(&self, history: crate::history::HistoryService) {
+        let _ = self.history.set(history);
+    }
+
+    /// Re-check a ticket's git history in the background (D18): at run
+    /// start for new prior work, at run end for the run's commits (E19).
+    fn spawn_history_check(&self, issue_id: Option<Uuid>) {
+        if let (Some(issue_id), Some(history)) = (issue_id, self.history.get()) {
+            history.spawn_check(issue_id);
+        }
     }
 
     pub fn sandbox(&self) -> &SandboxRuntime {
@@ -436,6 +453,15 @@ impl LocalContainerService {
             .get(&execution_process.id)
             .cloned();
         let log = move |line: String| Self::push_run_note(store.as_ref(), &line);
+        if agent_run {
+            self.spawn_history_check(issue.as_ref().map(|i| i.id));
+        }
+        let prior_work = match &issue {
+            Some(issue) => IssueHistory::find(pool, issue.id)
+                .await?
+                .and_then(|h| h.prior_work),
+            None => None,
+        };
         let target = self
             .sandbox
             .prepare(
@@ -448,6 +474,7 @@ impl LocalContainerService {
                     project: project.as_ref(),
                     agent_run,
                     budget_usd: budget,
+                    prior_work: prior_work.as_deref(),
                 },
                 &log,
             )
@@ -501,6 +528,9 @@ impl LocalContainerService {
                 &message,
             )
             .await;
+        if sync_out {
+            self.spawn_history_check(ctx.workspace.issue_id);
+        }
     }
 
     async fn cleanup_expired_workspaces(&self) -> Result<(), DeploymentError> {

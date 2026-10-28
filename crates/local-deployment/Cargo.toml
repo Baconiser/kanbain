@@ -33,6 +33,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 sqlx = { version = "0.8.6", default-features = false }
 ts-rs = { workspace = true }
+sha2 = "0.10"
 
 
 [dev-dependencies]

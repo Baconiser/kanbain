@@ -175,4 +175,9 @@ mod tests {
         assert_ne!(a, b);
         assert_eq!(a, base_image_tag("0.1.0", &args("2.0.0")));
     }
+
+    #[test]
+    fn agent_commits_use_the_known_author() {
+        assert!(BASE_DOCKERFILE.contains(&format!("user.name \"{}\"", crate::AGENT_GIT_NAME)));
+    }
 }

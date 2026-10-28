@@ -30,6 +30,7 @@ pub mod claude_login;
 mod command;
 pub mod container;
 mod copy;
+pub mod history;
 pub mod intake;
 pub mod jobs;
 pub mod pty;
@@ -58,6 +59,7 @@ pub struct LocalDeployment {
     claude_login: claude_login::ClaudeLogin,
     jobs: jobs::AgentJobs,
     intake: intake::IntakeService,
+    history: history::HistoryService,
 }
 
 #[async_trait]
@@ -177,6 +179,9 @@ impl Deployment for LocalDeployment {
         if let Err(e) = db::models::agent_job::AgentJob::fail_interrupted(&db.pool).await {
             tracing::warn!("Closing interrupted agent jobs failed: {e}");
         }
+        if let Err(e) = db::models::issue_history::IssueHistory::fail_interrupted(&db.pool).await {
+            tracing::warn!("Closing interrupted history analyses failed: {e}");
+        }
         if let Err(e) = sqlx::query(
             "UPDATE ticket_intakes SET status = 'failed', \
              error = 'Interrupted by an app restart' WHERE status = 'enhancing'",
@@ -202,6 +207,9 @@ impl Deployment for LocalDeployment {
             agent_library.clone(),
         )
         .await;
+
+        let history = history::HistoryService::new(db.clone(), jobs.clone());
+        container.set_history(history.clone());
 
         let events = EventService::new(db.clone(), events_msg_store, events_entry_count);
 
@@ -237,6 +245,7 @@ impl Deployment for LocalDeployment {
             claude_login,
             jobs,
             intake,
+            history,
         };
 
         Ok(deployment)
@@ -326,6 +335,10 @@ impl LocalDeployment {
 
     pub fn intake(&self) -> &intake::IntakeService {
         &self.intake
+    }
+
+    pub fn history(&self) -> &history::HistoryService {
+        &self.history
     }
 
     pub fn trigger_pr_sync(&self) {

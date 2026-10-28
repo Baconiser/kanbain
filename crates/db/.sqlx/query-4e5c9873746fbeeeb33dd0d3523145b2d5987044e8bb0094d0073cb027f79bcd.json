@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT c.issue_id as \"issue_id!: Uuid\",\n                      c.repo_id as \"repo_id!: Uuid\",\n                      r.name as \"repo_name!\",\n                      c.sha,\n                      c.author,\n                      c.committed_at as \"committed_at!: DateTime<Utc>\",\n                      c.subject,\n                      c.branches as \"branches!: sqlx::types::Json<Vec<String>>\",\n                      c.message_match as \"message_match!: bool\"\n               FROM ticket_commits c\n               JOIN repos r ON r.id = c.repo_id\n               WHERE c.issue_id = $1\n               ORDER BY julianday(c.committed_at) DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "repo_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "repo_name!",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "sha",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "author",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "committed_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "subject",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "branches!: sqlx::types::Json<Vec<String>>",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "message_match!: bool",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "4e5c9873746fbeeeb33dd0d3523145b2d5987044e8bb0094d0073cb027f79bcd"
+}

@@ -3414,6 +3414,7 @@ dependencies = [
  "serde",
  "serde_json",
  "services",
+ "sha2",
  "sqlx",
  "strip-ansi-escapes",
  "tempfile",

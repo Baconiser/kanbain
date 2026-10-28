@@ -47,7 +47,12 @@ async fn update_issue(
     State(deployment): State<DeploymentImpl>,
     Json(payload): Json<UpdateIssue>,
 ) -> Result<ResponseJson<ApiResponse<Issue>>, ApiError> {
+    let before = load_issue(&deployment, issue_id).await?;
     let issue = Issue::update(&deployment.db().pool, issue_id, &payload).await?;
+    // A new External ID means different commits (D18).
+    if issue.external_id != before.external_id {
+        deployment.history().spawn_check(issue.id);
+    }
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 

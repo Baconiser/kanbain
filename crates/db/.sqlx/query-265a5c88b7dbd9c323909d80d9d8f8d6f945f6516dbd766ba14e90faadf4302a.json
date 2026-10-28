@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT OR IGNORE INTO ticket_code_links\n                           (issue_id, repo_id, path, commit_sha, additions, deletions)\n                       VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "265a5c88b7dbd9c323909d80d9d8f8d6f945f6516dbd766ba14e90faadf4302a"
+}

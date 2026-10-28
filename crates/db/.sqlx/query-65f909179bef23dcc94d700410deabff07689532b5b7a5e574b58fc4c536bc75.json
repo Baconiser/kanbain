@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM ticket_commits WHERE issue_id = $1 AND repo_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "65f909179bef23dcc94d700410deabff07689532b5b7a5e574b58fc4c536bc75"
+}

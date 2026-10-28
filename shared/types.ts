@@ -121,6 +121,38 @@ export type AcceptIntake = { title: string, description: string, external_id?: s
  */
 update_issue_id?: string, };
 
+export type IssueHistory = { issue_id: string, searched_id: string, commit_count: number, 
+/**
+ * Commits the history agent may analyze: not made by KanbAIn's agents.
+ */
+prior_count: number, prior_hash: string, permission: HistoryPermission, status: HistoryStatus, prior_work: string | null, analyzed_hash: string | null, job_id: string | null, error: string | null, checked_at: string, analyzed_at: string | null, };
+
+export type HistoryPermission = "pending" | "allowed" | "denied";
+
+export type HistoryStatus = "idle" | "analyzing" | "failed";
+
+export type TicketCommit = { issue_id: string, repo_id: string, repo_name: string, sha: string, author: string, committed_at: string, subject: string, branches: string[], message_match: boolean, };
+
+export type TicketFileLink = { repo_id: string, repo_name: string, path: string, 
+/**
+ * `''` until code is chunked (Phase 3d).
+ */
+symbol: string, commits: number, additions: number, deletions: number, last_commit_sha: string, };
+
+export type IssueHistoryView = { 
+/**
+ * `None` until the ticket was checked.
+ */
+history: IssueHistory | null, commits: Array<TicketCommit>, files: Array<TicketFileLink>, 
+/**
+ * The latest analysis job.
+ */
+job: AgentJob | null, 
+/**
+ * The project skips the permission prompt.
+ */
+always_allow: boolean, };
+
 export type StartIntake = { text: string, attachment_ids: Array<string>, };
 
 export type IntakeAttachment = { attachment: AttachmentResponse, 

@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT l.repo_id as \"repo_id!: Uuid\",\n                      r.name as \"repo_name!\",\n                      l.path,\n                      l.symbol,\n                      COUNT(DISTINCT l.commit_sha) as \"commits!: i64\",\n                      COALESCE(SUM(l.additions), 0) as \"additions!: i64\",\n                      COALESCE(SUM(l.deletions), 0) as \"deletions!: i64\",\n                      (SELECT c.sha FROM ticket_commits c\n                       JOIN ticket_code_links l2 ON l2.commit_sha = c.sha\n                            AND l2.issue_id = c.issue_id AND l2.repo_id = c.repo_id\n                       WHERE c.issue_id = l.issue_id AND c.repo_id = l.repo_id\n                             AND l2.path = l.path\n                       ORDER BY julianday(c.committed_at) DESC LIMIT 1) as \"last_commit_sha!: String\"\n               FROM ticket_code_links l\n               JOIN repos r ON r.id = l.repo_id\n               WHERE l.issue_id = $1\n               GROUP BY l.repo_id, l.path, l.symbol\n               ORDER BY COUNT(DISTINCT l.commit_sha) DESC,\n                        COALESCE(SUM(l.additions), 0) + COALESCE(SUM(l.deletions), 0) DESC,\n                        l.path ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "repo_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "repo_name!",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "path",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "symbol",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "commits!: i64",
+        "ordinal": 4,
+        "type_info": "Null"
+      },
+      {
+        "name": "additions!: i64",
+        "ordinal": 5,
+        "type_info": "Null"
+      },
+      {
+        "name": "deletions!: i64",
+        "ordinal": 6,
+        "type_info": "Null"
+      },
+      {
+        "name": "last_commit_sha!: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "af35e58fa5890028615933bba9c574b3c41f86720e0021c0cda58c7ce91f5004"
+}

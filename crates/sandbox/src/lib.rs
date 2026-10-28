@@ -39,6 +39,9 @@ pub const WORKSPACE_DIR: &str = "/workspace";
 /// Unprivileged user agents run as (the `node` user of the base image).
 pub const AGENT_USER: &str = "node";
 pub const AGENT_UID: u64 = 1000;
+/// Git author name of agent commits (set in the base image). The history
+/// check tells them apart from people's commits.
+pub const AGENT_GIT_NAME: &str = "KanbAIn agent";
 
 #[derive(Debug, Error)]
 pub enum SandboxError {

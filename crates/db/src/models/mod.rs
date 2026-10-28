@@ -11,6 +11,7 @@ pub mod issue;
 pub mod issue_comment;
 pub mod issue_description;
 pub mod issue_event;
+pub mod issue_history;
 pub mod issue_relationship;
 pub mod merge;
 pub mod project;

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_history SET status = 'analyzing', error = NULL\n               WHERE issue_id = $1 AND status != 'analyzing'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2309a9786953b3130fa35e96113f4150747da04454bb35e3c78d1574a0ec8345"
+}

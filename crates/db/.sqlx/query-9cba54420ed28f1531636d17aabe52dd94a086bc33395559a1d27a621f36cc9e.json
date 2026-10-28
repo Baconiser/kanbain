@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO ticket_commits (issue_id, repo_id, sha, author, committed_at,\n                                               subject, branches, message_match)\n                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 8
+    },
+    "nullable": []
+  },
+  "hash": "9cba54420ed28f1531636d17aabe52dd94a086bc33395559a1d27a621f36cc9e"
+}

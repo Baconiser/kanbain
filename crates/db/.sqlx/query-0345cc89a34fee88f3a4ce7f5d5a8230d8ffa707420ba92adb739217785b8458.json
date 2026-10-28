@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_history SET permission = $2 WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0345cc89a34fee88f3a4ce7f5d5a8230d8ffa707420ba92adb739217785b8458"
+}

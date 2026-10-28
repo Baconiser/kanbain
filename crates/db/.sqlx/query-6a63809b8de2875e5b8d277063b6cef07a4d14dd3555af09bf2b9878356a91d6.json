@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_history (issue_id, searched_id, commit_count, prior_count,\n                                          prior_hash)\n               VALUES ($1, $2, $3, $4, $5)\n               ON CONFLICT (issue_id) DO UPDATE\n                   SET searched_id = excluded.searched_id,\n                       commit_count = excluded.commit_count,\n                       prior_count = excluded.prior_count,\n                       prior_hash = excluded.prior_hash,\n                       checked_at = datetime('now', 'subsec')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "6a63809b8de2875e5b8d277063b6cef07a4d14dd3555af09bf2b9878356a91d6"
+}

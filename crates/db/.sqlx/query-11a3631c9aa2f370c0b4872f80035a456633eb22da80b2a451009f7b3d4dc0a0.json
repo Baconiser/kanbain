@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_history\n                       SET status = 'idle', prior_work = $2, analyzed_hash = $3, job_id = $4,\n                           error = NULL, analyzed_at = datetime('now', 'subsec')\n                       WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "11a3631c9aa2f370c0b4872f80035a456633eb22da80b2a451009f7b3d4dc0a0"
+}

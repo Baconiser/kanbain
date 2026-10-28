@@ -149,6 +149,7 @@ async fn accept_intake(
     Json(payload): Json<AcceptIntake>,
 ) -> Result<ResponseJson<ApiResponse<Issue>>, ApiError> {
     let issue = deployment.intake().accept(intake_id, &payload).await?;
+    deployment.history().spawn_check(issue.id);
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 

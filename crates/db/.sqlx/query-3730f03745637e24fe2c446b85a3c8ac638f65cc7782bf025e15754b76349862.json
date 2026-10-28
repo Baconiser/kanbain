@@ -1,0 +1,92 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT issue_id as \"issue_id!: Uuid\",\n                      searched_id,\n                      commit_count,\n                      prior_count,\n                      prior_hash,\n                      permission as \"permission!: HistoryPermission\",\n                      status as \"status!: HistoryStatus\",\n                      prior_work,\n                      analyzed_hash,\n                      job_id as \"job_id: Uuid\",\n                      error,\n                      checked_at as \"checked_at!: DateTime<Utc>\",\n                      analyzed_at as \"analyzed_at: DateTime<Utc>\"\n               FROM issue_history\n               WHERE issue_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "searched_id",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "commit_count",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "prior_count",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "prior_hash",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "permission!: HistoryPermission",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: HistoryStatus",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "prior_work",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "analyzed_hash",
+        "ordinal": 8,
+        "type_info": "Text"
+      },
+      {
+        "name": "job_id: Uuid",
+        "ordinal": 9,
+        "type_info": "Blob"
+      },
+      {
+        "name": "error",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "checked_at!: DateTime<Utc>",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "analyzed_at: DateTime<Utc>",
+        "ordinal": 12,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "3730f03745637e24fe2c446b85a3c8ac638f65cc7782bf025e15754b76349862"
+}

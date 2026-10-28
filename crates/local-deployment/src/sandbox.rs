@@ -183,6 +183,8 @@ pub struct PrepareRun<'a> {
     pub agent_run: bool,
     /// Budget for this run in USD, already capped by the ticket's remainder.
     pub budget_usd: Option<f64>,
+    /// The ticket's prior-work summary (D18), as `prior_work.md`.
+    pub prior_work: Option<&'a str>,
 }
 
 fn random_token(prefix: &str) -> String {
@@ -594,14 +596,11 @@ impl SandboxRuntime {
                 issue.title,
                 issue.description.as_deref().unwrap_or("")
             );
-            ready
-                .docker
-                .copy_in(
-                    &container,
-                    CONTEXT_DIR,
-                    vec![FileEntry::new("ticket.md", ticket).owned_by_root()],
-                )
-                .await?;
+            let mut files = vec![FileEntry::new("ticket.md", ticket).owned_by_root()];
+            if let Some(prior_work) = run.prior_work {
+                files.push(FileEntry::new("prior_work.md", prior_work).owned_by_root());
+            }
+            ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
         }
 
         let model_token = self
