@@ -1,0 +1,61 @@
+version: 1.4.7
+opencode serve
+
+starts a headless opencode server
+
+Options:
+  -h, --help         show help                                                             [boolean]
+  -v, --version      show version number                                                   [boolean]
+      --print-logs   print logs to stderr                                                  [boolean]
+      --log-level    log level                  [string] [choices: "DEBUG", "INFO", "WARN", "ERROR"]
+      --pure         run without external plugins                                          [boolean]
+      --port         port to listen on                                         [number] [default: 0]
+      --hostname     hostname to listen on                           [string] [default: "127.0.0.1"]
+      --mdns         enable mDNS service discovery (defaults hostname to 0.0.0.0)
+                                                                          [boolean] [default: false]
+      --mdns-domain  custom domain name for mDNS service (default: opencode.local)
+                                                                [string] [default: "opencode.local"]
+      --cors         additional domains to allow for CORS                      [array] [default: []]
+## agent fields
+color
+description
+disable
+hidden
+maxSteps
+mode
+model
+options
+permission
+prompt
+steps
+temperature
+tools
+top_p
+variant
+## permission keys
+__originalKeys
+bash
+codesearch
+doom_loop
+edit
+external_directory
+glob
+grep
+list
+lsp
+question
+read
+skill
+task
+todowrite
+webfetch
+websearch
+## provider options
+apiKey
+baseURL
+chunkTimeout
+enterpriseUrl
+setCacheKey
+timeout
+## config fields
+instructions
