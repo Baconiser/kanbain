@@ -1,6 +1,6 @@
 # KanbAIn Implementation Plan
 
-This plan comes from the brief in `PLAN.md` and a full Q&A session on 2026-10-26. It is self-contained: a new session should be able to implement from this file alone. Where this file and `PLAN.md` disagree, **this file wins**.
+This plan comes from the brief in `PLAN.md` and a full Q&A session on 2026-10-26. It was extended on 2026-10-28 with the retrieval work from `EMBEDDING-IMPLEMENTATION-PLAN.md` (D42–D47, Phase 3a–3e). Together with that file it is self-contained: a new session should be able to implement from the two files alone. Where this file and `PLAN.md` or the embedding plan disagree, **this file wins**.
 
 KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a **local Tauri desktop app** for Windows. In it you drop in Jira tickets, an LLM enhances them, and sandboxed AI agents plan, code, test and document the work until it is ready for your review. Nothing reaches `main` without your approval.
 
@@ -116,6 +116,7 @@ KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a *
   - Subscription runs show an **API-equivalent cost estimate**, and budgets are enforced on that estimate.
   - OpenCode can use any provider through the proxy.
 - **D34.** Every LLM-using job, **including intake and history analysis**, runs as a **headless Claude Code or OpenCode run in a container**. Intake and history runs have no repo and no tools. This is what lets subscription login work everywhere and keeps logging uniform.
+  - **Exception: embedding and reranking calls** (D42) are made by the backend on the host, directly to the configured embedder/reranker URL. They generate no text, need no CLI and no subscription, and are logged as events like proxy calls.
 
 ### Sandbox and proxy
 - **D35.** Each run gets its **own Docker container**. Docker Desktop with WSL2 is required on Windows; the app checks for it at startup and shows a setup screen if it's missing. The container sees **no** host home folder, SSH keys or Docker socket. CPU and memory limits apply.
@@ -133,6 +134,17 @@ KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a *
   - It logs every call (model, tokens in/out/cache, cost, latency) as Events.
   - Revoking the token kills a runaway run instantly.
 - **D41.** A run is the existing **`execution_process`, extended**: ticket/subtask, agent definition, container id, branch, tokens, cost, status. Events are stored alongside the existing process logs. No parallel `runs` table.
+
+### Retrieval (details in `EMBEDDING-IMPLEMENTATION-PLAN.md`)
+- **D42.** KanbAIn keeps a **local hybrid search index** (sqlite-vec vectors plus FTS5 keywords, in a separate `embeddings.sqlite`) over tickets, comments, description versions, attachments' extracted text, prior-work summaries, run summaries, plans, issues found, changelogs, commits and code. It has two goals, weighted equally:
+  - **Find earlier work**: similar tickets, possible duplicates at intake, and where in the code a similar change was made.
+  - **Cut tokens and cost**: agents look things up instead of exploring with Grep/Glob/Read over whole files.
+  The embedding plan's decisions (E1–E23) are part of this plan; where they disagree with this file, this file wins.
+- **D43.** **Search returns locations, not contents**: path, line range, symbol and a short capped excerpt for code; ticket ID, title, status and a short excerpt for tickets. The agent reads only what it needs. Context files built from search (`related.md`) live in `/kanbain/context`, are capped in size, and are never put into the system prompt, so the runtimes' prompt caching keeps working.
+- **D44.** **Runs are a searchable source.** Each finished run gets a short **run summary** (task, agent, outcome, files changed, issues found, cost), built from `execution_process` and its logs, not raw transcripts. Agents can see that a similar task was done or failed before, and why.
+- **D45.** **Freshness**: code is indexed at `main`, plus a **ticket overlay**: the files changed on an in-progress ticket branch are indexed separately and searched only by runs and views of that ticket. The overlay is dropped on merge, when `main` is re-indexed.
+- **D46.** **Savings are measured, not assumed.** The model proxy's per-run tokens and cost (D40) are the yardstick: a benchmark runs the same tickets with search on and off and compares tokens, cost and outcome. Retrieval defaults are tuned on that benchmark plus recall@10/MRR.
+- **D47.** Search is **per project** by default, with an opt-in "all projects". No user pin/hide feedback on results for now.
 
 ---
 
@@ -290,31 +302,68 @@ Rules for every phase:
 
 **Demo:** the same ticket runs with `backend-coder` on Claude Code, then on OpenCode (Anthropic through the proxy, and one OpenAI-compatible model). Editing a style block changes both runs' system prompts. An imported skill is available in the container.
 
-### Phase 3: Ticket intake, External ID, history, timeline
+### Phase 3: Intake, history, timeline and retrieval
+Phase 3 combines the ticket-intake work with the first half of `EMBEDDING-IMPLEMENTATION-PLAN.md` (D42–D47). It is split into five sub-phases, each with its own demo, changelog entry and branch. 3a and 3b need nothing from retrieval; 3c needs 3a's extracted text; 3d needs 3c's store; 3e needs 3d.
+
+#### Phase 3a: Intake, External ID, description versions, timeline
 1. **Intake (D15)**:
    - A "Drop ticket" dialog with paste, file drop and images; attachments are stored locally.
-   - Text extraction for PDF/HTML/DOCX/XML happens in the backend (pure-Rust crates where possible).
+   - Text extraction for PDF/HTML/DOCX/XML happens in the backend (pure-Rust crates where possible). The extracted text is stored with the attachment so 3c can index it.
    - The intake agent runs in a **no-repo, no-tools** container (D34) and writes `enhanced_ticket.json`.
    - A review screen shows the original next to the enhanced version, editable, with "Create ticket".
    - Store `issue_descriptions` versions (`original`, `enhanced`, `edited`).
-2. **External ID (D16, D17)**: regex auto-fill with a per-project key; a lookup on create, and if the ID exists, "update existing (new version) / create new". The branch-name and commit-prefix helper lives in `crates/git` or `services`.
-3. **History check (D18)**:
-   - `git log --all --grep=<ID>` plus a branch-name scan over the project repos.
+2. **External ID (D16, D17)**: regex auto-fill with a per-project key; a lookup on create, and if the ID exists, "update existing (new version) / create new" with a diff. The branch-name and commit-prefix helper lives in `crates/git` or `services`.
+3. **Timeline (D19)**: an `issue_events` table (or a view over existing tables plus events) and a `Timeline` component on the ticket detail page, live-updated. Later phases add their own event kinds.
+
+**Demo:** paste a Jira ticket containing `[PROJEKTNAME-123]`. It is enhanced and its ID is detected; you edit and create it. Dropping it again offers "update existing" and creates version 2 with a diff. A dropped PDF's text shows on the ticket. The timeline shows all of it.
+
+#### Phase 3b: History check and ticket ↔ code links
+1. **History check (D18)**:
+   - `git log --all --grep=<ID>` plus a branch-name scan over the project repos, when a ticket is created and when a run starts.
    - A UI prompt, with a per-ticket permission record and a project "always allow" setting.
    - The history agent (no tools) gets the capped commits and diffs in `/kanbain/context` and writes `prior_work.md`, which is stored on the ticket.
-4. **Timeline (D19)**: an `issue_events` table (or a view over existing tables plus events) and a `Timeline` component on the ticket detail page, live-updated.
+   - Prior commits appear on the timeline as entries from before KanbAIn.
+2. **Ticket ↔ code links (E19)**: the commits found (and, from now on, commits whose message starts with a ticket's ID) record which files they changed, in the main database. 3d adds the symbols once code is chunked.
 
-**Demo:** paste a Jira ticket containing `[PROJEKTNAME-123]`. It is enhanced, its ID is detected, and commits for it are found; after "Allow" a prior-work summary appears. Dropping it again creates version 2. The timeline shows all of it.
+**Demo:** a ticket for an ID with existing commits shows "Found N commits"; after "Allow" a prior-work summary appears, the timeline lists the old commits, and the ticket lists the files they changed.
+
+#### Phase 3c: Embedding store and ticket search
+1. **Spike**: sqlite-vec loaded into sqlx's bundled SQLite via `sqlite3_auto_extension`; filtered KNN with a partition key; pinned versions. Push a spike branch for the Windows CI job (**ask before pushing**).
+2. **Store and clients (E1–E7, E10 client only)**: `crates/embeddings` with `embeddings.sqlite`, spaces and blue/green rebuilds; OpenAI-compatible and TEI embedder clients with dimension probing; tested against a mock HTTP server.
+3. **Settings → Search**: text, code and reranker endpoints with Test connection (model and dimension), the remote-endpoint warning (E9), index status and Reindex.
+4. **Text indexing (E15, E16, E18)**: tickets, description versions, comments, attachments' extracted text, prior-work summaries and **run summaries** (D44), queued from the existing SQLite commit hook.
+5. **Search (E5, E21)**: hybrid KNN + FTS5 with RRF; `POST /api/search`, `GET /api/issues/{id}/related`, `GET /api/embeddings/status`, `POST /api/embeddings/reindex`. The existing file-search route is renamed to avoid a clash.
+6. **UI**: the **Related** section in the ticket panel (similar tickets with status and a "done in KAN-12" hint), **possible duplicates** on the intake review screen next to the exact External-ID match, and a semantic mode in the command bar.
+
+**Demo** (TEI CPU image as the embedder; unit tests use a mock embedder): with 30 seeded tickets, "users cannot reset their password" lists "password reset email never arrives" first; `PROJ-123` is found by keyword; dropping a near-duplicate ticket shows it as a possible duplicate; editing a description re-embeds only the changed chunks; changing the model builds a new space while search keeps working.
+
+#### Phase 3d: Code index and agent search
+1. **Code chunking (E12–E14)**: tree-sitter with tags queries for the E13 languages, class splitting, merging of small items, context headers and the fallback splitter. Windows CI check for the grammars.
+2. **Repo indexing (E16, E17, D45)**: `main`, incremental by blob SHA, the separate code embedder slot (E8) with the per-project remote-code switch (E9), and the **ticket overlay** for files changed on in-progress ticket branches.
+3. **Code hits** in search and Related (open in editor; "KAN-12 changed `fn update`" from the 3b links, now with symbols).
+4. **`search_knowledge` tool (E22)**: in `kanbain-mcp`, reached from sandboxed runs through the run token and scoped to the run's project and ticket overlay. It returns locations and capped excerpts (D43). Agent definitions get a `search` capability; the default planner, coder and tester agents enable it and their role prompts say to search before exploring.
+5. **Token benchmark (D46)**: a driver runs a fixed set of tickets on this repo with the `search` capability on and off and reports tokens, cost, tool calls and outcome per run from the proxy events.
+
+**Demo:** "where are ticket numbers assigned" returns `Issue::create` in `crates/db/src/models/issue.rs` as a whole-function chunk. A one-file change re-embeds only that file's changed functions. A sandboxed coder run calls `search_knowledge` and reads only the returned ranges. The benchmark report shows the token difference with search on and off.
+
+#### Phase 3e: Reranking and quality
+1. Rerank the top 50 (E10) with timeout fallback to RRF.
+2. An evaluation set of about 40 query → expected-hit pairs over this repo's tickets, runs and code, reporting recall@10 and MRR with and without rerank.
+3. Tune the defaults (candidate count, RRF k, chunk budget, excerpt cap) on the evaluation set **and** the 3d token benchmark.
+
+**Demo:** the evaluation and benchmark reports show the reranker's effect on quality and tokens. Stopping the reranker falls back to RRF without errors.
 
 ### Phase 4: Planning flow and approval gate
 1. Assigning a ticket to the AI (or dragging it to Planning) starts a **planner run** with ticket, prior work and the ask/yolo flag in the task message.
+   - Before the run, the backend runs `related` for the ticket and writes a capped **`/kanbain/context/related.md`** (E22, D43): similar tickets with status, run summaries and merged files, and the top code locations. The task message points to it.
+   - Plans are indexed (E6), and coder runs (Phase 5) get the code hits for their subtask's file list.
 2. **Questions (D20)**: the planner writes `questions.md`, which becomes an agent comment on the ticket; the ticket gets a "waiting for answer" marker and you get a notification. Your reply comment starts a resumed run (`--resume <session>`; OpenCode session continue). Session ids are stored on the run.
 3. **`plan.json` schema**, defined in Rust with ts-rs and validated on harvest:
    `{subtasks:[{id,title,description,files[],depends_on[]}], acceptance_criteria[], assumptions[], test_strategy, checkpoints:[{after_subtasks[], what}]}`.
    Tables: `plans` (`issue_id`, `version`, JSON, `status` = draft|approved|rejected, `feedback`).
 4. **Approval UI (D21)**: a plan form editor; Approve, Save as new version, or Send back with feedback (starts a planner run with the feedback). The ticket moves to Awaiting approval, then In progress on approve.
 
-**Demo:** in ask mode the planner asks questions in the thread, you answer, and it produces a plan. Editing it creates v2. Send back produces v3. Approving moves the ticket to In progress. In yolo mode the plan lists its assumptions.
+**Demo:** in ask mode the planner asks questions in the thread, you answer, and it produces a plan. Editing it creates v2. Send back produces v3. Approving moves the ticket to In progress. In yolo mode the plan lists its assumptions. A ticket similar to a merged one gets a plan that cites the earlier ticket and its files.
 
 ### Phase 5: Orchestrator
 1. **New module `crates/services/src/services/orchestrator/`**: a state machine per ticket.
@@ -330,11 +379,13 @@ Rules for every phase:
 1. At each checkpoint, a **tester run** works on the ticket branch with the acceptance criteria and requirements in its context, and writes tests plus `issues.json`.
 2. **Enforcement (D23)**: after the run, reject the tester's changes outside the test paths. Test paths come from a project setting with sensible defaults per language (`**/tests/**`, `**/*.test.*`, `**/*_test.*`, …). Tester tests are a separate commit.
 3. Issues are stored in an `issues_found` table (`issue_id`, `run_id`, `file`, `line`, `severity`, `category`, `description`, `status` = open|fixed|wontfix). Open issues go to coder fix runs. After 3 rounds the ticket goes to Blocked and you get a notification (D24). A ticket over budget also goes to Blocked.
+4. Issues found are indexed for search (E6), so later runs see recurring problems in the same files.
 
 **Demo:** a seeded bug is found by the tester, fixed by the coder in round 1, and the ticket moves to Review. An unfixable issue goes to Blocked after round 3, with a notification.
 
 ### Phase 7: Scribe and changelogs
 1. A scribe run after each coder/tester run (Haiku, no edit tools) writes `changelog.md`, stored in `changelog_entries` (`issue_id`, `run_id`, `summary`, `files[]`, `commit_refs[]`, `issues_fixed[]`).
+   - Changelog entries and merged commit messages are indexed (E6); on merge, the ticket overlay is dropped and the merged files are re-indexed at `main` and linked to the ticket (D45, E17, E19).
 2. A **review screen (D26)**: summary, full ticket diff (existing diff view), issues found/fixed, changelog, cost. Merge does a local `git merge` into main (with conflict handling and an optional push); Request changes sends you back to coders or the planner.
 3. **Export (D11)**: Markdown per ticket and per project.
 
@@ -343,12 +394,14 @@ Rules for every phase:
 ### Phase 8: Stats and charts
 1. **Projects overview**: open tickets, active agents, open issues and cost per project, live.
 2. **Issues and stats views**: issues by category, file, severity and over time, and cost per ticket/run/agent/model (from `execution_process` and the proxy events). Use the existing UI kit; pick one chart library.
+3. **Retrieval stats**: embedding token use and cost for remote embedders (E11), search calls per run, and tokens per run for agents with and without the `search` capability (D46).
 
 **Demo:** after several tickets, the charts reflect the stored data and update live when a run finishes.
 
 ---
 
 ## 4. Risks and mitigations
+- **Retrieval that costs more than it saves**: oversized context files or excerpts add tokens instead of removing them. Results are locations with capped excerpts (D43), and the 3d benchmark decides the defaults (D46). Embedding-specific risks are listed in `EMBEDDING-IMPLEMENTATION-PLAN.md` §6.
 - **Phase 0b is the largest change** (a new board on a new data layer). Build it one entity at a time (projects, statuses, issues, then comments/tags/relationships), with each step usable on `/tickets`.
 - **Docker Desktop on Windows**: WSL2 memory limits, slow file IO, and differences in how `host.docker.internal` and networks behave. The design uses git transfer instead of bind mounts, and I test the network rules on Linux. Windows network behaviour must be checked by the user early, at the end of Phase 1.
 - **CLI drift**: keep CLI versions pinned in one place, test the adapter output against `--help`/schema, and bump versions deliberately.
