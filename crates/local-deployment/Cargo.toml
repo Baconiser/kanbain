@@ -25,6 +25,13 @@ futures = "0.3"
 tokio = { workspace = true }
 globwalk = "0.9"
 portable-pty = "0.8"
+sandbox = { path = "../sandbox" , version = "0.1.45" }
+model-proxy = { path = "../model-proxy" , version = "0.1.45" }
+rand = "0.9"
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { version = "0.8.6", default-features = false }
+ts-rs = { workspace = true }
 
 
 [dev-dependencies]

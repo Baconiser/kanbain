@@ -74,6 +74,46 @@ pub struct Config {
     /// Number of daily database backups to keep.
     #[serde(default = "default_backup_keep")]
     pub backup_keep: u32,
+    #[serde(default)]
+    pub sandbox: SandboxConfig,
+}
+
+/// Docker sandbox settings for agent runs (D28, D35).
+#[derive(Clone, Debug, Serialize, Deserialize, TS, PartialEq)]
+#[serde(default)]
+pub struct SandboxConfig {
+    /// Run agents and workspace scripts in Docker containers. Turning this
+    /// off runs them directly on this machine.
+    pub enabled: bool,
+    /// Agent runs allowed at the same time; the rest wait in a queue.
+    pub max_concurrent_runs: u32,
+    pub cpus: f64,
+    pub memory_mb: u32,
+    pub pids_limit: u32,
+    /// Model budget per run, enforced by the model proxy.
+    pub run_budget_usd: Option<f64>,
+    /// Default model budget per ticket, unless the ticket sets its own.
+    pub ticket_budget_usd: Option<f64>,
+    /// Longest an agent may run in one execution.
+    pub max_run_minutes: u32,
+    /// Extra hosts every sandbox may reach.
+    pub allowed_domains: Vec<String>,
+}
+
+impl Default for SandboxConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            max_concurrent_runs: 3,
+            cpus: 2.0,
+            memory_mb: 4096,
+            pids_limit: 1024,
+            run_budget_usd: Some(2.0),
+            ticket_budget_usd: Some(5.0),
+            max_run_minutes: 30,
+            allowed_domains: Vec::new(),
+        }
+    }
 }
 
 fn default_backup_keep() -> u32 {
@@ -114,6 +154,7 @@ impl Config {
             relay_enabled: true,
             host_nickname: None,
             backup_keep: default_backup_keep(),
+            sandbox: SandboxConfig::default(),
         }
     }
 
@@ -174,6 +215,7 @@ impl Default for Config {
             relay_enabled: true,
             host_nickname: None,
             backup_keep: default_backup_keep(),
+            sandbox: SandboxConfig::default(),
         }
     }
 }

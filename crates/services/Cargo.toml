@@ -9,6 +9,8 @@ cloud = []
 qa-mode = ["executors/qa-mode"]
 
 [dependencies]
+aws-lc-rs = { workspace = true }
+base64 = "0.22"
 indicatif = "0.17"
 utils = { path = "../utils" , version = "0.1.45" }
 git = { path = "../git" , version = "0.1.45" }

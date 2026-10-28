@@ -27,7 +27,8 @@ pub fn container_repo_dir(repo_name: &str) -> String {
 }
 
 /// Send `branch` from the host worktree into `/workspace/<repo_name>`,
-/// cloning on first use and hard-resetting to the host's head afterwards.
+/// cloning on first use and moving the branch to the host's head afterwards
+/// (`checkout -B` keeps uncommitted edits that don't conflict).
 /// Returns the head commit now checked out in the container.
 pub async fn push_branch(
     sandbox: &dyn Sandbox,
@@ -85,13 +86,6 @@ pub async fn push_branch(
             &agent(),
         )
         .await?;
-        exec_ok(
-            sandbox,
-            container,
-            &["git", "-C", &dir, "reset", "-q", "--hard"],
-            &agent(),
-        )
-        .await?;
     } else {
         exec_ok(
             sandbox,
@@ -112,6 +106,45 @@ pub async fn push_branch(
         .exec(container, &["rm", "-f", &bundle_path], &agent())
         .await;
     container_head(sandbox, container, repo_name, branch).await
+}
+
+/// Make the container's clone match the host worktree before a run.
+///
+/// - Container missing the repo, or behind the host: push the host branch.
+/// - Container ahead (e.g. commits made in the sandbox terminal): pull them
+///   to the host first, so nothing is overwritten.
+///
+/// Returns whether anything moved.
+pub async fn sync_branch_in(
+    sandbox: &dyn Sandbox,
+    container: &str,
+    host_worktree: &Path,
+    repo_name: &str,
+    branch: &str,
+) -> Result<bool> {
+    let host_head = host_git(host_worktree, &["rev-parse", "HEAD"]).await?;
+    let Ok(container_head) = container_head(sandbox, container, repo_name, branch).await else {
+        push_branch(sandbox, container, host_worktree, repo_name, branch).await?;
+        return Ok(true);
+    };
+    if container_head == host_head {
+        return Ok(false);
+    }
+    let container_behind = host_git(
+        host_worktree,
+        &["merge-base", "--is-ancestor", &container_head, &host_head],
+    )
+    .await
+    .is_ok();
+    if !container_behind {
+        pull_branch(sandbox, container, host_worktree, repo_name, branch).await?;
+        let host_head = host_git(host_worktree, &["rev-parse", "HEAD"]).await?;
+        if host_head == container_head {
+            return Ok(true);
+        }
+    }
+    push_branch(sandbox, container, host_worktree, repo_name, branch).await?;
+    Ok(true)
 }
 
 /// Head of `branch` in the container's clone.

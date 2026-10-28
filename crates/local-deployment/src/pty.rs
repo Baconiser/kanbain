@@ -33,6 +33,14 @@ struct PtySession {
     closed: bool,
 }
 
+/// Open the terminal inside a sandbox container instead of on the host.
+#[derive(Debug, Clone)]
+pub struct ContainerShell {
+    pub container: String,
+    pub dir: String,
+    pub user: String,
+}
+
 #[derive(Clone)]
 pub struct PtyService {
     sessions: Arc<Mutex<HashMap<Uuid, PtySession>>>,
@@ -48,6 +56,7 @@ impl PtyService {
     pub async fn create_session(
         &self,
         working_dir: PathBuf,
+        container: Option<ContainerShell>,
         cols: u16,
         rows: u16,
     ) -> Result<(Uuid, mpsc::UnboundedReceiver<Vec<u8>>), PtyError> {
@@ -71,9 +80,33 @@ impl PtyService {
             cmd.cwd(&working_dir);
 
             // Configure shell-specific options
-            let shell_name = shell.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let mut shell_name = shell.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
-            if shell_name == "powershell.exe" || shell_name == "pwsh.exe" {
+            if let Some(target) = &container {
+                cmd = CommandBuilder::new("docker");
+                cmd.cwd(&working_dir);
+                cmd.args([
+                    "exec",
+                    "-it",
+                    "-u",
+                    &target.user,
+                    "-w",
+                    &target.dir,
+                    "-e",
+                    "TERM=xterm-256color",
+                    "-e",
+                    "COLORTERM=truecolor",
+                    "-e",
+                    "KANBAIN_TERMINAL=1",
+                    "-e",
+                    "PS1=sandbox$ ",
+                    &target.container,
+                    "bash",
+                    "--rcfile",
+                    "/home/node/.kanbain-terminal-env",
+                ]);
+                shell_name = "docker";
+            } else if shell_name == "powershell.exe" || shell_name == "pwsh.exe" {
                 // PowerShell: use -NoLogo for cleaner startup
                 cmd.arg("-NoLogo");
             } else if shell_name == "cmd.exe" {

@@ -16,3 +16,4 @@ pub mod pr_monitor;
 pub mod qa_repos;
 pub mod queued_message;
 pub mod repo;
+pub mod secrets;

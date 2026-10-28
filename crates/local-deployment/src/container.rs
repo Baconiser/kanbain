@@ -17,6 +17,10 @@ use db::{
             ExecutionContext, ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus,
         },
         execution_process_repo_state::ExecutionProcessRepoState,
+        issue::{Issue, UpdateIssue},
+        issue_comment::{CreateIssueComment, IssueComment},
+        project::Project,
+        project_status::{ProjectStatus, ProjectStatusKind},
         repo::Repo,
         scratch::{DraftFollowUpData, Scratch, ScratchType},
         session::{Session, SessionError},
@@ -32,7 +36,7 @@ use executors::{
         coding_agent_initial::CodingAgentInitialRequest,
     },
     approvals::{ExecutorApprovalService, NoopExecutorApprovalService},
-    env::{ExecutionEnv, RepoContext},
+    env::{ExecutionEnv, RepoContext, SandboxTarget},
     executors::{BaseCodingAgent, CancellationToken, ExecutorExitResult, ExecutorExitSignal},
     logs::{NormalizedEntryType, utils::patch::extract_normalized_entry_from_patch},
 };
@@ -47,7 +51,10 @@ use services::services::{
     notification::NotificationService,
     queued_message::QueuedMessageService,
 };
-use tokio::{sync::RwLock, task::JoinHandle};
+use tokio::{
+    sync::{RwLock, mpsc},
+    task::JoinHandle,
+};
 use tokio_util::io::ReaderStream;
 use utils::{
     log_msg::LogMsg,
@@ -57,7 +64,10 @@ use utils::{
 use uuid::Uuid;
 use workspace_manager::{RepoWorkspaceInput, WorkspaceError, WorkspaceManager};
 
-use crate::{command, copy};
+use crate::{
+    command, copy,
+    sandbox::{PrepareRun, SandboxRuntime},
+};
 
 const WORKSPACE_TOUCH_DEBOUNCE: Duration = Duration::from_mins(2);
 
@@ -79,6 +89,7 @@ pub struct LocalContainerService {
     approvals: Approvals,
     queued_message_service: QueuedMessageService,
     notification_service: NotificationService,
+    sandbox: SandboxRuntime,
 }
 
 impl LocalContainerService {
@@ -92,6 +103,8 @@ impl LocalContainerService {
         file_service: FileService,
         approvals: Approvals,
         queued_message_service: QueuedMessageService,
+        sandbox: SandboxRuntime,
+        budget_rx: mpsc::UnboundedReceiver<Uuid>,
     ) -> Self {
         let child_store = Arc::new(RwLock::new(HashMap::new()));
         let cancellation_tokens = Arc::new(RwLock::new(HashMap::new()));
@@ -115,9 +128,11 @@ impl LocalContainerService {
             approvals,
             queued_message_service,
             notification_service,
+            sandbox,
         };
 
         container.spawn_workspace_cleanup();
+        container.spawn_budget_watcher(budget_rx);
 
         container
     }
@@ -260,7 +275,193 @@ impl LocalContainerService {
                 });
         }
 
+        self.sandbox.remove_workspace_container(workspace.id).await;
         let _ = Workspace::mark_worktree_deleted(&self.db.pool, workspace.id).await;
+    }
+
+    pub fn sandbox(&self) -> &SandboxRuntime {
+        &self.sandbox
+    }
+
+    fn push_run_note(store: Option<&Arc<MsgStore>>, line: &str) {
+        if let Some(store) = store {
+            store.push_stdout(format!("[sandbox] {line}\n"));
+        }
+    }
+
+    /// Stop runs whose model budget ran out, and block their ticket when the
+    /// ticket as a whole is over budget (D28).
+    fn spawn_budget_watcher(&self, mut budget_rx: mpsc::UnboundedReceiver<Uuid>) {
+        let container = self.clone();
+        tokio::spawn(async move {
+            while let Some(exec_id) = budget_rx.recv().await {
+                let Ok(Some(process)) =
+                    ExecutionProcess::find_by_id(&container.db.pool, exec_id).await
+                else {
+                    continue;
+                };
+                let store = container.msg_stores.read().await.get(&exec_id).cloned();
+                Self::push_run_note(
+                    store.as_ref(),
+                    &format!(
+                        "Budget exhausted (${:.2} spent); stopping this run.",
+                        process.cost_usd
+                    ),
+                );
+                if process.status == ExecutionProcessStatus::Running
+                    && let Err(e) = container
+                        .stop_execution(&process, ExecutionProcessStatus::Killed)
+                        .await
+                {
+                    tracing::error!("Failed to stop run {exec_id} over budget: {e}");
+                }
+                if let Some(issue_id) = process.issue_id {
+                    container
+                        .block_ticket_if_over_budget(issue_id, exec_id)
+                        .await;
+                }
+            }
+        });
+    }
+
+    /// Move the ticket to its project's Blocked status once its runs have
+    /// spent its budget, with a comment saying why.
+    async fn block_ticket_if_over_budget(&self, issue_id: Uuid, exec_id: Uuid) {
+        let pool = &self.db.pool;
+        let Ok(Some(issue)) = Issue::find_by_id(pool, issue_id).await else {
+            return;
+        };
+        let budget = issue
+            .budget_usd
+            .or(self.config.read().await.sandbox.ticket_budget_usd);
+        let Some(budget) = budget else {
+            return;
+        };
+        let spent = ExecutionProcess::total_cost_for_issue(pool, issue_id)
+            .await
+            .unwrap_or(0.0);
+        if spent < budget {
+            return;
+        }
+        let Ok(Some(blocked)) =
+            ProjectStatus::find_first_of_kind(pool, issue.project_id, ProjectStatusKind::Blocked)
+                .await
+        else {
+            return;
+        };
+        if issue.status_id == blocked.id {
+            return;
+        }
+        let update = UpdateIssue {
+            status_id: Some(blocked.id),
+            ..Default::default()
+        };
+        if let Err(e) = Issue::update(pool, issue_id, &update).await {
+            tracing::error!("Failed to block ticket {issue_id} over budget: {e}");
+            return;
+        }
+        let _ = IssueComment::create(
+            pool,
+            issue_id,
+            &format!("agent:{exec_id}"),
+            &CreateIssueComment {
+                message: format!(
+                    "Blocked: this ticket's runs have spent ${spent:.2} of its ${budget:.2} budget. \
+                     Raise the ticket budget to continue."
+                ),
+                parent_id: None,
+            },
+        )
+        .await;
+    }
+
+    /// Put the run into the workspace's sandbox container: image, container,
+    /// code, ticket context and proxy tokens. Agent runs get the smaller of
+    /// the run budget and what is left of the ticket budget.
+    async fn prepare_sandbox(
+        &self,
+        workspace: &Workspace,
+        execution_process: &ExecutionProcess,
+        repos: &[Repo],
+        workspace_root: &Path,
+    ) -> Result<SandboxTarget, ContainerError> {
+        let pool = &self.db.pool;
+        let agent_run = execution_process.run_reason == ExecutionProcessRunReason::CodingAgent;
+        let issue = match workspace.issue_id {
+            Some(id) => Issue::find_by_id(pool, id).await?,
+            None => None,
+        };
+        let project = match &issue {
+            Some(issue) => Project::find_by_id(pool, issue.project_id).await?,
+            None => None,
+        };
+        let settings = self.config.read().await.sandbox.clone();
+
+        // Scripts get no model budget at all.
+        let mut budget = if agent_run {
+            settings.run_budget_usd
+        } else {
+            Some(0.0)
+        };
+        if agent_run
+            && let Some(issue) = &issue
+            && let Some(ticket_budget) = issue.budget_usd.or(settings.ticket_budget_usd)
+        {
+            let spent = ExecutionProcess::total_cost_for_issue(pool, issue.id).await?;
+            let remaining = ticket_budget - spent;
+            if remaining <= 0.0 {
+                self.block_ticket_if_over_budget(issue.id, execution_process.id)
+                    .await;
+                return Err(ContainerError::Other(anyhow!(
+                    "This ticket has spent ${spent:.2} of its ${ticket_budget:.2} budget"
+                )));
+            }
+            budget = Some(budget.map_or(remaining, |b| b.min(remaining)));
+        }
+
+        let store = self
+            .msg_stores
+            .read()
+            .await
+            .get(&execution_process.id)
+            .cloned();
+        let log = move |line: String| Self::push_run_note(store.as_ref(), &line);
+        self.sandbox
+            .prepare(
+                PrepareRun {
+                    execution: execution_process,
+                    workspace,
+                    repos,
+                    workspace_root,
+                    issue: issue.as_ref(),
+                    project: project.as_ref(),
+                    agent_run,
+                    budget_usd: budget,
+                },
+                &log,
+            )
+            .await
+            .map_err(|e| ContainerError::Other(anyhow!(e)))
+    }
+
+    /// Bring a sandboxed run's work back to the host worktree and release
+    /// its tokens and slot. No-op for runs that were not sandboxed.
+    async fn finish_sandbox_run(&self, ctx: &ExecutionContext) {
+        let Some(workspace_root) = ctx.workspace.container_ref.as_ref().map(PathBuf::from) else {
+            return;
+        };
+        let sync_out = ctx.execution_process.run_reason != ExecutionProcessRunReason::DevServer;
+        let message = self.get_commit_message(ctx).await;
+        self.sandbox
+            .finish(
+                ctx.execution_process.id,
+                &ctx.workspace,
+                &ctx.repos,
+                &workspace_root,
+                sync_out,
+                &message,
+            )
+            .await;
     }
 
     async fn cleanup_expired_workspaces(&self) -> Result<(), DeploymentError> {
@@ -540,6 +741,10 @@ impl LocalContainerService {
                     tracing::warn!("Failed to update executor session summary: {}", e);
                 }
 
+                // Sandboxed runs worked on a clone; bring their commits back
+                // before the host-side commit and diff logic below.
+                container.finish_sandbox_run(&ctx).await;
+
                 let success = matches!(
                     ctx.execution_process.status,
                     ExecutionProcessStatus::Completed
@@ -726,6 +931,9 @@ impl LocalContainerService {
                     }
                 }
             }
+
+            // Revoke tokens and free the slot even if the context failed to load.
+            container.sandbox.release(exec_id).await;
 
             // Now that commit/next-action/finalization steps for this process are complete,
             // capture the HEAD OID as the definitive "after" state (best-effort).
@@ -984,6 +1192,36 @@ impl LocalContainerService {
     }
 
     /// Start a follow-up execution from a queued message
+    /// Stop an agent run after the configured number of minutes (D28).
+    async fn spawn_run_time_limit(&self, exec_id: Uuid) {
+        let minutes = self.config.read().await.sandbox.max_run_minutes;
+        if minutes == 0 {
+            return;
+        }
+        let container = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(minutes as u64 * 60)).await;
+            let Ok(Some(process)) = ExecutionProcess::find_by_id(&container.db.pool, exec_id).await
+            else {
+                return;
+            };
+            if process.status != ExecutionProcessStatus::Running {
+                return;
+            }
+            let store = container.msg_stores.read().await.get(&exec_id).cloned();
+            Self::push_run_note(
+                store.as_ref(),
+                &format!("Time limit of {minutes} minutes reached; stopping this run."),
+            );
+            if let Err(e) = container
+                .stop_execution(&process, ExecutionProcessStatus::Killed)
+                .await
+            {
+                tracing::error!("Failed to stop run {exec_id} at its time limit: {e}");
+            }
+        });
+    }
+
     async fn start_queued_follow_up(
         &self,
         ctx: &ExecutionContext,
@@ -1301,8 +1539,16 @@ impl ContainerService for LocalContainerService {
         env.insert("KANBAIN_WORKSPACE_ID", workspace.id.to_string());
         env.insert("KANBAIN_WORKSPACE_BRANCH", &workspace.branch);
 
+        let sandboxed = self.sandbox.enabled().await;
+        if sandboxed {
+            env.sandbox = Some(
+                self.prepare_sandbox(workspace, execution_process, &repos, &current_dir)
+                    .await?,
+            );
+        }
+
         // Create the child and stream, add to execution tracker with timeout
-        let mut spawned = tokio::time::timeout(
+        let spawn_result = tokio::time::timeout(
             Duration::from_secs(30),
             executor_action.spawn(&current_dir, approvals_service, &env),
         )
@@ -1311,7 +1557,17 @@ impl ContainerService for LocalContainerService {
             ContainerError::Other(anyhow!(
                 "Timeout: process took more than 30 seconds to start"
             ))
-        })??;
+        })
+        .and_then(|r| r.map_err(ContainerError::from));
+        let mut spawned = match spawn_result {
+            Ok(spawned) => spawned,
+            Err(e) => {
+                if sandboxed {
+                    self.sandbox.release(execution_process.id).await;
+                }
+                return Err(e);
+            }
+        };
 
         if let Err(e) = self
             .track_child_msgs_in_store(execution_process.id, &mut spawned.child)
@@ -1333,6 +1589,10 @@ impl ContainerService for LocalContainerService {
         // Spawn unified exit monitor: watches OS exit and optional executor signal
         let hn = self.spawn_exit_monitor(&execution_process.id, spawned.exit_signal);
         self.add_exit_monitor_handle(execution_process.id, hn).await;
+
+        if sandboxed && execution_process.run_reason == ExecutionProcessRunReason::CodingAgent {
+            self.spawn_run_time_limit(execution_process.id).await;
+        }
 
         Ok(())
     }
@@ -1356,6 +1616,10 @@ impl ContainerService for LocalContainerService {
 
         ExecutionProcess::update_completion(&self.db.pool, execution_process.id, status, exit_code)
             .await?;
+
+        // Killing the `docker exec` client leaves the process running in the
+        // container, so stop its process group there first.
+        self.sandbox.kill(execution_process.id).await;
 
         // Try graceful cancellation first, then force kill
         if let Some(cancel) = self.take_cancellation_token(&execution_process.id).await {

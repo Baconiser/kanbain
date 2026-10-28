@@ -30,6 +30,7 @@ mod command;
 pub mod container;
 mod copy;
 pub mod pty;
+pub mod sandbox;
 
 #[derive(Clone)]
 pub struct LocalDeployment {
@@ -49,6 +50,7 @@ pub struct LocalDeployment {
     preview_proxy: PreviewProxyService,
     pty: PtyService,
     pr_sync_notify: Arc<Notify>,
+    secrets: Arc<services::services::secrets::SecretStore>,
 }
 
 #[async_trait]
@@ -147,6 +149,12 @@ impl Deployment for LocalDeployment {
         let client_info = ClientInfo::new();
         let preview_proxy = PreviewProxyService::new();
 
+        let secrets = Arc::new(services::services::secrets::SecretStore::new(
+            utils::assets::asset_dir(),
+        ));
+        let (sandbox, budget_rx) =
+            crate::sandbox::SandboxRuntime::new(db.clone(), config.clone(), secrets.clone()).await;
+
         let workspace_manager = WorkspaceManager::new(db.clone());
         let container = LocalContainerService::new(
             db.clone(),
@@ -157,6 +165,8 @@ impl Deployment for LocalDeployment {
             file.clone(),
             approvals.clone(),
             queued_message_service.clone(),
+            sandbox,
+            budget_rx,
         )
         .await;
 
@@ -189,6 +199,7 @@ impl Deployment for LocalDeployment {
             preview_proxy,
             pty,
             pr_sync_notify,
+            secrets,
         };
 
         Ok(deployment)
@@ -254,6 +265,14 @@ impl LocalDeployment {
 
     pub fn pty(&self) -> &PtyService {
         &self.pty
+    }
+
+    pub fn sandbox(&self) -> &crate::sandbox::SandboxRuntime {
+        self.container.sandbox()
+    }
+
+    pub fn secrets(&self) -> &Arc<services::services::secrets::SecretStore> {
+        &self.secrets
     }
 
     pub fn trigger_pr_sync(&self) {

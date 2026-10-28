@@ -12,7 +12,17 @@ export type ProjectSettings = {
 /**
  * Skip the "allow history analysis?" prompt for this project's tickets.
  */
-history_always_allow: boolean, };
+history_always_allow: boolean, 
+/**
+ * Extra hosts sandbox containers may reach, on top of the default
+ * package registries (`*.example.com` matches subdomains).
+ */
+sandbox_allowed_domains: Array<string>, 
+/**
+ * Path to a Dockerfile (starting `FROM kanbain-agent`) used instead of
+ * the base image for this project's runs.
+ */
+sandbox_dockerfile: string | null, };
 
 export type CreateProject = { name: string, id_prefix: string | null, repo_ids: Array<string>, };
 
@@ -243,11 +253,27 @@ export type ExecutionProcess = { id: string, session_id: string, run_reason: Exe
  * history view (due to restore/trimming). Hidden from logs/timeline;
  * still listed in the Processes tab.
  */
-dropped: boolean, started_at: string, completed_at: string | null, created_at: string, updated_at: string, };
+dropped: boolean, started_at: string, completed_at: string | null, created_at: string, updated_at: string, 
+/**
+ * Ticket this run works on.
+ */
+issue_id: string | null, subtask_id: string | null, agent_def_id: string | null, 
+/**
+ * Docker container the run executed in (sandboxed runs only).
+ */
+container_id: string | null, branch: string | null, tokens_in: bigint, tokens_out: bigint, tokens_cache_read: bigint, tokens_cache_write: bigint, 
+/**
+ * Model cost measured by the model proxy (API-equivalent estimate).
+ */
+cost_usd: number, budget_usd: number | null, };
 
 export enum ExecutionProcessStatus { running = "running", completed = "completed", failed = "failed", killed = "killed" }
 
 export type ExecutionProcessRunReason = "setupscript" | "cleanupscript" | "archivescript" | "codingagent" | "devserver";
+
+export type ExecutionProcessEvent = { id: string, execution_process_id: string, event_type: ExecutionProcessEventType, payload: Record<string, unknown>, created_at: string, };
+
+export enum ExecutionProcessEventType { model_call = "model_call", tool_call = "tool_call", egress_block = "egress_block", budget_exceeded = "budget_exceeded", sandbox = "sandbox" }
 
 export type ExecutionProcessRepoState = { id: string, execution_process_id: string, repo_id: string, before_head_commit: string | null, after_head_commit: string | null, merge_commit: string | null, created_at: Date, updated_at: Date, };
 
@@ -475,7 +501,7 @@ export type Config = { config_version: string, theme: ThemeMode, executor_profil
 /**
  * Number of daily database backups to keep.
  */
-backup_keep: number, };
+backup_keep: number, sandbox: SandboxConfig, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 
@@ -496,6 +522,47 @@ export type UiLanguage = "BROWSER" | "EN" | "FR" | "JA" | "ES" | "KO" | "ZH_HANS
 export type ShowcaseState = { seen_features: Array<string>, };
 
 export type SendMessageShortcut = "ModifierEnter" | "Enter";
+
+export type SandboxConfig = { 
+/**
+ * Run agents and workspace scripts in Docker containers. Turning this
+ * off runs them directly on this machine.
+ */
+enabled: boolean, 
+/**
+ * Agent runs allowed at the same time; the rest wait in a queue.
+ */
+max_concurrent_runs: number, cpus: number, memory_mb: number, pids_limit: number, 
+/**
+ * Model budget per run, enforced by the model proxy.
+ */
+run_budget_usd: number | null, 
+/**
+ * Default model budget per ticket, unless the ticket sets its own.
+ */
+ticket_budget_usd: number | null, 
+/**
+ * Longest an agent may run in one execution.
+ */
+max_run_minutes: number, 
+/**
+ * Extra hosts every sandbox may reach.
+ */
+allowed_domains: Array<string>, };
+
+export type SandboxStatus = { enabled: boolean, docker_available: boolean, docker_version: string | null, docker_desktop: boolean, 
+/**
+ * Why Docker can't be used, when it can't.
+ */
+error: string | null, image: string | null, image_ready: boolean, image_building: boolean, image_error: string | null, anthropic_key_configured: boolean, openai_key_configured: boolean, running_containers: number, };
+
+export type ModelProvider = "anthropic" | "openai";
+
+export type SetModelCredential = { provider: ModelProvider, 
+/**
+ * The API key; `null` removes the stored key.
+ */
+api_key: string | null, };
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 

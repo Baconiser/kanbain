@@ -20,6 +20,7 @@ pub mod issues;
 pub mod preview;
 pub mod projects;
 pub mod repo;
+pub mod sandbox;
 pub mod scratch;
 pub mod search;
 pub mod sessions;
@@ -41,6 +42,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(export::router())
         .merge(filesystem::router())
         .merge(repo::router())
+        .merge(sandbox::router(&deployment))
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(scratch::router(&deployment))

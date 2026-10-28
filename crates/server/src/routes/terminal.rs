@@ -7,8 +7,11 @@ use axum::{
     routing::get,
 };
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
-use db::models::{workspace::Workspace, workspace_repo::WorkspaceRepo};
+use db::models::{
+    issue::Issue, project::Project, workspace::Workspace, workspace_repo::WorkspaceRepo,
+};
 use deployment::Deployment;
+use local_deployment::pty::ContainerShell;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -60,6 +63,7 @@ async fn terminal_ws(
 
     let container_ref = attempt
         .container_ref
+        .clone()
         .ok_or_else(|| ApiError::BadRequest("Attempt has no workspace directory".to_string()))?;
 
     let base_dir = PathBuf::from(&container_ref);
@@ -87,8 +91,37 @@ async fn terminal_ws(
         }
     }
 
+    // With the sandbox on, the terminal opens in the workspace's container.
+    let container = if deployment.sandbox().enabled().await {
+        let pool = &deployment.db().pool;
+        let repos = WorkspaceRepo::find_repos_for_workspace(pool, attempt.id).await?;
+        let project = match attempt.issue_id {
+            Some(issue_id) => match Issue::find_by_id(pool, issue_id).await? {
+                Some(issue) => Project::find_by_id(pool, issue.project_id).await?,
+                None => None,
+            },
+            None => None,
+        };
+        Some(
+            deployment
+                .sandbox()
+                .terminal_shell(&attempt, &repos, &base_dir, &working_dir, project.as_ref())
+                .await
+                .map_err(|e| ApiError::BadRequest(format!("Sandbox terminal unavailable: {e}")))?,
+        )
+    } else {
+        None
+    };
+
     Ok(ws.on_upgrade(move |socket| {
-        handle_terminal_ws(socket, deployment, working_dir, query.cols, query.rows)
+        handle_terminal_ws(
+            socket,
+            deployment,
+            working_dir,
+            container,
+            query.cols,
+            query.rows,
+        )
     }))
 }
 
@@ -96,12 +129,13 @@ async fn handle_terminal_ws(
     mut socket: AppWebSocket,
     deployment: DeploymentImpl,
     working_dir: PathBuf,
+    container: Option<ContainerShell>,
     cols: u16,
     rows: u16,
 ) {
     let (session_id, mut output_rx) = match deployment
         .pty()
-        .create_session(working_dir, cols, rows)
+        .create_session(working_dir, container, cols, rows)
         .await
     {
         Ok(result) => result,
