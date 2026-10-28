@@ -16,7 +16,6 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use ts_rs::TS;
 use workspace_utils::{
@@ -625,22 +624,20 @@ impl ClaudeCode {
         command_parts: CommandParts,
         env: &ExecutionEnv,
     ) -> Result<SpawnedChild, ExecutorError> {
-        let (program_path, args) = command_parts.into_resolved().await?;
+        let (program, args) = command_parts.into_parts();
         let combined_prompt = self.append_prompt.combine_prompt(prompt);
 
-        let mut command = Command::new(program_path);
+        let mut process_env = env.clone();
+        process_env.insert("NPM_CONFIG_LOGLEVEL", "error");
+        let mut command = process_env
+            .with_profile(&self.cmd)
+            .command(&program, &args, current_dir)
+            .await?;
         command
             .kill_on_drop(true)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .current_dir(current_dir)
-            .env("NPM_CONFIG_LOGLEVEL", "error")
-            .args(&args);
-
-        env.clone()
-            .with_profile(&self.cmd)
-            .apply_to_command(&mut command);
+            .stderr(Stdio::piped());
 
         // Remove ANTHROPIC_API_KEY if disable_api_key is enabled
         if self.disable_api_key.unwrap_or(false) {

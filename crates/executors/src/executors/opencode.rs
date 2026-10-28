@@ -8,7 +8,7 @@ use futures::StreamExt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use tokio::{io::AsyncBufReadExt, process::Command};
+use tokio::io::AsyncBufReadExt;
 use ts_rs::TS;
 use workspace_utils::{command_ext::GroupSpawnNoWindowExt, msg_store::MsgStore};
 
@@ -108,28 +108,32 @@ impl Opencode {
         current_dir: &Path,
         env: &ExecutionEnv,
     ) -> Result<(AsyncGroupChild, ServerPassword), ExecutorError> {
+        // The backend talks to `opencode serve` over HTTP on 127.0.0.1, which
+        // a sandbox container does not expose; the OpenCode adapter (Phase 2)
+        // routes it through the sandbox.
+        if env.sandbox.is_some() {
+            return Err(ExecutorError::SandboxUnsupported("OpenCode".into()));
+        }
         let command_parts = self.build_command_builder()?.build_initial()?;
-        let (program_path, args) = command_parts.into_resolved().await?;
+        let (program, args) = command_parts.into_parts();
 
         let server_password = generate_server_password();
 
-        let mut command = Command::new(program_path);
+        let mut process_env = env.clone();
+        process_env.insert("NPM_CONFIG_LOGLEVEL", "error");
+        process_env.insert("NODE_NO_WARNINGS", "1");
+        process_env.insert("NO_COLOR", "1");
+        process_env.insert("OPENCODE_SERVER_USERNAME", "opencode");
+        process_env.insert("OPENCODE_SERVER_PASSWORD", &server_password);
+        let mut command = process_env
+            .with_profile(&self.cmd)
+            .command(&program, &args, current_dir)
+            .await?;
         command
             .kill_on_drop(true)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .current_dir(current_dir)
-            .env("NPM_CONFIG_LOGLEVEL", "error")
-            .env("NODE_NO_WARNINGS", "1")
-            .env("NO_COLOR", "1")
-            .env("OPENCODE_SERVER_USERNAME", "opencode")
-            .env("OPENCODE_SERVER_PASSWORD", &server_password)
-            .args(&args);
-
-        env.clone()
-            .with_profile(&self.cmd)
-            .apply_to_command(&mut command);
+            .stderr(std::process::Stdio::piped());
 
         let child = command.group_spawn_no_window()?;
 

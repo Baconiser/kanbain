@@ -52,19 +52,29 @@ impl Executable for ScriptRequest {
             None => current_dir.to_path_buf(),
         };
 
-        let (shell_cmd, shell_arg) = get_shell_command();
-        let mut command = Command::new(shell_cmd);
+        let mut command = match &env.sandbox {
+            Some(target) => target.command(
+                "bash",
+                &["-c".to_string(), self.script.clone()],
+                &effective_dir,
+                &env.vars,
+            ),
+            None => {
+                let (shell_cmd, shell_arg) = get_shell_command();
+                let mut command = Command::new(shell_cmd);
+                command
+                    .arg(shell_arg)
+                    .arg(&self.script)
+                    .current_dir(&effective_dir);
+                env.apply_to_command(&mut command);
+                command
+            }
+        };
         command
             .kill_on_drop(true)
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .arg(shell_arg)
-            .arg(&self.script)
-            .current_dir(&effective_dir);
-
-        // Apply environment variables
-        env.apply_to_command(&mut command);
+            .stderr(std::process::Stdio::piped());
 
         let child = command.group_spawn_no_window()?;
 
