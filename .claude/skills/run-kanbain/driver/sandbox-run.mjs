@@ -1,10 +1,12 @@
 // End-to-end sandbox run through the backend API.
-// Usage: node sandbox-run.mjs <backendPort> <token> <repoDir> <label> [budgetUsd]
+// Usage: node sandbox-run.mjs <backendPort> <token> <repoDir> <label> [budgetUsd|-] [agent]
 // Creates a scratch repo, project and ticket, starts a Claude Code workspace
-// run and prints the run record, its events and the host branch afterwards.
+// run (or a run of the named agent definition) and prints the run record,
+// its events and the host branch afterwards.
 import { execSync } from 'node:child_process';
 
-const [port, token, repoDir, label, budget] = process.argv.slice(2);
+const [port, token, repoDir, label, budgetArg, agent] = process.argv.slice(2);
+const budget = budgetArg && budgetArg !== '-' ? budgetArg : undefined;
 const base = `http://127.0.0.1:${port}/api`;
 
 async function api(method, path, body) {
@@ -44,7 +46,10 @@ const { workspace, execution_process: exec } = await api('POST', '/workspaces/st
   name: `sandbox-${label}`,
   repos: [{ repo_id: repo.id, target_branch: 'main' }],
   linked_issue: { issue_id: issue.id },
-  executor_config: { executor: 'CLAUDE_CODE' },
+  executor_config: {
+    executor: 'CLAUDE_CODE',
+    ...(agent ? { agent_definition: agent } : {}),
+  },
   prompt: 'Follow the scripted steps.',
   attachment_ids: null,
 });
@@ -64,6 +69,7 @@ console.log(
   JSON.stringify(
     {
       status: process_.status,
+      agent_def_id: process_.agent_def_id,
       exit_code: process_.exit_code,
       issue_id: process_.issue_id,
       container_id: process_.container_id?.slice(0, 12),

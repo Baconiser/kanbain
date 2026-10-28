@@ -696,6 +696,22 @@ impl SandboxRuntime {
         if !files.is_empty() {
             ready.docker.copy_in(container, KANBAIN_DIR, files).await?;
         }
+        // The upload leaves existing folders world-writable; the agent must
+        // not be able to swap files in them.
+        sandbox::exec_ok(
+            &ready.docker,
+            container,
+            &[
+                "sh",
+                "-c",
+                &format!("find {agent_dir} {skills_dir} -type d -exec chmod 755 {{}} +"),
+            ],
+            &ExecOptions {
+                user: Some("root".into()),
+                ..Default::default()
+            },
+        )
+        .await?;
 
         sandbox::exec_ok(
             &ready.docker,

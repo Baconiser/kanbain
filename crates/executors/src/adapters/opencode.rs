@@ -148,10 +148,16 @@ impl RuntimeAdapter for OpencodeAdapter {
             executor: BaseCodingAgent::Opencode,
             model,
             args: vec![],
-            env: HashMap::from([(
-                "OPENCODE_CONFIG_CONTENT".to_string(),
-                Value::Object(config).to_string(),
-            )]),
+            env: HashMap::from([
+                (
+                    "OPENCODE_CONFIG_CONTENT".to_string(),
+                    Value::Object(config).to_string(),
+                ),
+                // The bundled model catalogue is enough, and models.dev is
+                // not on the egress allowlist.
+                ("OPENCODE_DISABLE_MODELS_FETCH".to_string(), "1".to_string()),
+                ("OPENCODE_DISABLE_AUTOUPDATE".to_string(), "1".to_string()),
+            ]),
             files,
             skills: agent.skills.clone(),
             runtime_agent: Some(runtime_agent),
