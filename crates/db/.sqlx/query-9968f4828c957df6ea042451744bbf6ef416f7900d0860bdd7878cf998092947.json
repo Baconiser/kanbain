@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT COALESCE(SUM(cost_usd), 0.0) as \"total!: f64\"\n               FROM execution_processes WHERE issue_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "total!: f64",
+        "ordinal": 0,
+        "type_info": "Float"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "9968f4828c957df6ea042451744bbf6ef416f7900d0860bdd7878cf998092947"
+}

@@ -75,6 +75,30 @@ pub struct ExecutionProcess {
     pub completed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Ticket this run works on.
+    pub issue_id: Option<Uuid>,
+    pub subtask_id: Option<Uuid>,
+    pub agent_def_id: Option<String>,
+    /// Docker container the run executed in (sandboxed runs only).
+    pub container_id: Option<String>,
+    pub branch: Option<String>,
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub tokens_cache_read: i64,
+    pub tokens_cache_write: i64,
+    /// Model cost measured by the model proxy (API-equivalent estimate).
+    pub cost_usd: f64,
+    pub budget_usd: Option<f64>,
+}
+
+/// Token and cost totals added to a run by one proxied model call.
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct RunUsageDelta {
+    pub tokens_in: i64,
+    pub tokens_out: i64,
+    pub tokens_cache_read: i64,
+    pub tokens_cache_write: i64,
+    pub cost_usd: f64,
 }
 
 #[derive(Debug, Deserialize, TS)]
@@ -136,7 +160,18 @@ impl ExecutionProcess {
                     ep.started_at as "started_at!: DateTime<Utc>",
                     ep.completed_at as "completed_at?: DateTime<Utc>",
                     ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+                    ep.updated_at as "updated_at!: DateTime<Utc>",
+                    ep.issue_id as "issue_id: Uuid",
+                    ep.subtask_id as "subtask_id: Uuid",
+                    ep.agent_def_id,
+                    ep.container_id,
+                    ep.branch,
+                    ep.tokens_in as "tokens_in!: i64",
+                    ep.tokens_out as "tokens_out!: i64",
+                    ep.tokens_cache_read as "tokens_cache_read!: i64",
+                    ep.tokens_cache_write as "tokens_cache_write!: i64",
+                    ep.cost_usd as "cost_usd!: f64",
+                    ep.budget_usd
                FROM execution_processes ep WHERE ep.id = ?"#,
             id
         )
@@ -210,7 +245,18 @@ impl ExecutionProcess {
                     ep.started_at as "started_at!: DateTime<Utc>",
                     ep.completed_at as "completed_at?: DateTime<Utc>",
                     ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+                    ep.updated_at as "updated_at!: DateTime<Utc>",
+                    ep.issue_id as "issue_id: Uuid",
+                    ep.subtask_id as "subtask_id: Uuid",
+                    ep.agent_def_id,
+                    ep.container_id,
+                    ep.branch,
+                    ep.tokens_in as "tokens_in!: i64",
+                    ep.tokens_out as "tokens_out!: i64",
+                    ep.tokens_cache_read as "tokens_cache_read!: i64",
+                    ep.tokens_cache_write as "tokens_cache_write!: i64",
+                    ep.cost_usd as "cost_usd!: f64",
+                    ep.budget_usd
                FROM execution_processes ep WHERE ep.rowid = ?"#,
             rowid
         )
@@ -237,7 +283,18 @@ impl ExecutionProcess {
                       ep.started_at      as "started_at!: DateTime<Utc>",
                       ep.completed_at    as "completed_at?: DateTime<Utc>",
                       ep.created_at      as "created_at!: DateTime<Utc>",
-                      ep.updated_at      as "updated_at!: DateTime<Utc>"
+                      ep.updated_at      as "updated_at!: DateTime<Utc>",
+                      ep.issue_id as "issue_id: Uuid",
+                      ep.subtask_id as "subtask_id: Uuid",
+                      ep.agent_def_id,
+                      ep.container_id,
+                      ep.branch,
+                      ep.tokens_in as "tokens_in!: i64",
+                      ep.tokens_out as "tokens_out!: i64",
+                      ep.tokens_cache_read as "tokens_cache_read!: i64",
+                      ep.tokens_cache_write as "tokens_cache_write!: i64",
+                      ep.cost_usd as "cost_usd!: f64",
+                      ep.budget_usd
                FROM execution_processes ep
                WHERE ep.session_id = ?
                  AND (? OR ep.dropped = FALSE)
@@ -264,7 +321,18 @@ impl ExecutionProcess {
                     ep.started_at as "started_at!: DateTime<Utc>",
                     ep.completed_at as "completed_at?: DateTime<Utc>",
                     ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+                    ep.updated_at as "updated_at!: DateTime<Utc>",
+                    ep.issue_id as "issue_id: Uuid",
+                    ep.subtask_id as "subtask_id: Uuid",
+                    ep.agent_def_id,
+                    ep.container_id,
+                    ep.branch,
+                    ep.tokens_in as "tokens_in!: i64",
+                    ep.tokens_out as "tokens_out!: i64",
+                    ep.tokens_cache_read as "tokens_cache_read!: i64",
+                    ep.tokens_cache_write as "tokens_cache_write!: i64",
+                    ep.cost_usd as "cost_usd!: f64",
+                    ep.budget_usd
                FROM execution_processes ep WHERE ep.status = 'running' ORDER BY ep.created_at ASC"#,
         )
         .fetch_all(pool)
@@ -327,7 +395,18 @@ impl ExecutionProcess {
             ep.started_at as "started_at!: DateTime<Utc>",
             ep.completed_at as "completed_at?: DateTime<Utc>",
             ep.created_at as "created_at!: DateTime<Utc>",
-            ep.updated_at as "updated_at!: DateTime<Utc>"
+            ep.updated_at as "updated_at!: DateTime<Utc>",
+            ep.issue_id as "issue_id: Uuid",
+            ep.subtask_id as "subtask_id: Uuid",
+            ep.agent_def_id,
+            ep.container_id,
+            ep.branch,
+            ep.tokens_in as "tokens_in!: i64",
+            ep.tokens_out as "tokens_out!: i64",
+            ep.tokens_cache_read as "tokens_cache_read!: i64",
+            ep.tokens_cache_write as "tokens_cache_write!: i64",
+            ep.cost_usd as "cost_usd!: f64",
+            ep.budget_usd
         FROM execution_processes ep
         JOIN sessions s ON ep.session_id = s.id
         WHERE s.workspace_id = ?
@@ -361,7 +440,18 @@ impl ExecutionProcess {
                     ep.started_at as "started_at!: DateTime<Utc>",
                     ep.completed_at as "completed_at?: DateTime<Utc>",
                     ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+                    ep.updated_at as "updated_at!: DateTime<Utc>",
+                    ep.issue_id as "issue_id: Uuid",
+                    ep.subtask_id as "subtask_id: Uuid",
+                    ep.agent_def_id,
+                    ep.container_id,
+                    ep.branch,
+                    ep.tokens_in as "tokens_in!: i64",
+                    ep.tokens_out as "tokens_out!: i64",
+                    ep.tokens_cache_read as "tokens_cache_read!: i64",
+                    ep.tokens_cache_write as "tokens_cache_write!: i64",
+                    ep.cost_usd as "cost_usd!: f64",
+                    ep.budget_usd
                FROM execution_processes ep
                JOIN sessions s ON ep.session_id = s.id
                WHERE s.workspace_id = ? AND ep.run_reason = ? AND ep.dropped = FALSE
@@ -413,6 +503,76 @@ impl ExecutionProcess {
         Self::find_by_id(pool, process_id)
             .await?
             .ok_or(sqlx::Error::RowNotFound)
+    }
+
+    /// Record which ticket, container and branch a sandboxed run uses.
+    pub async fn set_run_info(
+        pool: &SqlitePool,
+        id: Uuid,
+        issue_id: Option<Uuid>,
+        container_id: Option<&str>,
+        branch: Option<&str>,
+        budget_usd: Option<f64>,
+    ) -> Result<(), sqlx::Error> {
+        let now = Utc::now();
+        sqlx::query!(
+            r#"UPDATE execution_processes
+               SET issue_id = ?, container_id = ?, branch = ?, budget_usd = ?, updated_at = ?
+               WHERE id = ?"#,
+            issue_id,
+            container_id,
+            branch,
+            budget_usd,
+            now,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Add one model call's tokens and cost to the run's totals.
+    pub async fn add_usage(
+        pool: &SqlitePool,
+        id: Uuid,
+        delta: RunUsageDelta,
+    ) -> Result<(), sqlx::Error> {
+        let now = Utc::now();
+        sqlx::query!(
+            r#"UPDATE execution_processes
+               SET tokens_in = tokens_in + ?,
+                   tokens_out = tokens_out + ?,
+                   tokens_cache_read = tokens_cache_read + ?,
+                   tokens_cache_write = tokens_cache_write + ?,
+                   cost_usd = cost_usd + ?,
+                   updated_at = ?
+               WHERE id = ?"#,
+            delta.tokens_in,
+            delta.tokens_out,
+            delta.tokens_cache_read,
+            delta.tokens_cache_write,
+            delta.cost_usd,
+            now,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Total model cost of all runs on a ticket.
+    pub async fn total_cost_for_issue(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+    ) -> Result<f64, sqlx::Error> {
+        let total = sqlx::query_scalar!(
+            r#"SELECT COALESCE(SUM(cost_usd), 0.0) as "total!: f64"
+               FROM execution_processes WHERE issue_id = ?"#,
+            issue_id
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(total)
     }
 
     pub async fn was_stopped(pool: &SqlitePool, id: Uuid) -> bool {
@@ -573,7 +733,18 @@ impl ExecutionProcess {
                     ep.started_at as "started_at!: DateTime<Utc>",
                     ep.completed_at as "completed_at?: DateTime<Utc>",
                     ep.created_at as "created_at!: DateTime<Utc>",
-                    ep.updated_at as "updated_at!: DateTime<Utc>"
+                    ep.updated_at as "updated_at!: DateTime<Utc>",
+                    ep.issue_id as "issue_id: Uuid",
+                    ep.subtask_id as "subtask_id: Uuid",
+                    ep.agent_def_id,
+                    ep.container_id,
+                    ep.branch,
+                    ep.tokens_in as "tokens_in!: i64",
+                    ep.tokens_out as "tokens_out!: i64",
+                    ep.tokens_cache_read as "tokens_cache_read!: i64",
+                    ep.tokens_cache_write as "tokens_cache_write!: i64",
+                    ep.cost_usd as "cost_usd!: f64",
+                    ep.budget_usd
                FROM execution_processes ep
                WHERE ep.session_id = ? AND ep.run_reason = ? AND ep.dropped = FALSE
                ORDER BY ep.created_at DESC LIMIT 1"#,

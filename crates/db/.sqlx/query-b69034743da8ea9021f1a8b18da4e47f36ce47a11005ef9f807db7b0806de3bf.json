@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO execution_process_events\n                   (id, execution_process_id, event_type, payload, created_at)\n               VALUES (?, ?, ?, ?, ?)\n               RETURNING id as \"id!: Uuid\",\n                         execution_process_id as \"execution_process_id!: Uuid\",\n                         event_type as \"event_type!: ExecutionProcessEventType\",\n                         payload as \"payload!: sqlx::types::Json<Value>\",\n                         created_at as \"created_at!: DateTime<Utc>\"",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "execution_process_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "event_type!: ExecutionProcessEventType",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "payload!: sqlx::types::Json<Value>",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b69034743da8ea9021f1a8b18da4e47f36ce47a11005ef9f807db7b0806de3bf"
+}

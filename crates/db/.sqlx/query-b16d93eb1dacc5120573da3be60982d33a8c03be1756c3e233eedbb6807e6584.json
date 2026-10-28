@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE execution_processes\n               SET issue_id = ?, container_id = ?, branch = ?, budget_usd = ?, updated_at = ?\n               WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "b16d93eb1dacc5120573da3be60982d33a8c03be1756c3e233eedbb6807e6584"
+}

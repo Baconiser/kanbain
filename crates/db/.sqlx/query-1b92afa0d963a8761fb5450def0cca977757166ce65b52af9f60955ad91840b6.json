@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      execution_process_id as \"execution_process_id!: Uuid\",\n                      event_type as \"event_type!: ExecutionProcessEventType\",\n                      payload as \"payload!: sqlx::types::Json<Value>\",\n                      created_at as \"created_at!: DateTime<Utc>\"\n               FROM execution_process_events\n               WHERE execution_process_id = ?\n               ORDER BY created_at ASC",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "execution_process_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "event_type!: ExecutionProcessEventType",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "payload!: sqlx::types::Json<Value>",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1b92afa0d963a8761fb5450def0cca977757166ce65b52af9f60955ad91840b6"
+}

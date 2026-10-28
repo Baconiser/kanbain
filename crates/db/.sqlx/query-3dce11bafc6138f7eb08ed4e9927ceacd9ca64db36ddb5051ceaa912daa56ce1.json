@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE execution_processes\n               SET tokens_in = tokens_in + ?,\n                   tokens_out = tokens_out + ?,\n                   tokens_cache_read = tokens_cache_read + ?,\n                   tokens_cache_write = tokens_cache_write + ?,\n                   cost_usd = cost_usd + ?,\n                   updated_at = ?\n               WHERE id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "3dce11bafc6138f7eb08ed4e9927ceacd9ca64db36ddb5051ceaa912daa56ce1"
+}

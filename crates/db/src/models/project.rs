@@ -16,6 +16,14 @@ pub struct ProjectSettings {
     /// Skip the "allow history analysis?" prompt for this project's tickets.
     #[serde(default)]
     pub history_always_allow: bool,
+    /// Extra hosts sandbox containers may reach, on top of the default
+    /// package registries (`*.example.com` matches subdomains).
+    #[serde(default)]
+    pub sandbox_allowed_domains: Vec<String>,
+    /// Path to a Dockerfile (starting `FROM kanbain-agent`) used instead of
+    /// the base image for this project's runs.
+    #[serde(default)]
+    pub sandbox_dockerfile: Option<String>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
