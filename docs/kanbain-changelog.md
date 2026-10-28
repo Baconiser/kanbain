@@ -545,4 +545,95 @@ The model upstream was the scripted mock with `mock-script-intake.json`
 
 - Ticket pages are not translated (as in 0b).
 - Run events on the timeline come from triggers on `execution_processes`.
-  They were checked in 3b's run demo, not here.
+  They were checked in 3b's run demo, not here (they pass there).
+
+## Phase 3b: History check and ticket ↔ code links (2026-10-28)
+
+**Goal:** a ticket whose id appears in the git history gets a prior-work
+summary, its old commits on the timeline, and the files they changed.
+
+### What changed
+
+- **History check (D18, `crates/git/src/history.rs`).**
+  - `git log --all` finds commits whose message mentions the ticket's
+    External ID (else its internal id). Matching is case-insensitive and
+    on whole tokens, so `PROJ-12` doesn't match `PROJ-123`.
+  - Branches named after the id add their commits that the checked-out
+    branch doesn't contain.
+  - Each commit's changed files come from `--numstat`.
+- **When it runs.** The check runs in the background when a ticket is
+  created (board, intake), when its External ID changes, and when a run on
+  it starts and ends (`local-deployment/src/history.rs`).
+- **Prior work vs agent commits.** Commits by KanbAIn's agents (git author
+  `KanbAIn agent`, now a shared constant tested against the Dockerfile) are
+  linked to the ticket, but they are not prior work. They never prompt and
+  never trigger a new analysis.
+- **Permission.**
+  - New prior commits show "Found N commits for X. Allow analysis?" in the
+    ticket panel.
+  - The answer is stored per ticket (`issue_history.permission`). The
+    project setting "always allow" (from 0b) skips the prompt.
+  - Allowing later, or new prior commits after an allowed analysis, starts
+    the analysis again.
+- **Analysis.**
+  - The history agent (a headless job, like intake) gets each prior
+    commit's message and patch. A patch over 48 KB, or one that doesn't fit
+    the 200 KB total, is cut down to message plus file list.
+  - It writes Markdown sections (done, left open, what the planner should
+    know, files).
+  - The summary is stored on the ticket and copied into
+    `/kanbain/context/prior_work.md` for every later run on the ticket.
+- **Timeline.**
+  - Every commit for the id becomes a `prior_commit` entry at its commit
+    time; earlier ones show "before KanbAIn".
+  - There are also entries for the check ("Found N commits") and the
+    analysis (agent, cost, or the error).
+- **Ticket ↔ code links (E19).**
+  - `ticket_commits` and `ticket_code_links` (main database) record each
+    commit and the files it changed.
+  - The panel's Prior work section lists the files with +/− and their
+    commits.
+  - `symbol` is empty until Phase 3d chunks code.
+
+### Demo (Linux dev container)
+
+`history.mjs` with the mock upstream (`mock-script-history.json`) and the
+seeded `history` agent in the sandbox:
+
+- A repo with commits from March 2025:
+  - `PROJEKTNAME-123: send reset mails over SMTP`;
+  - `Fix the reset template for projektname-123`;
+  - `PROJEKTNAME-1234: unrelated`;
+  - an unmerged `feature/PROJEKTNAME-123-expiry` branch.
+- Creating a ticket with External ID `PROJEKTNAME-123` showed "Found 3
+  commits for PROJEKTNAME-123. Allow analysis?".
+- After Allow, the summary appeared with "history · haiku · 1520 tokens ·
+  $0.0016".
+- The ticket listed `mailer.rs`, `templates/reset.html` and `token.rs` but
+  not `other.rs`.
+- The timeline started with the three commits, marked "before KanbAIn",
+  then the check and the analysis.
+- A sandboxed run on the ticket:
+  - branched `kanbain/PROJEKTNAME-123-password-reset-mail-never-arrives`;
+  - read `prior_work.md`, and its `ticket.md` asked for the ID prefix;
+  - committed `PROJEKTNAME-123: add reset notes`.
+- After the run, that commit and `NOTES.md` were linked to the ticket,
+  the prior-work count stayed 3, and no new analysis started.
+- The timeline got "Run started" and "Run completed" with tokens and cost.
+- No console errors or failed API calls.
+- `cargo test --workspace`, `pnpm run check`, `pnpm run lint` pass.
+
+### Not verified here
+
+- **Large repos.** Each check runs `git log --all` plus one `git show` per
+  commit (at most 200 per repo). That is fast on the demo repo but wasn't
+  measured on a large monorepo.
+- **Windows** paths for the git calls go through the existing `GitCli`.
+
+### Known leftovers
+
+- The check runs at every run start and end. It is cheap and never
+  re-analyzes agent commits, but a run doesn't wait for a summary that is
+  still being written (Phase 4's planner should).
+- Commits that other people make for the id after the ticket exists count
+  as prior work and prompt again. That is intended, but might be noisy.

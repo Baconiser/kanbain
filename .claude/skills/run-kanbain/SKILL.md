@@ -166,6 +166,15 @@ API checks without the UI: `POST /api/projects/{id}/intakes`, poll
 `GET /api/intakes/{id}`, then `POST /api/intakes/{id}/accept`;
 `GET /api/issues/{id}/descriptions` and `/timeline`.
 
+**History check (Phase 3b):** start the mock with `mock-script-history.json`,
+then `node $D/history.mjs http://localhost:$FRONTEND_PORT /tmp/shots
+$BACKEND_PORT $KANBAIN_LAUNCH_TOKEN /tmp/repos/shop`. It builds a repo with
+backdated commits for `PROJEKTNAME-123`, creates the ticket in the UI,
+allows the analysis, checks the summary, files and timeline, then runs a
+sandboxed agent on the ticket and checks the agent commit's links, the run
+events and that the run read `prior_work.md`. API:
+`GET /api/issues/{id}/history`, `POST …/history/check|allow|deny`.
+
 ## 8. Stop
 
 ```bash

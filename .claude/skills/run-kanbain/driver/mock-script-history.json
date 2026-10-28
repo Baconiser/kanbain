@@ -1,0 +1,17 @@
+{
+  "commands": [
+    "echo 'reset notes' > NOTES.md && git add NOTES.md && git commit -qm 'PROJEKTNAME-123: add reset notes' && git log --format='%an %s' -1",
+    "head -3 /kanbain/context/prior_work.md; grep 'Start every commit' /kanbain/context/ticket.md"
+  ],
+  "output_tokens": 300,
+  "text_replies": [
+    {
+      "when": "Earlier commits mention the ticket",
+      "text": "## What was done\n\n- `mailer.rs`: password reset mails are sent over SMTP (PROJEKTNAME-123).\n- `templates/reset.html`: the reset template was fixed.\n\n## What was left open\n\n- The expiry check on `feature/PROJEKTNAME-123-expiry` (`token.rs`) was never merged.\n\n## What the planner should know\n\n- Reuse `send_reset_mail` in `mailer.rs`.\n\n## Files involved\n\n- mailer.rs, templates/reset.html, token.rs"
+    }
+  ],
+  "markers": [
+    "## What was done",
+    "Start every commit message with `PROJEKTNAME-123: `"
+  ]
+}
