@@ -175,7 +175,26 @@ sandboxed agent on the ticket and checks the agent commit's links, the run
 events and that the run read `prior_work.md`. API:
 `GET /api/issues/{id}/history`, `POST …/history/check|allow|deny`.
 
-## 8. Stop
+## 8. Search (Phase 3c)
+
+A real embedder runs fine on CPU with TEI (about 1.3 GB RAM per model; the
+model downloads from Hugging Face on first start):
+
+```bash
+docker run -d --name kb-tei-a -p 8090:80 ghcr.io/huggingface/text-embeddings-inference:cpu-1.7 --model-id BAAI/bge-small-en-v1.5
+docker run -d --name kb-tei-b -p 8091:80 ghcr.io/huggingface/text-embeddings-inference:cpu-1.7 --model-id BAAI/bge-base-en-v1.5
+node $D/search.mjs http://localhost:$FRONTEND_PORT /tmp/shots $BACKEND_PORT $KANBAIN_LAUNCH_TOKEN \
+  dev_assets/embeddings.sqlite http://localhost:8090 BAAI/bge-small-en-v1.5 http://localhost:8091 BAAI/bge-base-en-v1.5
+```
+
+It configures the text embedder through `PUT /api/config`, seeds 30
+tickets, checks paraphrase and id search, partial re-embedding and the
+model switch, then the UI. `UI_PROJECT="Search <n>"` reruns only the UI
+part against an earlier run's project (one TEI container is enough then).
+Memory is tight with two TEI containers, Vite, Chromium and a Rust build;
+build with `CARGO_BUILD_JOBS=2` and stop TEI containers you don't need.
+
+## 9. Stop
 
 ```bash
 lsof -ti:$FRONTEND_PORT -sTCP:LISTEN | xargs -r kill

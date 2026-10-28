@@ -637,3 +637,134 @@ seeded `history` agent in the sandbox:
   still being written (Phase 4's planner should).
 - Commits that other people make for the id after the ticket exists count
   as prior work and prompt again. That is intended, but might be noisy.
+
+## Phase 3c: Embedding store and ticket search (2026-10-28)
+
+**Goal:** tickets and their history are searchable by meaning and by
+keyword, locally, with an embedder configured by URL.
+
+### What changed
+
+- **Spike (E2).**
+  - sqlite-vec **0.1.9** (the newest stable; 0.1.10 is an alpha) is
+    compiled in and registered with `sqlite3_auto_extension` into sqlx's
+    bundled SQLite (`libsqlite3-sys` 0.30). FTS5 is compiled in too.
+  - A vec0 table with a `project_id` partition key and `kind`/`scope`
+    metadata columns answers a filtered KNN (`kind IN (…)`) over 1,000
+    vectors exactly like brute force (`filtered_knn_matches_brute_force`).
+  - **Not checked on Windows yet:** that needs a pushed branch for the
+    Windows CI job, which needs your approval.
+- **`crates/embeddings` (E1–E7, E10 client).**
+  - `embeddings.sqlite` sits next to the database (backups don't include
+    it). If it can't be opened, it is deleted and rebuilt.
+  - Tables follow the embedding plan's §2: spaces, sources, chunks,
+    chunk_embeddings, FTS5 kept in sync by triggers, and index_jobs, plus
+    `embedding_calls` for tokens and latency (E11).
+  - Queries are built at runtime, since sqlx's compile-time checks can't
+    see vec0.
+  - **Spaces (E4):** each embedder configuration plus its probed dimension
+    is one space with its own vec table.
+    - A new configuration builds while search uses the active space, then
+      takes over; the old one is retired and its vectors dropped.
+    - Chunks and FTS are shared.
+    - A dimension change behind the same model name marks the space stale
+      (E7).
+  - **Clients:**
+    - OpenAI-compatible `/embeddings` and TEI `/embed`, with prefixes,
+      batching, input cap and retries on 429/5xx.
+    - The dimension probe, "Test connection" and the E9 remote-URL check.
+    - TEI and Jina/Cohere reranker clients (used in 3e).
+    - All tested against a mock HTTP server.
+- **Indexing (E15, E16, E18, D44).**
+  - Any change to a ticket, its comments or its timeline (from the existing
+    SQLite commit-hook patch stream) queues the ticket, debounced.
+  - One job syncs all of a ticket's text sources:
+    - the ticket itself;
+    - the dropped original, if it differs from the description;
+    - comments;
+    - attachments' extracted text;
+    - the prior-work summary;
+    - a summary of each finished run (agent, outcome, minutes, tokens,
+      cost, task, files changed, final message; never the transcript).
+  - Text is chunked at Markdown headings and paragraphs (about 400 tokens,
+    40 overlap) under a `KAN-12 · PROJ-123 · Title` header.
+  - Only chunks whose text changed are embedded again. Deleted tickets and
+    comments leave the index.
+  - All tickets are queued at start, so changes made while the app was
+    closed are caught (unchanged content costs nothing).
+- **Search (E5, E21).**
+  - Vector KNN and FTS5 bm25 (stopwords dropped, each term a quoted phrase,
+    so `PROJ-123` matches) are merged with RRF (k = 60, 50 candidates each).
+  - Hits are locations with capped excerpts (D43).
+  - Without an embedder, or while one is unreachable, search falls back to
+    keywords and says so.
+  - API:
+    - `POST /api/search`;
+    - `GET /api/issues/{id}/related` (tickets ranked by their best chunk);
+    - `GET /api/intakes/{id}/duplicates`;
+    - `GET /api/embeddings/status`;
+    - `POST /api/embeddings/reindex` (optionally rebuilding vectors);
+    - test and key routes for the settings.
+  - The file search route moved to `/api/file-search`.
+- **UI (E23).**
+  - Settings → Search, in all seven locales:
+    - text and code embedders and the reranker, each with Test connection
+      and an encrypted API key;
+    - the remote-URL warning;
+    - retrieval defaults;
+    - index status per space, with Re-index and Rebuild vectors.
+  - The ticket panel's **Related** section, with status, "Done in KAN-n"
+    and run hits.
+  - **Possible duplicates** in the intake review, next to the exact
+    External-ID match. Picking one turns the intake into a new version of
+    it, with a diff.
+  - The command bar offers "Search tickets for “…”" for whatever is typed.
+    It opens a search dialog (this project or all projects) whose results
+    open the ticket.
+
+### Demo (Linux dev container)
+
+`search.mjs`, with TEI CPU 1.7 serving `BAAI/bge-small-en-v1.5` (384
+dimensions), then `BAAI/bge-base-en-v1.5` (768):
+
+- 30 seeded tickets were indexed: 105 chunks, all embedded, in an active
+  space.
+- "users cannot reset their password" listed "Password reset email never
+  arrives" first, ahead of two-factor authentication.
+- `PROJ-123` found its ticket as keyword rank 1.
+- Editing one section of a four-chunk ticket sent exactly one input to the
+  embedder.
+- Switching to `bge-base` created a building 768-dimension space. Search
+  kept answering from the active space during the build, then the new
+  space became active, the old one was retired, and the paraphrase still
+  ranked first.
+- Related for the reset ticket lists email change and Google login.
+- In the UI:
+  - the Related section;
+  - the command bar's ticket search, whose result opens the ticket;
+  - the near-duplicate "Forgot-password mail is not delivered" showing
+    SRC-1 first under Possible duplicates, and "Update SRC-1" after
+    picking it;
+  - Settings → Search: "bge-base-en-v1.5 · 768 dimensions · 96 ms" and the
+    active space.
+- No console errors or failed API calls.
+- `cargo test --workspace`, `pnpm run check`, `pnpm run lint` and clippy
+  pass.
+
+### Not verified here
+
+- **Windows:** sqlite-vec's static link in the Windows CI build (the spike
+  branch needs your OK to push).
+- **Big indexes:** query latency and indexing speed past a few hundred
+  chunks. sqlite-vec's KNN is brute force per partition.
+
+### Known leftovers
+
+- Related scores aren't comparable across queries; only the order is
+  meaningful.
+- Code kinds, the ticket overlay and the reranker are wired into the types
+  and settings, but are used only from 3d and 3e.
+- The dev container ran out of memory once while running two TEI
+  containers, the IDE's rust-analyzer and leftover OpenCode servers from
+  earlier sessions, all at the same time. The UI half of the demo ran
+  afterwards (`UI_PROJECT=…`) against the data the API half seeded.
