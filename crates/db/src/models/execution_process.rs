@@ -82,9 +82,13 @@ pub struct ExecutionProcess {
     /// Docker container the run executed in (sandboxed runs only).
     pub container_id: Option<String>,
     pub branch: Option<String>,
+    #[ts(type = "number")]
     pub tokens_in: i64,
+    #[ts(type = "number")]
     pub tokens_out: i64,
+    #[ts(type = "number")]
     pub tokens_cache_read: i64,
+    #[ts(type = "number")]
     pub tokens_cache_write: i64,
     /// Model cost measured by the model proxy (API-equivalent estimate).
     pub cost_usd: f64,

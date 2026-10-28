@@ -21,6 +21,8 @@
         "reposDesc": "Scripts y configuración de repositorios",
         "agents": "Agentes",
         "agentsDesc": "Configuraciones de agentes",
+        "sandbox": "Sandbox",
+        "sandboxDesc": "Sandbox de Docker, claves de modelos y límites",
         "mcp": "Servidores MCP",
         "mcpDesc": "Servidores de Protocolo de Contexto de Modelo (MCP)",
         "organizations": "Organization Settings",
@@ -617,6 +619,54 @@
       "noHostAvailable": "No host is available for host-specific settings yet.",
       "pairMachineHint": "Pair a machine to open machine settings.",
       "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "Los agentes y los scripts del espacio de trabajo se ejecutan en contenedores Docker que solo pueden acceder al proxy de modelos y a los registros de paquetes.",
+        "available": "Docker {{version}} está disponible.",
+        "unavailable": "Docker no está disponible.",
+        "installHint": "Instala Docker Desktop (con el backend WSL 2 en Windows), inícialo y reinicia KanbAIn.",
+        "imageReady": "Imagen del agente lista",
+        "imageBuilding": "Creando la imagen del agente (la primera vez tarda varios minutos)",
+        "imageError": "Error al crear la imagen del agente: {{error}}",
+        "imageMissing": "La imagen del agente aún no se ha creado",
+        "containers": "Contenedores de espacios de trabajo en ejecución: {{count}}"
+      },
+      "enabled": {
+        "label": "Ejecutar agentes en el sandbox",
+        "helper": "Si está desactivado, los agentes y scripts se ejecutan directamente en este equipo con acceso completo."
+      },
+      "credentials": {
+        "title": "Claves de API de modelos",
+        "description": "Se guardan cifradas en la carpeta de datos de KanbAIn. Los contenedores nunca las ven; el proxy de modelos las añade a cada solicitud.",
+        "anthropic": {
+          "label": "Clave de API de Anthropic",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "Clave de API compatible con OpenAI",
+          "placeholder": "sk-…"
+        },
+        "configured": "Hay una clave guardada.",
+        "missing": "No hay ninguna clave guardada.",
+        "save": "Guardar",
+        "remove": "Eliminar"
+      },
+      "limits": {
+        "title": "Límites",
+        "description": "El proxy de modelos aplica los presupuestos según el coste equivalente de la API.",
+        "runBudget": "Presupuesto por ejecución (USD)",
+        "ticketBudget": "Presupuesto predeterminado por ticket (USD)",
+        "budgetHelper": "Déjalo vacío para no tener límite.",
+        "maxRunMinutes": "Límite de tiempo por ejecución (minutos)",
+        "maxConcurrent": "Ejecuciones de agentes simultáneas",
+        "restartHelper": "Se aplica tras reiniciar.",
+        "cpus": "CPU por contenedor",
+        "memory": "Memoria por contenedor (MB)",
+        "allowedDomains": "Hosts permitidos adicionales",
+        "allowedDomainsHelper": "Uno por línea, además de los registros de paquetes. *.example.com incluye los subdominios."
+      }
     }
   },
   "integrations": {

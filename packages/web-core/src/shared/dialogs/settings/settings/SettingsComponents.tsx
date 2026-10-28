@@ -298,16 +298,19 @@ export function SettingsInput({
   placeholder,
   error,
   disabled,
+  type = 'text',
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   error?: boolean;
   disabled?: boolean;
+  type?: 'text' | 'password';
 }) {
   return (
     <input
-      type="text"
+      type={type}
+      autoComplete={type === 'password' ? 'off' : undefined}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}

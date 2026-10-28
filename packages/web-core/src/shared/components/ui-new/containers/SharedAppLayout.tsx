@@ -18,6 +18,7 @@ import { useCommandBarShortcut } from '@/shared/hooks/useCommandBarShortcut';
 import { useWorkspaceSidebarPreviewController } from '@/shared/hooks/useWorkspaceSidebarPreviewController';
 import { WorkspacesSidebarContainer } from '@/pages/workspaces/WorkspacesSidebarContainer';
 import { WorkspacesSidebarReopenTag } from '@kanbain/ui/components/WorkspacesSidebar';
+import { SandboxBanner } from '@/shared/components/SandboxBanner';
 
 export function SharedAppLayout() {
   const appNavigation = useAppNavigation();
@@ -131,6 +132,7 @@ export function SharedAppLayout() {
             )}
 
             <Outlet />
+            <SandboxBanner />
           </div>
         </>
       )}
@@ -141,8 +143,9 @@ export function SharedAppLayout() {
             mobileMode={isMobile}
             onOpenDrawer={() => setIsDrawerOpen(true)}
           />
-          <div className="flex-1 min-h-0 overflow-hidden">
+          <div className="relative flex-1 min-h-0 overflow-hidden">
             <Outlet />
+            <SandboxBanner />
           </div>
         </div>
       )}

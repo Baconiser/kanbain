@@ -457,5 +457,19 @@
     "submitting": "Enviando respuestas...",
     "answeredCount": "Respondió {{count}} pregunta",
     "answeredCount_other": "Respondió {{count}} preguntas"
+  },
+  "runSummary": {
+    "sandboxed": "Ejecutado en el sandbox",
+    "cost": "Coste",
+    "tokens": "Tokens entrada → salida",
+    "cache": "Caché lectura / escritura",
+    "modelCalls": "Llamadas al modelo",
+    "budgetStop": "Detenido: presupuesto agotado.",
+    "blocked": "Acceso de red bloqueado: {{hosts}}"
+  },
+  "sandboxBanner": {
+    "noDocker": "Docker no está disponible, así que los agentes no pueden ejecutarse en el sandbox.",
+    "noKey": "Añade una clave de API de Anthropic para que los agentes puedan ejecutarse en el sandbox.",
+    "openSettings": "Abrir ajustes del sandbox"
   }
 }

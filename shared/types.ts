@@ -261,7 +261,7 @@ issue_id: string | null, subtask_id: string | null, agent_def_id: string | null,
 /**
  * Docker container the run executed in (sandboxed runs only).
  */
-container_id: string | null, branch: string | null, tokens_in: bigint, tokens_out: bigint, tokens_cache_read: bigint, tokens_cache_write: bigint, 
+container_id: string | null, branch: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, 
 /**
  * Model cost measured by the model proxy (API-equivalent estimate).
  */
@@ -556,9 +556,9 @@ export type SandboxStatus = { enabled: boolean, docker_available: boolean, docke
  */
 error: string | null, image: string | null, image_ready: boolean, image_building: boolean, image_error: string | null, anthropic_key_configured: boolean, openai_key_configured: boolean, running_containers: number, };
 
-export type ModelProvider = "anthropic" | "openai";
+export type CredentialProvider = "anthropic" | "openai";
 
-export type SetModelCredential = { provider: ModelProvider, 
+export type SetModelCredential = { provider: CredentialProvider, 
 /**
  * The API key; `null` removes the stored key.
  */

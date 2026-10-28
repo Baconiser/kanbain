@@ -12,7 +12,10 @@ import {
   DirectoryListResponse,
   DirectoryEntry,
   ExecutionProcess,
+  ExecutionProcessEvent,
   ExecutionProcessRepoState,
+  SandboxStatus,
+  SetModelCredential,
   GitBranch,
   Repo,
   RepoWithTargetBranch,
@@ -666,6 +669,13 @@ export const executionProcessesApi = {
     return handleApiResponse<ExecutionProcessRepoState[]>(response);
   },
 
+  getEvents: async (processId: string): Promise<ExecutionProcessEvent[]> => {
+    const response = await makeRequest(
+      `/api/execution-processes/${processId}/events`
+    );
+    return handleApiResponse<ExecutionProcessEvent[]>(response);
+  },
+
   stopExecutionProcess: async (processId: string): Promise<void> => {
     const response = await makeRequest(
       `/api/execution-processes/${processId}/stop`,
@@ -674,6 +684,24 @@ export const executionProcessesApi = {
       }
     );
     return handleApiResponse<void>(response);
+  },
+};
+
+// Docker sandbox and model credentials
+export const sandboxApi = {
+  getStatus: async (): Promise<SandboxStatus> => {
+    const response = await makeRequest('/api/sandbox/status', {
+      cache: 'no-store',
+    });
+    return handleApiResponse<SandboxStatus>(response);
+  },
+
+  setCredential: async (data: SetModelCredential): Promise<SandboxStatus> => {
+    const response = await makeRequest('/api/sandbox/credentials', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<SandboxStatus>(response);
   },
 };
 

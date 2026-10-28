@@ -11,6 +11,8 @@ interface ProcessListItemProps {
   runReason: string;
   status: string;
   startedAt: string;
+  /** Model cost of the run, shown when above zero. */
+  costUsd?: number;
   selected?: boolean;
   onClick?: () => void;
   className?: string;
@@ -86,6 +88,7 @@ export function ProcessListItem({
   runReason,
   status,
   startedAt,
+  costUsd,
   selected,
   onClick,
   className,
@@ -125,6 +128,11 @@ export function ProcessListItem({
       >
         {label}
       </span>
+      {costUsd !== undefined && costUsd > 0 && (
+        <span className="text-xs text-low flex-shrink-0 tabular-nums">
+          ${costUsd < 0.01 ? costUsd.toFixed(3) : costUsd.toFixed(2)}
+        </span>
+      )}
       <span className="text-xs text-low flex-shrink-0">
         {formatRelativeElapsed(startedAt)}
       </span>

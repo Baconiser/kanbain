@@ -291,6 +291,12 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [historyAlwaysAllow, setHistoryAlwaysAllow] = useState(
       project?.settings.history_always_allow ?? false
     );
+    const [sandboxDomains, setSandboxDomains] = useState(
+      project?.settings.sandbox_allowed_domains.join('\n') ?? ''
+    );
+    const [sandboxDockerfile, setSandboxDockerfile] = useState(
+      project?.settings.sandbox_dockerfile ?? ''
+    );
     const [repos, setRepos] = useState<Repo[]>([]);
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -349,7 +355,14 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
               id_prefix: prefix,
               external_id_key: externalKey.trim() || null,
               external_id_pattern: externalPattern.trim() || null,
-              settings: { history_always_allow: historyAlwaysAllow },
+              settings: {
+                history_always_allow: historyAlwaysAllow,
+                sandbox_allowed_domains: sandboxDomains
+                  .split('\n')
+                  .map((d) => d.trim())
+                  .filter(Boolean),
+                sandbox_dockerfile: sandboxDockerfile.trim() || null,
+              },
             })
           : await projectsApi.create({
               name,
@@ -445,6 +458,29 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   />
                   Always allow git-history analysis for this project’s tickets
                 </label>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-sandbox-domains">
+                    Extra hosts the sandbox may reach
+                  </Label>
+                  <textarea
+                    id="project-sandbox-domains"
+                    className="min-h-16 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder={'api.example.com\n*.internal.example.org'}
+                    value={sandboxDomains}
+                    onChange={(e) => setSandboxDomains(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-sandbox-dockerfile">
+                    Sandbox Dockerfile (optional)
+                  </Label>
+                  <Input
+                    id="project-sandbox-dockerfile"
+                    placeholder="/path/to/Dockerfile (FROM ${KANBAIN_BASE_IMAGE})"
+                    value={sandboxDockerfile}
+                    onChange={(e) => setSandboxDockerfile(e.target.value)}
+                  />
+                </div>
               </div>
             )}
 

@@ -10,6 +10,7 @@ import {
   TerminalIcon,
 } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
+import { RunSummary } from './RunSummary';
 
 export function ProcessListContainer() {
   const {
@@ -41,6 +42,10 @@ export function ProcessListContainer() {
       );
     });
   }, [executionProcessesVisible]);
+
+  const selectedProcess = sortedProcesses.find(
+    (process) => process.id === selectedProcessId
+  );
 
   // Auto-select latest process if none selected (unless disabled)
   useEffect(() => {
@@ -155,6 +160,7 @@ export function ProcessListContainer() {
             runReason={process.run_reason}
             status={process.status}
             startedAt={process.started_at}
+            costUsd={process.cost_usd}
             selected={process.id === selectedProcessId}
             onClick={() => handleSelectProcess(process.id)}
           />
@@ -165,6 +171,7 @@ export function ProcessListContainer() {
           <p className="text-sm">{t('processes.noProcesses')}</p>
         </div>
       )}
+      {selectedProcess && <RunSummary process={selectedProcess} />}
       <div>{searchBar}</div>
     </div>
   );

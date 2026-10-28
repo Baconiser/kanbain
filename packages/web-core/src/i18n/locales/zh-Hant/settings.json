@@ -21,6 +21,8 @@
         "reposDesc": "儲存庫腳本與設定",
         "agents": "代理",
         "agentsDesc": "編碼代理設定",
+        "sandbox": "沙箱",
+        "sandboxDesc": "Docker 沙箱、模型金鑰和執行限制",
         "mcp": "MCP 伺服器",
         "mcpDesc": "模型上下文協議伺服器",
         "organizations": "組織設定",
@@ -617,6 +619,54 @@
       "noHostAvailable": "No host is available for host-specific settings yet.",
       "pairMachineHint": "Pair a machine to open machine settings.",
       "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "代理和工作區腳本在 Docker 容器中執行，這些容器只能存取模型代理和套件登錄庫。",
+        "available": "Docker {{version}} 可用。",
+        "unavailable": "Docker 無法使用。",
+        "installHint": "請安裝 Docker Desktop（在 Windows 上使用 WSL 2 後端）並啟動，然後重新啟動 KanbAIn。",
+        "imageReady": "代理映像已就緒",
+        "imageBuilding": "正在建置代理映像（首次需要幾分鐘）",
+        "imageError": "建置代理映像失敗：{{error}}",
+        "imageMissing": "代理映像尚未建置",
+        "containers": "正在執行的工作區容器：{{count}}"
+      },
+      "enabled": {
+        "label": "在沙箱中執行代理",
+        "helper": "關閉後，代理和腳本會直接在本機上以完整權限執行。"
+      },
+      "credentials": {
+        "title": "模型 API 金鑰",
+        "description": "加密儲存在 KanbAIn 資料夾中。容器無法看到金鑰；模型代理會在每個請求中加入金鑰。",
+        "anthropic": {
+          "label": "Anthropic API 金鑰",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "OpenAI 相容 API 金鑰",
+          "placeholder": "sk-…"
+        },
+        "configured": "已儲存金鑰。",
+        "missing": "尚未儲存金鑰。",
+        "save": "儲存",
+        "remove": "刪除"
+      },
+      "limits": {
+        "title": "限制",
+        "description": "模型代理依 API 等值成本執行預算。",
+        "runBudget": "每次執行的預算（美元）",
+        "ticketBudget": "每張工單的預設預算（美元）",
+        "budgetHelper": "留空表示不限制。",
+        "maxRunMinutes": "每次執行的時間限制（分鐘）",
+        "maxConcurrent": "同時執行的代理數",
+        "restartHelper": "重新啟動後生效。",
+        "cpus": "每個容器的 CPU",
+        "memory": "每個容器的記憶體（MB）",
+        "allowedDomains": "額外允許的主機",
+        "allowedDomainsHelper": "每行一個，在套件登錄庫之外額外允許。*.example.com 符合子網域。"
+      }
     }
   },
   "integrations": {

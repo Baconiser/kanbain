@@ -21,7 +21,7 @@ use crate::{DeploymentImpl, error::ApiError, middleware::load_execution_process_
 
 #[derive(Debug, Clone, Copy, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
-pub enum ModelProvider {
+pub enum CredentialProvider {
     Anthropic,
     #[serde(rename = "openai")]
     OpenAi,
@@ -29,7 +29,7 @@ pub enum ModelProvider {
 
 #[derive(Debug, Deserialize, TS)]
 pub struct SetModelCredential {
-    pub provider: ModelProvider,
+    pub provider: CredentialProvider,
     /// The API key; `null` removes the stored key.
     pub api_key: Option<String>,
 }
@@ -47,8 +47,8 @@ async fn set_credential(
     ResponseJson(payload): ResponseJson<SetModelCredential>,
 ) -> Result<ResponseJson<ApiResponse<SandboxStatus>>, ApiError> {
     let name = match payload.provider {
-        ModelProvider::Anthropic => ANTHROPIC_API_KEY,
-        ModelProvider::OpenAi => OPENAI_API_KEY,
+        CredentialProvider::Anthropic => ANTHROPIC_API_KEY,
+        CredentialProvider::OpenAi => OPENAI_API_KEY,
     };
     let secrets = deployment.secrets();
     let result = match payload.api_key.as_deref().map(str::trim) {

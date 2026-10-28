@@ -457,5 +457,19 @@
     "submitting": "Envoi des réponses...",
     "answeredCount": "Répondu à {{count}} question",
     "answeredCount_other": "Répondu à {{count}} questions"
+  },
+  "runSummary": {
+    "sandboxed": "Exécuté dans la sandbox",
+    "cost": "Coût",
+    "tokens": "Jetons entrée → sortie",
+    "cache": "Cache lecture / écriture",
+    "modelCalls": "Appels au modèle",
+    "budgetStop": "Arrêté : budget épuisé.",
+    "blocked": "Accès réseau bloqué : {{hosts}}"
+  },
+  "sandboxBanner": {
+    "noDocker": "Docker n'est pas disponible, les agents ne peuvent donc pas s'exécuter dans la sandbox.",
+    "noKey": "Ajoutez une clé d'API Anthropic pour que les agents puissent s'exécuter dans la sandbox.",
+    "openSettings": "Ouvrir les réglages de la sandbox"
   }
 }

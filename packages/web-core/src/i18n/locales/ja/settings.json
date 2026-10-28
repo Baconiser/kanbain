@@ -21,6 +21,8 @@
         "reposDesc": "リポジトリスクリプトと設定",
         "agents": "エージェント",
         "agentsDesc": "コーディングエージェントの設定",
+        "sandbox": "サンドボックス",
+        "sandboxDesc": "Docker サンドボックス、モデルキー、実行制限",
         "mcp": "MCPサーバー",
         "mcpDesc": "モデルコンテキストプロトコルサーバー",
         "organizations": "Organization Settings",
@@ -617,6 +619,54 @@
       "noHostAvailable": "No host is available for host-specific settings yet.",
       "pairMachineHint": "Pair a machine to open machine settings.",
       "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "エージェントとワークスペースのスクリプトは、モデルプロキシとパッケージレジストリにのみ接続できる Docker コンテナで実行されます。",
+        "available": "Docker {{version}} が利用できます。",
+        "unavailable": "Docker が利用できません。",
+        "installHint": "Docker Desktop をインストールして（Windows では WSL 2 バックエンドを使用）起動し、KanbAIn を再起動してください。",
+        "imageReady": "エージェントイメージの準備ができました",
+        "imageBuilding": "エージェントイメージを作成中（初回は数分かかります）",
+        "imageError": "エージェントイメージの作成に失敗しました: {{error}}",
+        "imageMissing": "エージェントイメージはまだ作成されていません",
+        "containers": "実行中のワークスペースコンテナ: {{count}}"
+      },
+      "enabled": {
+        "label": "エージェントをサンドボックスで実行",
+        "helper": "オフにすると、エージェントとスクリプトはこのマシン上でフルアクセス権を持って直接実行されます。"
+      },
+      "credentials": {
+        "title": "モデルの API キー",
+        "description": "KanbAIn のデータフォルダに暗号化して保存されます。コンテナからは見えず、モデルプロキシが各リクエストに付加します。",
+        "anthropic": {
+          "label": "Anthropic API キー",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "OpenAI 互換 API キー",
+          "placeholder": "sk-…"
+        },
+        "configured": "キーが保存されています。",
+        "missing": "キーは保存されていません。",
+        "save": "保存",
+        "remove": "削除"
+      },
+      "limits": {
+        "title": "制限",
+        "description": "予算は API 換算のコストに基づいてモデルプロキシが適用します。",
+        "runBudget": "実行あたりの予算（USD）",
+        "ticketBudget": "チケットあたりの既定の予算（USD）",
+        "budgetHelper": "空欄にすると無制限になります。",
+        "maxRunMinutes": "実行あたりの制限時間（分）",
+        "maxConcurrent": "同時に実行できるエージェント数",
+        "restartHelper": "再起動後に反映されます。",
+        "cpus": "コンテナあたりの CPU",
+        "memory": "コンテナあたりのメモリ（MB）",
+        "allowedDomains": "追加で許可するホスト",
+        "allowedDomainsHelper": "1 行に 1 つ。パッケージレジストリに加えて許可されます。*.example.com はサブドメインに一致します。"
+      }
     }
   },
   "integrations": {

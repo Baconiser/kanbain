@@ -174,7 +174,7 @@ fn generate_types_content() -> String {
         services::services::config::SendMessageShortcut::decl(),
         services::services::config::SandboxConfig::decl(),
         local_deployment::sandbox::SandboxStatus::decl(),
-        server::routes::sandbox::ModelProvider::decl(),
+        server::routes::sandbox::CredentialProvider::decl(),
         server::routes::sandbox::SetModelCredential::decl(),
         git::GitBranch::decl(),
         services::services::queued_message::QueuedMessage::decl(),

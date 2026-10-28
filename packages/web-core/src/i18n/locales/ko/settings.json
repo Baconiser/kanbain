@@ -21,6 +21,8 @@
         "reposDesc": "저장소 스크립트 및 구성",
         "agents": "에이전트",
         "agentsDesc": "코딩 에이전트 구성",
+        "sandbox": "샌드박스",
+        "sandboxDesc": "Docker 샌드박스, 모델 키, 실행 제한",
         "mcp": "MCP 서버",
         "mcpDesc": "Model Context Protocol 서버",
         "organizations": "Organization Settings",
@@ -617,6 +619,54 @@
       "noHostAvailable": "No host is available for host-specific settings yet.",
       "pairMachineHint": "Pair a machine to open machine settings.",
       "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "에이전트와 워크스페이스 스크립트는 모델 프록시와 패키지 레지스트리에만 접근할 수 있는 Docker 컨테이너에서 실행됩니다.",
+        "available": "Docker {{version}}을(를) 사용할 수 있습니다.",
+        "unavailable": "Docker를 사용할 수 없습니다.",
+        "installHint": "Docker Desktop을 설치하고(Windows에서는 WSL 2 백엔드 사용) 실행한 다음 KanbAIn을 다시 시작하세요.",
+        "imageReady": "에이전트 이미지 준비됨",
+        "imageBuilding": "에이전트 이미지 빌드 중(처음에는 몇 분 걸립니다)",
+        "imageError": "에이전트 이미지 빌드 실패: {{error}}",
+        "imageMissing": "에이전트 이미지가 아직 빌드되지 않았습니다",
+        "containers": "실행 중인 워크스페이스 컨테이너: {{count}}"
+      },
+      "enabled": {
+        "label": "샌드박스에서 에이전트 실행",
+        "helper": "끄면 에이전트와 스크립트가 이 컴퓨터에서 전체 권한으로 직접 실행됩니다."
+      },
+      "credentials": {
+        "title": "모델 API 키",
+        "description": "KanbAIn 데이터 폴더에 암호화되어 저장됩니다. 컨테이너는 키를 볼 수 없으며, 모델 프록시가 각 요청에 키를 추가합니다.",
+        "anthropic": {
+          "label": "Anthropic API 키",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "OpenAI 호환 API 키",
+          "placeholder": "sk-…"
+        },
+        "configured": "저장된 키가 있습니다.",
+        "missing": "저장된 키가 없습니다.",
+        "save": "저장",
+        "remove": "삭제"
+      },
+      "limits": {
+        "title": "제한",
+        "description": "예산은 API 환산 비용을 기준으로 모델 프록시가 적용합니다.",
+        "runBudget": "실행당 예산(USD)",
+        "ticketBudget": "티켓당 기본 예산(USD)",
+        "budgetHelper": "비워 두면 제한이 없습니다.",
+        "maxRunMinutes": "실행당 시간 제한(분)",
+        "maxConcurrent": "동시 에이전트 실행 수",
+        "restartHelper": "다시 시작한 후 적용됩니다.",
+        "cpus": "컨테이너당 CPU",
+        "memory": "컨테이너당 메모리(MB)",
+        "allowedDomains": "추가 허용 호스트",
+        "allowedDomainsHelper": "한 줄에 하나씩, 패키지 레지스트리에 더해 허용됩니다. *.example.com은 하위 도메인과 일치합니다."
+      }
     }
   },
   "integrations": {

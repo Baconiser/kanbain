@@ -25,6 +25,8 @@
         "reposDesc": "Repository scripts and configuration",
         "agents": "Agents",
         "agentsDesc": "Coding agent configurations",
+        "sandbox": "Sandbox",
+        "sandboxDesc": "Docker sandbox, model keys and run limits",
         "mcp": "MCP Servers",
         "mcpDesc": "Model Context Protocol servers",
         "organizations": "Organization Settings",
@@ -616,6 +618,54 @@
         "title": "Sign in required",
         "description": "Sign in to manage your remote projects.",
         "action": "Sign in"
+      }
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "Agents and workspace scripts run in Docker containers that can only reach the model proxy and package registries.",
+        "available": "Docker {{version}} is available.",
+        "unavailable": "Docker is not available.",
+        "installHint": "Install Docker Desktop (with the WSL 2 backend on Windows), start it, then restart KanbAIn.",
+        "imageReady": "Agent image ready",
+        "imageBuilding": "Building the agent image (takes several minutes the first time)",
+        "imageError": "Building the agent image failed: {{error}}",
+        "imageMissing": "Agent image not built yet",
+        "containers": "Workspace containers running: {{count}}"
+      },
+      "enabled": {
+        "label": "Run agents in the sandbox",
+        "helper": "When off, agents and scripts run directly on this machine with full access to it."
+      },
+      "credentials": {
+        "title": "Model API keys",
+        "description": "Stored encrypted in the KanbAIn data folder. Containers never see them; the model proxy adds them to each request.",
+        "anthropic": {
+          "label": "Anthropic API key",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "OpenAI-compatible API key",
+          "placeholder": "sk-…"
+        },
+        "configured": "A key is stored.",
+        "missing": "No key stored.",
+        "save": "Save",
+        "remove": "Remove"
+      },
+      "limits": {
+        "title": "Limits",
+        "description": "Budgets are enforced by the model proxy on API-equivalent cost.",
+        "runBudget": "Budget per run (USD)",
+        "ticketBudget": "Default budget per ticket (USD)",
+        "budgetHelper": "Leave empty for no limit.",
+        "maxRunMinutes": "Time limit per run (minutes)",
+        "maxConcurrent": "Agent runs at the same time",
+        "restartHelper": "Takes effect after a restart.",
+        "cpus": "CPUs per container",
+        "memory": "Memory per container (MB)",
+        "allowedDomains": "Extra allowed hosts",
+        "allowedDomainsHelper": "One per line, on top of the package registries. *.example.com matches subdomains."
       }
     }
   },

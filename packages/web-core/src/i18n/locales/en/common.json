@@ -457,5 +457,19 @@
     "submitting": "Submitting answers...",
     "answeredCount": "Answered {{count}} question",
     "answeredCount_other": "Answered {{count}} questions"
+  },
+  "runSummary": {
+    "sandboxed": "Ran in the sandbox",
+    "cost": "Cost",
+    "tokens": "Tokens in → out",
+    "cache": "Cache read / write",
+    "modelCalls": "Model calls",
+    "budgetStop": "Stopped: budget exhausted.",
+    "blocked": "Blocked network access: {{hosts}}"
+  },
+  "sandboxBanner": {
+    "noDocker": "Docker is not available, so agents cannot run in the sandbox.",
+    "noKey": "Add an Anthropic API key so agents can run in the sandbox.",
+    "openSettings": "Open sandbox settings"
   }
 }

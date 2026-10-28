@@ -21,6 +21,8 @@
         "reposDesc": "仓库脚本和配置",
         "agents": "代理",
         "agentsDesc": "编码代理配置",
+        "sandbox": "沙箱",
+        "sandboxDesc": "Docker 沙箱、模型密钥和运行限制",
         "mcp": "MCP 服务器",
         "mcpDesc": "模型上下文协议服务器",
         "organizations": "组织设置",
@@ -617,6 +619,54 @@
       "noHostAvailable": "No host is available for host-specific settings yet.",
       "pairMachineHint": "Pair a machine to open machine settings.",
       "selectMachineHint": "Select a machine to open machine settings."
+    },
+    "sandbox": {
+      "docker": {
+        "title": "Docker",
+        "description": "代理和工作区脚本在 Docker 容器中运行，这些容器只能访问模型代理和软件包仓库。",
+        "available": "Docker {{version}} 可用。",
+        "unavailable": "Docker 不可用。",
+        "installHint": "请安装 Docker Desktop（在 Windows 上使用 WSL 2 后端）并启动，然后重新启动 KanbAIn。",
+        "imageReady": "代理镜像已就绪",
+        "imageBuilding": "正在构建代理镜像（首次需要几分钟）",
+        "imageError": "构建代理镜像失败：{{error}}",
+        "imageMissing": "代理镜像尚未构建",
+        "containers": "正在运行的工作区容器：{{count}}"
+      },
+      "enabled": {
+        "label": "在沙箱中运行代理",
+        "helper": "关闭后，代理和脚本将直接在本机上以完全权限运行。"
+      },
+      "credentials": {
+        "title": "模型 API 密钥",
+        "description": "加密保存在 KanbAIn 数据文件夹中。容器无法看到密钥；模型代理会在每个请求中添加密钥。",
+        "anthropic": {
+          "label": "Anthropic API 密钥",
+          "placeholder": "sk-ant-…"
+        },
+        "openai": {
+          "label": "OpenAI 兼容 API 密钥",
+          "placeholder": "sk-…"
+        },
+        "configured": "已保存密钥。",
+        "missing": "未保存密钥。",
+        "save": "保存",
+        "remove": "删除"
+      },
+      "limits": {
+        "title": "限制",
+        "description": "模型代理按 API 等价成本执行预算。",
+        "runBudget": "每次运行的预算（美元）",
+        "ticketBudget": "每个工单的默认预算（美元）",
+        "budgetHelper": "留空表示不限制。",
+        "maxRunMinutes": "每次运行的时间限制（分钟）",
+        "maxConcurrent": "同时运行的代理数",
+        "restartHelper": "重启后生效。",
+        "cpus": "每个容器的 CPU",
+        "memory": "每个容器的内存（MB）",
+        "allowedDomains": "额外允许的主机",
+        "allowedDomainsHelper": "每行一个，在软件包仓库之外额外允许。*.example.com 匹配子域名。"
+      }
     }
   },
   "integrations": {

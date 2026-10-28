@@ -457,5 +457,19 @@
     "submitting": "正在提交回答...",
     "answeredCount": "已回答{{count}}个问题",
     "answeredCount_other": "已回答{{count}}个问题"
+  },
+  "runSummary": {
+    "sandboxed": "在沙箱中运行",
+    "cost": "成本",
+    "tokens": "令牌 输入 → 输出",
+    "cache": "缓存 读取 / 写入",
+    "modelCalls": "模型调用",
+    "budgetStop": "已停止：预算已用完。",
+    "blocked": "已阻止的网络访问：{{hosts}}"
+  },
+  "sandboxBanner": {
+    "noDocker": "Docker 不可用，因此代理无法在沙箱中运行。",
+    "noKey": "请添加 Anthropic API 密钥，以便代理在沙箱中运行。",
+    "openSettings": "打开沙箱设置"
   }
 }
