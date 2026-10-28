@@ -144,7 +144,7 @@
         "description": "Configurez les préférences de nommage des branches git",
         "branchPrefix": {
           "label": "Préfixe de branche",
-          "placeholder": "vk",
+          "placeholder": "kanbain",
           "helper": "Préfixe pour les noms de branches auto-générés. Laissez vide pour aucun préfixe.",
           "preview": "Aperçu :",
           "previewWithPrefix": "{{prefix}}/1a2b-nom-tache",
@@ -165,6 +165,20 @@
           "browse": "Parcourir",
           "dialogTitle": "Sélectionner le répertoire des espaces de travail",
           "dialogDescription": "Choisissez un répertoire. Les espaces de travail seront créés dans un sous-répertoire .kanbain-workspaces à l'intérieur."
+        }
+      },
+      "data": {
+        "title": "Données",
+        "description": "Les tickets, projets et paramètres sont stockés dans une base de données SQLite locale.",
+        "backupKeep": {
+          "label": "Sauvegardes quotidiennes à conserver",
+          "helper": "Une copie est faite une fois par jour et avant chaque migration de la base de données. Les sauvegardes sont stockées dans le dossier backups du répertoire de données de KanbAIn."
+        },
+        "export": {
+          "label": "Exporter tous les tickets",
+          "helper": "Télécharge tous les projets avec leurs tickets, statuts, étiquettes et commentaires.",
+          "json": "Exporter en JSON",
+          "markdown": "Exporter en Markdown"
         }
       },
       "pullRequests": {

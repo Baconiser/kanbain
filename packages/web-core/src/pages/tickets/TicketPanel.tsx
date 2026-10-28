@@ -24,6 +24,7 @@ import type {
 import WYSIWYGEditor from '@/shared/components/WYSIWYGEditor';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
+import { resolveDefaultTargetBranch } from '@/shared/hooks/useProjectRepoDefaults';
 import type { ProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { attachmentsApi } from '@/shared/lib/api';
 import { issuesApi, projectsApi } from '@/shared/lib/ticketsApi';
@@ -224,9 +225,16 @@ export function TicketPanel({
   );
 
   const startWorkspace = async () => {
-    let repos: { id: string }[] = [];
+    let preferredRepos: { repo_id: string; target_branch: string | null }[] =
+      [];
     try {
-      repos = await projectsApi.listRepos(project.id);
+      const repos = await projectsApi.listRepos(project.id);
+      preferredRepos = await Promise.all(
+        repos.map(async (repo) => ({
+          repo_id: repo.id,
+          target_branch: (await resolveDefaultTargetBranch(repo)) || null,
+        }))
+      );
     } catch {
       // Fall back to choosing repos in the create screen.
     }
@@ -239,12 +247,7 @@ export function TicketPanel({
     setCreateModeSeedState(
       buildWorkspaceCreateInitialState({
         prompt,
-        defaults: {
-          preferredRepos: repos.map((r) => ({
-            repo_id: r.id,
-            target_branch: null,
-          })),
-        },
+        defaults: { preferredRepos },
         linkedIssue: {
           issueId: issue.id,
           simpleId: issue.external_id ?? internalTicketId(issue, project),

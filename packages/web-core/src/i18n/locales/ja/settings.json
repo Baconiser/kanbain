@@ -144,7 +144,7 @@
         "description": "Gitブランチ名の設定",
         "branchPrefix": {
           "label": "ブランチプレフィックス",
-          "placeholder": "vk",
+          "placeholder": "kanbain",
           "helper": "自動生成されるブランチ名のプレフィックス。空欄にするとプレフィックスなしになります。",
           "preview": "プレビュー：",
           "previewWithPrefix": "{{prefix}}/1a2b-タスク名",
@@ -165,6 +165,20 @@
           "browse": "参照",
           "dialogTitle": "ワークスペースディレクトリを選択",
           "dialogDescription": "ディレクトリを選択してください。ワークスペースはその中の .kanbain-workspaces サブディレクトリに作成されます。"
+        }
+      },
+      "data": {
+        "title": "データ",
+        "description": "チケット、プロジェクト、設定はローカルの SQLite データベースに保存されます。",
+        "backupKeep": {
+          "label": "保持する日次バックアップ数",
+          "helper": "1 日に 1 回、およびデータベースの移行前に毎回コピーが作成されます。バックアップは KanbAIn データディレクトリの backups フォルダーに保存されます。"
+        },
+        "export": {
+          "label": "すべてのチケットをエクスポート",
+          "helper": "すべてのプロジェクトを、チケット、ステータス、タグ、コメントとともにダウンロードします。",
+          "json": "JSON でエクスポート",
+          "markdown": "Markdown でエクスポート"
         }
       },
       "pullRequests": {

@@ -144,7 +144,7 @@
         "description": "Git 브랜치 이름 지정 기본 설정 구성",
         "branchPrefix": {
           "label": "브랜치 접두사",
-          "placeholder": "vk",
+          "placeholder": "kanbain",
           "helper": "자동 생성된 브랜치 이름의 접두사입니다. 접두사가 없으려면 비워두세요.",
           "preview": "미리보기:",
           "previewWithPrefix": "{{prefix}}/1a2b-task-name",
@@ -165,6 +165,20 @@
           "browse": "찾아보기",
           "dialogTitle": "워크스페이스 디렉토리 선택",
           "dialogDescription": "디렉토리를 선택하세요. 워크스페이스는 해당 디렉토리 내의 .kanbain-workspaces 하위 디렉토리에 생성됩니다."
+        }
+      },
+      "data": {
+        "title": "데이터",
+        "description": "티켓, 프로젝트, 설정은 로컬 SQLite 데이터베이스에 저장됩니다.",
+        "backupKeep": {
+          "label": "보관할 일일 백업 수",
+          "helper": "하루에 한 번, 그리고 데이터베이스 마이그레이션 전마다 사본이 생성됩니다. 백업은 KanbAIn 데이터 디렉터리의 backups 폴더에 저장됩니다."
+        },
+        "export": {
+          "label": "모든 티켓 내보내기",
+          "helper": "모든 프로젝트를 티켓, 상태, 태그, 댓글과 함께 다운로드합니다.",
+          "json": "JSON으로 내보내기",
+          "markdown": "Markdown으로 내보내기"
         }
       },
       "pullRequests": {

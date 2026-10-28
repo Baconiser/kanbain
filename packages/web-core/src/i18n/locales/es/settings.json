@@ -144,7 +144,7 @@
         "description": "Configurar preferencias de nombres de ramas git",
         "branchPrefix": {
           "label": "Prefijo de Rama",
-          "placeholder": "vk",
+          "placeholder": "kanbain",
           "helper": "Prefijo para nombres de ramas generadas automáticamente. Dejar vacío para no usar prefijo.",
           "preview": "Vista previa:",
           "previewWithPrefix": "{{prefix}}/1a2b-nombre-tarea",
@@ -165,6 +165,20 @@
           "browse": "Explorar",
           "dialogTitle": "Seleccionar Directorio de Espacios de Trabajo",
           "dialogDescription": "Elija un directorio. Los espacios de trabajo se crearán en un subdirectorio .kanbain-workspaces dentro de él."
+        }
+      },
+      "data": {
+        "title": "Datos",
+        "description": "Los tickets, proyectos y ajustes se guardan en una base de datos SQLite local.",
+        "backupKeep": {
+          "label": "Copias de seguridad diarias a conservar",
+          "helper": "Se crea una copia una vez al día y antes de cada migración de la base de datos. Las copias se guardan en la carpeta backups del directorio de datos de KanbAIn."
+        },
+        "export": {
+          "label": "Exportar todos los tickets",
+          "helper": "Descarga todos los proyectos con sus tickets, estados, etiquetas y comentarios.",
+          "json": "Exportar como JSON",
+          "markdown": "Exportar como Markdown"
         }
       },
       "pullRequests": {

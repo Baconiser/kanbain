@@ -144,7 +144,7 @@
         "description": "設定 Git 分支命名偏好",
         "branchPrefix": {
           "label": "分支前綴",
-          "placeholder": "vk",
+          "placeholder": "kanbain",
           "helper": "自動產生的分支名稱前綴。留空表示不使用前綴。",
           "preview": "預覽：",
           "previewWithPrefix": "{{prefix}}/1a2b-task-name",
@@ -165,6 +165,20 @@
           "browse": "瀏覽",
           "dialogTitle": "選擇工作區目錄",
           "dialogDescription": "選擇一個目錄。工作區將在其中的 .kanbain-workspaces 子目錄中建立。"
+        }
+      },
+      "data": {
+        "title": "資料",
+        "description": "工單、專案和設定儲存在本機 SQLite 資料庫中。",
+        "backupKeep": {
+          "label": "保留的每日備份數",
+          "helper": "每天以及每次資料庫遷移前都會建立一份副本。備份儲存在 KanbAIn 資料目錄的 backups 資料夾中。"
+        },
+        "export": {
+          "label": "匯出所有工單",
+          "helper": "下載所有專案及其工單、狀態、標籤和留言。",
+          "json": "匯出為 JSON",
+          "markdown": "匯出為 Markdown"
         }
       },
       "pullRequests": {

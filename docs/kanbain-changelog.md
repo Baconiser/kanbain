@@ -121,6 +121,11 @@ and runs.
   file cannot break the dev session.
 - **Cleanup.** `shared/remote-types.ts`, dead selection builders and the
   issue/kanban keyboard shortcuts are gone.
+- **Fixes found while verifying.** "Start workspace" picks each repo's
+  default target branch (or its checked-out branch) so Create isn't blocked
+  on "Select branch". The default branch prefix is `kanbain` instead of
+  upstream's `vk`; configs still on `vk` move over. The Data settings card is
+  translated into all locales, which the CI i18n check requires.
 
 ### Demo (Linux dev container)
 
@@ -138,13 +143,24 @@ and runs.
   `/tickets`; the board, panel and all 7 WebSockets work with no failed
   API calls.
 - A daily backup is written at startup when none is younger than a day.
+- **Manual workspace from a ticket with Claude Code**, through the UI: a
+  ticket with External ID `DEMO-7` in a project linked to a scratch repo →
+  Start workspace → the create screen comes up with the prompt, the repo on
+  `main` and the linked-ticket badge → Create. Claude Code (Opus) ran in the
+  new worktree, wrote `hello.txt` and committed it. The workspace has the
+  ticket's `issue_id`, its branch is named after `DEMO-7`, and the ticket
+  panel lists it.
+- **Restart:** after adding a comment, the backend process was killed,
+  rebuilt and started again. All projects, the ticket, the comment and the
+  linked workspace were still there, with no failed API calls.
+- **Windows CI:** the `Windows build` workflow built the installers for the
+  pushed Phase 0b commits.
 
 ### Not verified here
 
-- **Windows.** The Tauri sign-in flow, downloads of the export from the
-  WebView2 window and backups under `%APPDATA%` need the user's check.
-- **Manual workspace from a ticket with Claude Code.** Needs an
-  authenticated Claude account.
+- **Windows at runtime.** The installer builds in CI, but the Tauri
+  sign-in flow, export downloads from the WebView2 window and backups under
+  `%APPDATA%` need the user's check on a Windows machine.
 
 ### Known leftovers
 

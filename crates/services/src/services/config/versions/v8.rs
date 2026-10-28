@@ -10,8 +10,11 @@ pub use v7::{
 use crate::services::config::versions::v7;
 
 fn default_git_branch_prefix() -> String {
-    "vk".to_string()
+    "kanbain".to_string()
 }
+
+/// Branch prefix inherited from Vibe Kanban's default.
+const UPSTREAM_GIT_BRANCH_PREFIX: &str = "vk";
 
 fn default_pr_auto_description_enabled() -> bool {
     true
@@ -97,7 +100,11 @@ impl Config {
             last_app_version: old_config.last_app_version,
             show_release_notes: old_config.show_release_notes,
             language: old_config.language,
-            git_branch_prefix: old_config.git_branch_prefix,
+            git_branch_prefix: if old_config.git_branch_prefix == UPSTREAM_GIT_BRANCH_PREFIX {
+                default_git_branch_prefix()
+            } else {
+                old_config.git_branch_prefix
+            },
             showcases: old_config.showcases,
             pr_auto_description_enabled: true,
             pr_auto_description_prompt: None,
@@ -118,9 +125,12 @@ impl Config {
 
 impl From<String> for Config {
     fn from(raw_config: String) -> Self {
-        if let Ok(config) = serde_json::from_str::<Config>(&raw_config)
+        if let Ok(mut config) = serde_json::from_str::<Config>(&raw_config)
             && config.config_version == "v8"
         {
+            if config.git_branch_prefix == UPSTREAM_GIT_BRANCH_PREFIX {
+                config.git_branch_prefix = default_git_branch_prefix();
+            }
             return config;
         }
 
@@ -165,5 +175,24 @@ impl Default for Config {
             host_nickname: None,
             backup_keep: default_backup_keep(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upstream_branch_prefix_becomes_kanbain() {
+        let mut config = Config::default();
+        assert_eq!(config.git_branch_prefix, "kanbain");
+
+        config.git_branch_prefix = "vk".to_string();
+        let loaded = Config::from(serde_json::to_string(&config).unwrap());
+        assert_eq!(loaded.git_branch_prefix, "kanbain");
+
+        config.git_branch_prefix = "team".to_string();
+        let loaded = Config::from(serde_json::to_string(&config).unwrap());
+        assert_eq!(loaded.git_branch_prefix, "team");
     }
 }
