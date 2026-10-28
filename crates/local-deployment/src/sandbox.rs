@@ -123,6 +123,8 @@ struct Inner {
     egress_grants: Arc<std::sync::RwLock<HashMap<String, EgressGrant>>>,
     runs: Mutex<HashMap<Uuid, ActiveRun>>,
     slots: Arc<Semaphore>,
+    /// Host port forwards of sandboxed dev servers, by execution.
+    forwards: Mutex<HashMap<Uuid, Vec<tokio::task::JoinHandle<()>>>>,
 }
 
 #[derive(Clone)]
@@ -211,6 +213,7 @@ impl SandboxRuntime {
                 egress_grants,
                 runs: Mutex::new(HashMap::new()),
                 slots: Arc::new(Semaphore::new(max_runs)),
+                forwards: Mutex::new(HashMap::new()),
             }),
         };
 
@@ -726,23 +729,7 @@ impl SandboxRuntime {
             return;
         };
         let pid_file = format!("{SANDBOX_PID_DIR}/{execution_id}.pid");
-        let script = format!(
-            "pid=$(cat {pid_file} 2>/dev/null) || exit 0; \
-             kill -TERM -- -$pid 2>/dev/null; \
-             for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 -- -$pid 2>/dev/null || exit 0; sleep 0.3; done; \
-             kill -KILL -- -$pid 2>/dev/null; exit 0"
-        );
-        let _ = ready
-            .docker
-            .exec(
-                &container,
-                &["sh", "-c", &script],
-                &ExecOptions {
-                    user: Some("root".into()),
-                    ..Default::default()
-                },
-            )
-            .await;
+        sandbox::kill_process_group(&ready.docker, &container, &pid_file).await;
     }
 
     /// Finish a run: commit what the agent left uncommitted, bring the
@@ -854,8 +841,62 @@ impl SandboxRuntime {
         }
     }
 
+    /// Forward the local ports a sandboxed dev server announces in its log
+    /// to the same ports on the host, so the preview proxy reaches it.
+    pub fn watch_dev_server_ports(
+        &self,
+        execution_id: Uuid,
+        container: String,
+        store: Arc<utils::msg_store::MsgStore>,
+    ) {
+        use futures::StreamExt;
+        use utils::log_msg::LogMsg;
+
+        let runtime = self.clone();
+        tokio::spawn(async move {
+            let mut forwarded: Vec<u16> = Vec::new();
+            let mut stream = store.history_plus_stream();
+            while let Some(Ok(msg)) = stream.next().await {
+                let text = match msg {
+                    LogMsg::Stdout(text) | LogMsg::Stderr(text) => text,
+                    LogMsg::Finished => break,
+                    _ => continue,
+                };
+                for port in sandbox::forward::detect_local_ports(&text) {
+                    if forwarded.contains(&port) {
+                        continue;
+                    }
+                    forwarded.push(port);
+                    match sandbox::forward::forward_port(container.clone(), port).await {
+                        Ok(handle) => {
+                            runtime
+                                .inner
+                                .forwards
+                                .lock()
+                                .await
+                                .entry(execution_id)
+                                .or_default()
+                                .push(handle);
+                            store.push_stdout(format!(
+                                "[sandbox] Forwarding localhost:{port} to the sandbox for previews\n"
+                            ));
+                        }
+                        Err(e) => store.push_stdout(format!(
+                            "[sandbox] Can't forward localhost:{port} for previews: {e}\n"
+                        )),
+                    }
+                }
+            }
+        });
+    }
+
     /// Revoke a run's tokens and free its slot without syncing anything.
     pub async fn release(&self, execution_id: Uuid) {
+        if let Some(handles) = self.inner.forwards.lock().await.remove(&execution_id) {
+            for handle in handles {
+                handle.abort();
+            }
+        }
         self.inner.proxy.revoke_run(execution_id);
         if let Some(active) = self.inner.runs.lock().await.remove(&execution_id) {
             self.inner

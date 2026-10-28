@@ -1593,6 +1593,16 @@ impl ContainerService for LocalContainerService {
         if sandboxed && execution_process.run_reason == ExecutionProcessRunReason::CodingAgent {
             self.spawn_run_time_limit(execution_process.id).await;
         }
+        if execution_process.run_reason == ExecutionProcessRunReason::DevServer
+            && let Some(target) = &env.sandbox
+            && let Some(store) = self.msg_stores.read().await.get(&execution_process.id)
+        {
+            self.sandbox.watch_dev_server_ports(
+                execution_process.id,
+                target.container.clone(),
+                store.clone(),
+            );
+        }
 
         Ok(())
     }

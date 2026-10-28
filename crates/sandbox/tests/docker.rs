@@ -288,6 +288,39 @@ async fn sandbox_isolation_and_git_round_trip() {
         let (_, out) = sh(&sandbox, &agent, "cat /workspace/app/d.txt").await;
         assert_eq!(out, "host");
 
+        // Commits made in the container (e.g. from the terminal) are pulled
+        // to the host before the next push instead of being overwritten.
+        sh(&sandbox, &agent, "cd /workspace/app && echo t > t.txt && git add t.txt && git commit -qm terminal").await;
+        assert!(
+            transfer::sync_branch_in(&sandbox, &agent, repo, "app", "kanbain/KAN-1-test")
+                .await
+                .unwrap()
+        );
+        assert_eq!(git(repo, &["log", "--format=%s", "-1"]), "terminal");
+        assert!(
+            !transfer::sync_branch_in(&sandbox, &agent, repo, "app", "kanbain/KAN-1-test")
+                .await
+                .unwrap()
+        );
+
+        // A process group started the way executors start theirs is killed
+        // as a whole, children included.
+        let mut client = tokio::process::Command::new("docker")
+            .args([
+                "exec", "-i", "-u", "node", &agent, "sh", "-c",
+                "mkdir -p /tmp/kanbain-exec && echo $$ > /tmp/kanbain-exec/t.pid && exec \"$0\" \"$@\"",
+                "sh", "-c", "sleep 300 & sleep 301",
+            ])
+            .spawn()
+            .unwrap();
+        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let (_, out) = sh(&sandbox, &agent, "pgrep -c -f '^sleep 30[01]$'").await;
+        assert_eq!(out.trim(), "2");
+        sandbox::kill_process_group(&sandbox, &agent, "/tmp/kanbain-exec/t.pid").await;
+        let (_, out) = sh(&sandbox, &agent, "pgrep -c -f '^sleep 30[01]$'").await;
+        assert_eq!(out.trim(), "0");
+        let _ = client.kill().await;
+
         // Context dir: root-owned files are read-only for the agent.
         sandbox
             .copy_in(

@@ -6,6 +6,7 @@
 
 pub mod docker;
 pub mod egress;
+pub mod forward;
 pub mod image;
 pub mod network;
 pub mod transfer;
@@ -192,4 +193,26 @@ pub async fn exec_ok(
         });
     }
     Ok(out)
+}
+
+/// Stop the process group whose leader's pid is in `pid_file`: TERM, then
+/// KILL after about three seconds. Runs as the agent user, because
+/// containers drop all capabilities and root may not signal its processes.
+pub async fn kill_process_group(sandbox: &dyn Sandbox, id: &str, pid_file: &str) {
+    let script = format!(
+        "pid=$(cat {pid_file} 2>/dev/null) || exit 0; \
+         kill -TERM -$pid 2>/dev/null; \
+         for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 -$pid 2>/dev/null || exit 0; sleep 0.3; done; \
+         kill -KILL -$pid 2>/dev/null; exit 0"
+    );
+    let _ = sandbox
+        .exec(
+            id,
+            &["sh", "-c", &script],
+            &ExecOptions {
+                user: Some(AGENT_USER.into()),
+                ..Default::default()
+            },
+        )
+        .await;
 }
