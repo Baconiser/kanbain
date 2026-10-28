@@ -16,6 +16,8 @@ members = [
     "crates/deployment",
     "crates/tauri-app",
     "crates/preview-proxy",
+    "crates/sandbox",
+    "crates/model-proxy",
 ]
 
 [workspace.dependencies]

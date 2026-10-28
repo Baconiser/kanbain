@@ -25,6 +25,7 @@ use crate::{
     model_selector::{AgentInfo, ModelInfo, ModelProvider, PermissionPolicy, ReasoningOption},
     profile::ExecutorConfig,
     stdout_dup::create_stdout_pipe_writer,
+    versions::{OPENCODE_PACKAGE, OPENCODE_VERSION},
 };
 
 mod models;
@@ -89,7 +90,7 @@ type ServerPassword = String;
 
 impl Opencode {
     fn build_command_builder(&self) -> Result<CommandBuilder, CommandBuildError> {
-        let builder = CommandBuilder::new("npx -y opencode-ai@1.4.7")
+        let builder = CommandBuilder::new(format!("npx -y {OPENCODE_PACKAGE}@{OPENCODE_VERSION}"))
             // Pass hostname/port as separate args so OpenCode treats them as explicitly set
             // (it checks `process.argv.includes(\"--port\")` / `\"--hostname\"`).
             .extend_params(["serve", "--hostname", "127.0.0.1", "--port", "0"]);

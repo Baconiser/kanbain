@@ -54,15 +54,16 @@ use crate::{
     model_selector::PermissionPolicy,
     profile::ExecutorConfig,
     stdout_dup::create_stdout_pipe_writer,
+    versions::{CLAUDE_CODE_PACKAGE, CLAUDE_CODE_VERSION},
 };
 
 const SUPPRESSED_STDERR_PATTERNS: &[&str] = &["[WARN] Fast mode requires the native binary"];
 
-fn base_command(claude_code_router: bool) -> &'static str {
+fn base_command(claude_code_router: bool) -> String {
     if claude_code_router {
-        "npx -y @musistudio/claude-code-router@1.0.66 code"
+        "npx -y @musistudio/claude-code-router@1.0.66 code".to_string()
     } else {
-        "npx -y @anthropic-ai/claude-code@2.1.119"
+        format!("npx -y {CLAUDE_CODE_PACKAGE}@{CLAUDE_CODE_VERSION}")
     }
 }
 
