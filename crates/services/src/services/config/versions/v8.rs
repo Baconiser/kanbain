@@ -76,6 +76,9 @@ pub struct Config {
     pub backup_keep: u32,
     #[serde(default)]
     pub sandbox: SandboxConfig,
+    /// Embedders, reranker and retrieval defaults (Settings → Search).
+    #[serde(default)]
+    pub search: embeddings::SearchConfig,
 }
 
 /// Docker sandbox settings for agent runs (D28, D35).
@@ -155,6 +158,7 @@ impl Config {
             host_nickname: None,
             backup_keep: default_backup_keep(),
             sandbox: SandboxConfig::default(),
+            search: embeddings::SearchConfig::default(),
         }
     }
 
@@ -216,6 +220,7 @@ impl Default for Config {
             host_nickname: None,
             backup_keep: default_backup_keep(),
             sandbox: SandboxConfig::default(),
+            search: embeddings::SearchConfig::default(),
         }
     }
 }

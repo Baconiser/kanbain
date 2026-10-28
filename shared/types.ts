@@ -153,6 +153,163 @@ job: AgentJob | null,
  */
 always_allow: boolean, };
 
+export type SearchConfig = { 
+/**
+ * Embedder for tickets, comments, attachments and runs. Without one,
+ * search uses keywords only.
+ */
+text: EmbedderConfig | null, 
+/**
+ * Embedder for code; `None` uses the text embedder (E8).
+ */
+code: EmbedderConfig | null, reranker: RerankerConfig | null, 
+/**
+ * Candidates taken from each of the vector and keyword searches.
+ */
+candidates: number, 
+/**
+ * Reciprocal rank fusion constant.
+ */
+rrf_k: number, 
+/**
+ * Hits returned when the request names no limit.
+ */
+limit: number, 
+/**
+ * Longest excerpt per hit, in characters (D43).
+ */
+excerpt_chars: number, };
+
+export type EmbedderConfig = { provider: EmbedderProvider, base_url: string, model: string, 
+/**
+ * Requested output dimension, for models with Matryoshka truncation.
+ */
+dimensions: number | null, 
+/**
+ * Prepended to queries, e.g. `search_query: ` for nomic-embed.
+ */
+query_prefix: string, 
+/**
+ * Prepended to documents, e.g. `search_document: `.
+ */
+document_prefix: string, batch_size: number, 
+/**
+ * Inputs are cut to about this many tokens.
+ */
+max_input_tokens: number, timeout_secs: number, };
+
+export type EmbedderProvider = "openai" | "tei";
+
+export type RerankerConfig = { provider: RerankerProvider, base_url: string, model: string, timeout_secs: number, };
+
+export type RerankerProvider = "tei" | "jina";
+
+export type ConnectionTest = { ok: boolean, model: string, 
+/**
+ * Vector dimension (embedders only).
+ */
+dimension: number | null, latency_ms: number, 
+/**
+ * The URL leaves this machine and its private networks (E9).
+ */
+remote: boolean, error: string | null, };
+
+export type SearchRequest = { query: string, project_id?: string, 
+/**
+ * Search every project (D47).
+ */
+all_projects?: boolean, 
+/**
+ * Adds that ticket's overlay (D45).
+ */
+issue_id?: string, 
+/**
+ * `ticket`, `comment`, `attachment`, `prior_work`, `run`, … (E21).
+ */
+kinds?: Array<string>, limit?: number, 
+/**
+ * Rerank with the configured reranker (Phase 3e).
+ */
+rerank?: boolean, 
+/**
+ * Leave out hits of this ticket (related tickets, duplicates).
+ */
+exclude_issue_id?: string, };
+
+export type SearchHit = { kind: string, score: number, 
+/**
+ * Rank in the vector and keyword candidate lists (1-based).
+ */
+vector_rank: number | null, keyword_rank: number | null, excerpt: string, project_id: string, issue_id: string | null, comment_id: string | null, attachment_id: string | null, execution_process_id: string | null, repo_id: string | null, path: string | null, start_line: number | null, end_line: number | null, symbol: string | null, };
+
+export type EmbeddingStatus = { 
+/**
+ * A text embedder is configured.
+ */
+enabled: boolean, spaces: Array<SpaceStatus>, jobs: JobCounts, chunks: number, sources: number, 
+/**
+ * The configured text embedder could not be probed.
+ */
+embedder_error: string | null, text_remote: boolean, };
+
+export type SpaceStatus = { space: Space, chunks: number, embedded: number, };
+
+export type ReindexRequest = { 
+/**
+ * Only this project's sources; all when absent.
+ */
+project_id?: string, 
+/**
+ * Drop the active text space's vectors and embed everything again.
+ */
+rebuild_vectors?: boolean, };
+
+export type Space = { id: number, purpose: string, provider: string, base_url: string, model: string, dimension: number, query_prefix: string, doc_prefix: string, config_hash: string, 
+/**
+ * `building`, `active` or `retired`.
+ */
+state: string, stale: boolean, last_error: string | null, created_at: string, activated_at: string | null, };
+
+export type JobCounts = { queued: number, running: number, failed: number, };
+
+export type TicketRef = { id: string, project_id: string, 
+/**
+ * e.g. `KAN-12`
+ */
+internal_id: string, external_id: string | null, title: string, status: string | null, status_kind: ProjectStatusKind | null, };
+
+export type SearchResults = { hits: Array<SearchHit>, 
+/**
+ * The tickets the hits belong to, by id.
+ */
+tickets: { [key in string]?: TicketRef }, semantic: boolean, notice: string | null, took_ms: number, };
+
+export type RelatedTicket = { ticket: TicketRef, score: number, kinds: Array<string>, excerpt: string, };
+
+export type ReindexResult = { 
+/**
+ * Tickets queued.
+ */
+queued: number, };
+
+export type SearchKeySlot = "text" | "code" | "reranker";
+
+export type TestEmbedderRequest = { config: EmbedderConfig, slot: SearchKeySlot, 
+/**
+ * A key typed but not saved yet; the stored one is used otherwise.
+ */
+api_key?: string, };
+
+export type TestRerankerRequest = { config: RerankerConfig, api_key?: string, };
+
+export type SearchKeys = { text: boolean, code: boolean, reranker: boolean, };
+
+export type SetSearchKey = { slot: SearchKeySlot, 
+/**
+ * `None` removes the key.
+ */
+key?: string, };
+
 export type StartIntake = { text: string, attachment_ids: Array<string>, };
 
 export type IntakeAttachment = { attachment: AttachmentResponse, 
@@ -608,7 +765,11 @@ export type Config = { config_version: string, theme: ThemeMode, executor_profil
 /**
  * Number of daily database backups to keep.
  */
-backup_keep: number, sandbox: SandboxConfig, };
+backup_keep: number, sandbox: SandboxConfig, 
+/**
+ * Embedders, reranker and retrieval defaults (Settings → Search).
+ */
+search: SearchConfig, };
 
 export type NotificationConfig = { sound_enabled: boolean, push_enabled: boolean, sound_file: SoundFile, };
 

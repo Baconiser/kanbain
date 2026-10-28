@@ -35,6 +35,7 @@ pub mod intake;
 pub mod jobs;
 pub mod pty;
 pub mod sandbox;
+pub mod search;
 
 #[derive(Clone)]
 pub struct LocalDeployment {
@@ -60,6 +61,7 @@ pub struct LocalDeployment {
     jobs: jobs::AgentJobs,
     intake: intake::IntakeService,
     history: history::HistoryService,
+    search: Option<embeddings::SearchService>,
 }
 
 #[async_trait]
@@ -211,6 +213,15 @@ impl Deployment for LocalDeployment {
         let history = history::HistoryService::new(db.clone(), jobs.clone());
         container.set_history(history.clone());
 
+        let search_config = config.read().await.search.clone();
+        let search = search::start_search(
+            &db,
+            search_config,
+            secrets.clone(),
+            events_msg_store.clone(),
+        )
+        .await;
+
         let events = EventService::new(db.clone(), events_msg_store, events_entry_count);
 
         let file_search_cache = Arc::new(FileSearchCache::new());
@@ -246,6 +257,7 @@ impl Deployment for LocalDeployment {
             jobs,
             intake,
             history,
+            search,
         };
 
         Ok(deployment)
@@ -339,6 +351,11 @@ impl LocalDeployment {
 
     pub fn history(&self) -> &history::HistoryService {
         &self.history
+    }
+
+    /// `None` when the search index could not be opened.
+    pub fn search(&self) -> Option<&embeddings::SearchService> {
+        self.search.as_ref()
     }
 
     pub fn trigger_pr_sync(&self) {

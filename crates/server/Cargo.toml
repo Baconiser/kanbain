@@ -15,6 +15,7 @@ local-deployment = { path = "../local-deployment" , version = "0.1.45" }
 utils = { path = "../utils" , version = "0.1.45" }
 git = { path = "../git" , version = "0.1.45" }
 git-host = { path = "../git-host" , version = "0.1.45" }
+embeddings = { path = "../embeddings", version = "0.1.45" }
 db = { path = "../db" , version = "0.1.45" }
 services = { path = "../services" , version = "0.1.45" }
 worktree-manager = { path = "../worktree-manager" , version = "0.1.45" }

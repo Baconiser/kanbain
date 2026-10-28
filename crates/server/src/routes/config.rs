@@ -139,6 +139,9 @@ async fn update_config(
             let mut config = deployment.config().write().await;
             *config = new_config.clone();
             drop(config);
+            if let Some(search) = deployment.search() {
+                search.set_config(new_config.search.clone()).await;
+            }
 
             ResponseJson(ApiResponse::success(new_config))
         }

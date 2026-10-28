@@ -18,6 +18,7 @@ members = [
     "crates/preview-proxy",
     "crates/sandbox",
     "crates/model-proxy",
+    "crates/embeddings",
 ]
 
 [workspace.dependencies]

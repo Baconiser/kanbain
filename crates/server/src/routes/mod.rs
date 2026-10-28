@@ -14,6 +14,7 @@ pub mod containers;
 pub mod events;
 pub mod execution_processes;
 pub mod export;
+pub mod file_search;
 pub mod filesystem;
 pub mod frontend;
 pub mod health;
@@ -45,6 +46,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(issues::router())
         .merge(intake::router())
         .merge(history::router())
+        .merge(search::router())
         .merge(export::router())
         .merge(filesystem::router())
         .merge(repo::router())
@@ -52,7 +54,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(events::router(&deployment))
         .merge(approvals::router())
         .merge(scratch::router(&deployment))
-        .merge(search::router(&deployment))
+        .merge(file_search::router(&deployment))
         .merge(preview::api_router())
         .merge(sessions::router(&deployment))
         .merge(terminal::router())

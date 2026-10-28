@@ -17,6 +17,7 @@ git = { path = "../git" , version = "0.1.45" }
 git-host = { path = "../git-host" , version = "0.1.45" }
 executors = { path = "../executors" , version = "0.1.45" }
 db = { path = "../db" , version = "0.1.45" }
+embeddings = { path = "../embeddings" , version = "0.1.45" }
 worktree-manager = { path = "../worktree-manager" , version = "0.1.45" }
 tokio = { workspace = true }
 tokio-util = { version = "0.7", features = ["io"] }
