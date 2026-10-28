@@ -23,6 +23,8 @@
         "agentsDesc": "Configuraciones de agentes",
         "sandbox": "Sandbox",
         "sandboxDesc": "Sandbox de Docker, claves de modelos y límites",
+        "search": "Búsqueda",
+        "searchDesc": "Embedders, reranker e índice de búsqueda",
         "mcp": "Servidores MCP",
         "mcpDesc": "Servidores de Protocolo de Contexto de Modelo (MCP)",
         "organizations": "Organization Settings",
@@ -630,6 +632,79 @@
         "submit": "Conectar",
         "exchanging": "Finalizando el inicio de sesión…",
         "costNote": "Los costes de las ejecuciones con suscripción son estimaciones equivalentes a la API, y los presupuestos se aplican a ellas."
+      }
+    },
+    "search": {
+      "text": {
+        "title": "Embedder de texto",
+        "description": "Genera embeddings de tickets, comentarios, adjuntos, trabajo previo y resúmenes de ejecuciones. Sin él, la búsqueda usa solo palabras clave.",
+        "enabled": "Usar un embedder"
+      },
+      "code": {
+        "title": "Embedder de código",
+        "description": "Genera embeddings del código (desde la fase 3d). Un modelo específico para código encuentra mejor el código.",
+        "sameAsText": "Usar el embedder de texto"
+      },
+      "reranker": {
+        "title": "Reranker",
+        "description": "Vuelve a puntuar los mejores candidatos con un cross-encoder. Si falla, se usa el orden normal.",
+        "enabled": "Usar un reranker",
+        "tei": "TEI (/rerank)",
+        "jina": "Compatible con Jina o Cohere (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "Compatible con OpenAI (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "URL base",
+        "baseUrlHelper": "En las API compatibles con OpenAI suele terminar en /v1.",
+        "model": "Modelo",
+        "prefixes": "Prefijos de consulta y documento",
+        "prefixesHelper": "Algunos modelos los esperan, p. ej. \"search_query: \" y \"search_document: \".",
+        "dimensions": "Dimensiones",
+        "dimensionsHelper": "Opcional; solo para modelos que pueden acortar sus vectores.",
+        "batchSize": "Tamaño de lote"
+      },
+      "apiKey": {
+        "label": "Clave de API",
+        "configured": "Hay una clave guardada cifrada.",
+        "missing": "No hay clave guardada; los servidores locales no suelen necesitarla.",
+        "placeholder": "Pega una clave",
+        "save": "Guardar clave",
+        "remove": "Quitar"
+      },
+      "test": {
+        "button": "Probar conexión",
+        "okEmbedder": "{{model}} · {{dimension}} dimensiones · {{ms}} ms",
+        "okReranker": "{{model}} respondió en {{ms}} ms"
+      },
+      "remote": {
+        "text": "El texto de los tickets se enviará a {{host}}.",
+        "code": "El código se enviará a {{host}}. Los proyectos nunca envían código a un embedder remoto salvo que lo permitan."
+      },
+      "retrieval": {
+        "title": "Recuperación",
+        "description": "Valores por defecto de cada búsqueda.",
+        "candidates": "Candidatos por búsqueda",
+        "rrfK": "k de RRF",
+        "limit": "Resultados",
+        "excerpt": "Longitud del extracto (caracteres)"
+      },
+      "index": {
+        "title": "Índice",
+        "description": "El índice está en embeddings.sqlite junto a la base de datos y se puede reconstruir en cualquier momento.",
+        "unavailable": "El índice de búsqueda no está disponible.",
+        "summary": "{{chunks}} fragmentos de {{sources}} fuentes · {{queued}} en cola · {{failed}} con error",
+        "noSpaces": "Aún no hay embeddings. La búsqueda usa palabras clave hasta que se configure un embedder.",
+        "space": "{{dimension}} dimensiones · {{state}} · {{embedded}} de {{chunks}} con embedding",
+        "state": {
+          "building": "en construcción",
+          "active": "activo",
+          "retired": "retirado"
+        },
+        "reindex": "Reindexar tickets",
+        "rebuild": "Reconstruir vectores",
+        "queued": "{{count}} tickets en cola"
       }
     },
     "agentLibrary": {

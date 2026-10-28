@@ -23,6 +23,8 @@
         "agentsDesc": "Configurations des agents de codage",
         "sandbox": "Sandbox",
         "sandboxDesc": "Sandbox Docker, clés de modèles et limites",
+        "search": "Recherche",
+        "searchDesc": "Embedders, reranker et index de recherche",
         "mcp": "Serveurs MCP",
         "mcpDesc": "Serveurs Model Context Protocol",
         "organizations": "Paramètres de l'organisation",
@@ -630,6 +632,79 @@
         "submit": "Connecter",
         "exchanging": "Finalisation de la connexion…",
         "costNote": "Les coûts des exécutions avec abonnement sont des estimations équivalentes à l'API, et les budgets s'y appliquent."
+      }
+    },
+    "search": {
+      "text": {
+        "title": "Embedder de texte",
+        "description": "Vectorise les tickets, commentaires, pièces jointes, travaux antérieurs et résumés d’exécution. Sans lui, la recherche n’utilise que les mots-clés.",
+        "enabled": "Utiliser un embedder"
+      },
+      "code": {
+        "title": "Embedder de code",
+        "description": "Vectorise le code (à partir de la phase 3d). Un modèle dédié au code trouve mieux le code.",
+        "sameAsText": "Utiliser l’embedder de texte"
+      },
+      "reranker": {
+        "title": "Reranker",
+        "description": "Réévalue les meilleurs candidats avec un cross-encoder. En cas d’échec, le classement normal est utilisé.",
+        "enabled": "Utiliser un reranker",
+        "tei": "TEI (/rerank)",
+        "jina": "Compatible Jina ou Cohere (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "Compatible OpenAI (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "URL de base",
+        "baseUrlHelper": "Pour les API compatibles OpenAI, elle se termine généralement par /v1.",
+        "model": "Modèle",
+        "prefixes": "Préfixes de requête et de document",
+        "prefixesHelper": "Certains modèles les attendent, p. ex. « search_query: » et « search_document: ».",
+        "dimensions": "Dimensions",
+        "dimensionsHelper": "Facultatif ; uniquement pour les modèles qui peuvent raccourcir leurs vecteurs.",
+        "batchSize": "Taille de lot"
+      },
+      "apiKey": {
+        "label": "Clé d’API",
+        "configured": "Une clé est enregistrée chiffrée.",
+        "missing": "Aucune clé enregistrée ; les serveurs locaux n’en ont généralement pas besoin.",
+        "placeholder": "Collez une clé",
+        "save": "Enregistrer la clé",
+        "remove": "Supprimer"
+      },
+      "test": {
+        "button": "Tester la connexion",
+        "okEmbedder": "{{model}} · {{dimension}} dimensions · {{ms}} ms",
+        "okReranker": "{{model}} a répondu en {{ms}} ms"
+      },
+      "remote": {
+        "text": "Le texte des tickets sera envoyé à {{host}}.",
+        "code": "Le code sera envoyé à {{host}}. Les projets n’envoient jamais de code à un embedder distant sans l’autoriser."
+      },
+      "retrieval": {
+        "title": "Recherche",
+        "description": "Valeurs par défaut de chaque recherche.",
+        "candidates": "Candidats par recherche",
+        "rrfK": "k de RRF",
+        "limit": "Résultats",
+        "excerpt": "Longueur de l’extrait (caractères)"
+      },
+      "index": {
+        "title": "Index",
+        "description": "L’index se trouve dans embeddings.sqlite à côté de la base de données et peut être reconstruit à tout moment.",
+        "unavailable": "L’index de recherche n’est pas disponible.",
+        "summary": "{{chunks}} fragments de {{sources}} sources · {{queued}} en attente · {{failed}} en échec",
+        "noSpaces": "Pas encore de vecteurs. La recherche utilise les mots-clés tant qu’aucun embedder n’est configuré.",
+        "space": "{{dimension}} dimensions · {{state}} · {{embedded}} sur {{chunks}} vectorisés",
+        "state": {
+          "building": "en construction",
+          "active": "actif",
+          "retired": "retiré"
+        },
+        "reindex": "Réindexer les tickets",
+        "rebuild": "Reconstruire les vecteurs",
+        "queued": "{{count}} tickets en attente"
       }
     },
     "agentLibrary": {

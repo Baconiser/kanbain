@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   GearSixIcon,
   KanbanIcon,
@@ -16,6 +16,7 @@ import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { TicketBoard } from './TicketBoard';
 import { TicketPanel } from './TicketPanel';
 import { ticketMatchesQuery } from './ticketIds';
+import { onOpenTicketRequest, takeOpenTicketRequest } from './openTicket';
 
 const PROJECT_STORAGE_KEY = 'kanbain.tickets.projectId';
 
@@ -45,6 +46,19 @@ export function TicketsPage() {
   const [query, setQuery] = useState('');
   const [showHidden, setShowHidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Tickets opened from search results elsewhere.
+  useEffect(() => {
+    const open = () => {
+      const request = takeOpenTicketRequest();
+      if (!request) return;
+      setProjectId(request.projectId);
+      storeProjectId(request.projectId);
+      setSelectedIssueId(request.issueId);
+    };
+    open();
+    return onOpenTicketRequest(open);
+  }, []);
 
   // Fall back to the first project when the stored one is gone. A project
   // created moments ago may not have arrived on the stream yet; keep the

@@ -9,6 +9,7 @@ import {
   TrashIcon,
   PlusIcon,
   GearIcon,
+  MagnifyingGlassIcon,
   ColumnsIcon,
   RowsIcon,
   TextAlignLeftIcon,
@@ -337,6 +338,19 @@ export const Actions = {
       await CreateWorkspaceFromPrDialog.show({});
     },
   } satisfies GlobalActionDefinition,
+
+  SearchTickets: {
+    id: 'search-tickets',
+    label: 'Search tickets and history',
+    icon: MagnifyingGlassIcon,
+    keywords: ['semantic', 'find', 'related', 'similar'],
+    requiresTarget: ActionTargetType.NONE,
+    execute: async () => {
+      const { TicketSearchDialog } =
+        await import('@/pages/tickets/TicketSearchDialog');
+      await TicketSearchDialog.show({});
+    },
+  },
 
   Settings: {
     id: 'settings',

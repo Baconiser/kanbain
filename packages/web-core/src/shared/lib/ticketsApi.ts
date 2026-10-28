@@ -1,5 +1,16 @@
 import type {
   AcceptIntake,
+  ConnectionTest,
+  EmbeddingStatus,
+  ReindexRequest,
+  ReindexResult,
+  RelatedTicket,
+  SearchKeys,
+  SearchRequest,
+  SearchResults,
+  SetSearchKey,
+  TestEmbedderRequest,
+  TestRerankerRequest,
   AttachmentResponse,
   AttachmentText,
   BulkUpdateIssueItem,
@@ -111,6 +122,25 @@ export const historyApi = {
     request<IssueHistoryView>(`/api/issues/${issueId}/history/deny`, 'POST'),
 };
 
+export const searchApi = {
+  search: (data: SearchRequest) =>
+    request<SearchResults>('/api/search', 'POST', data),
+  related: (issueId: string) =>
+    request<RelatedTicket[]>(`/api/issues/${issueId}/related`),
+  intakeDuplicates: (intakeId: string) =>
+    request<RelatedTicket[]>(`/api/intakes/${intakeId}/duplicates`),
+  status: () => request<EmbeddingStatus>('/api/embeddings/status'),
+  reindex: (data: ReindexRequest) =>
+    request<ReindexResult>('/api/embeddings/reindex', 'POST', data),
+  testEmbedder: (data: TestEmbedderRequest) =>
+    request<ConnectionTest>('/api/search/test-embedder', 'POST', data),
+  testReranker: (data: TestRerankerRequest) =>
+    request<ConnectionTest>('/api/search/test-reranker', 'POST', data),
+  keys: () => request<SearchKeys>('/api/search/keys'),
+  setKey: (data: SetSearchKey) =>
+    request<void>('/api/search/keys', 'PUT', data),
+};
+
 export const textDiff = (oldText: string, newText: string) =>
   request<TextDiffLine[]>('/api/text-diff', 'POST', {
     old: oldText,
@@ -118,6 +148,7 @@ export const textDiff = (oldText: string, newText: string) =>
   });
 
 export const issuesApi = {
+  get: (id: string) => request<Issue>(`/api/issues/${id}`),
   update: (id: string, data: UpdateIssue) =>
     request<Issue>(`/api/issues/${id}`, 'PUT', data),
   delete: (id: string) => request<void>(`/api/issues/${id}`, 'DELETE'),

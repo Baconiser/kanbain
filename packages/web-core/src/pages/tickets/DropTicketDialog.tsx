@@ -15,14 +15,16 @@ import {
 import type {
   EnhancedTicket,
   IntakeView,
+  RelatedTicket,
   Issue,
   IssueMode,
   IssuePriority,
 } from 'shared/types';
 import { attachmentsApi } from '@/shared/lib/api';
 import { defineModal, getErrorMessage } from '@/shared/lib/modals';
-import { intakeApi } from '@/shared/lib/ticketsApi';
+import { intakeApi, issuesApi, searchApi } from '@/shared/lib/ticketsApi';
 import { TextDiffView } from './TextDiffView';
+import { TicketResultLine } from './TicketSearchDialog';
 
 export interface DropTicketDialogProps {
   projectId: string;
@@ -108,6 +110,12 @@ const DropTicketDialogImpl = create<DropTicketDialogProps>(({ projectId }) => {
   const [view, setView] = useState<IntakeView | null>(null);
   const [form, setForm] = useState<TicketForm | null>(null);
   const [target, setTarget] = useState<'update' | 'create'>('update');
+  // Similar tickets from the search index (E23), and one picked to update.
+  const [duplicates, setDuplicates] = useState<RelatedTicket[]>([]);
+  const [duplicateTarget, setDuplicateTarget] = useState<{
+    issue: Issue;
+    internalId: string;
+  } | null>(null);
   const [openText, setOpenText] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -183,7 +191,40 @@ const DropTicketDialogImpl = create<DropTicketDialogProps>(({ projectId }) => {
   );
 
   const existing = view?.existing_issue ?? null;
-  const updating = !!existing && target === 'update';
+  const updateTarget =
+    duplicateTarget ??
+    (existing && target === 'update'
+      ? { issue: existing, internalId: view?.existing_internal_id ?? '' }
+      : null);
+  const updating = !!updateTarget;
+
+  // Possible duplicates once the agent is done.
+  useEffect(() => {
+    if (!intakeId || (status !== 'ready' && status !== 'failed')) return;
+    let cancelled = false;
+    searchApi
+      .intakeDuplicates(intakeId)
+      .then((found) => {
+        if (!cancelled) setDuplicates(found);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [intakeId, status]);
+
+  const pickDuplicate = async (related: RelatedTicket) => {
+    if (duplicateTarget?.issue.id === related.ticket.id) {
+      setDuplicateTarget(null);
+      return;
+    }
+    try {
+      const issue = await issuesApi.get(related.ticket.id);
+      setDuplicateTarget({ issue, internalId: related.ticket.internal_id });
+    } catch (err) {
+      setError(getErrorMessage(err) || 'Failed to load the ticket');
+    }
+  };
 
   const retry = async () => {
     if (!intakeId) return;
@@ -210,7 +251,7 @@ const DropTicketDialogImpl = create<DropTicketDialogProps>(({ projectId }) => {
         external_id: form.externalId.trim() || undefined,
         priority: form.priority || undefined,
         mode: form.mode,
-        update_issue_id: updating ? existing.id : undefined,
+        update_issue_id: updateTarget?.issue.id,
       });
       close(issue);
     } catch (err) {
@@ -520,9 +561,48 @@ const DropTicketDialogImpl = create<DropTicketDialogProps>(({ projectId }) => {
                         />
                         Create a new ticket
                       </label>
-                      {updating && (
+                      {updating && !duplicateTarget && (
                         <TextDiffView
                           oldText={existing.description ?? ''}
+                          newText={composed}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {duplicates.filter((d) => d.ticket.id !== existing?.id)
+                    .length > 0 && (
+                    <div
+                      className="flex flex-col gap-half rounded-sm border p-base text-sm"
+                      data-testid="possible-duplicates"
+                    >
+                      <p className="font-medium">Possible duplicates</p>
+                      {duplicates
+                        .filter((d) => d.ticket.id !== existing?.id)
+                        .map((d) => (
+                          <div
+                            key={d.ticket.id}
+                            className={
+                              duplicateTarget?.issue.id === d.ticket.id
+                                ? 'rounded-sm ring-1 ring-brand'
+                                : ''
+                            }
+                          >
+                            <TicketResultLine
+                              ticket={d.ticket}
+                              excerpt={d.excerpt}
+                              onOpen={() => void pickDuplicate(d)}
+                            />
+                          </div>
+                        ))}
+                      <p className="text-xs text-low">
+                        {duplicateTarget
+                          ? `This will add a new description version to ${duplicateTarget.internalId}. Click it again to create a new ticket instead.`
+                          : 'Click one to add this as a new version of it.'}
+                      </p>
+                      {duplicateTarget && (
+                        <TextDiffView
+                          oldText={duplicateTarget.issue.description ?? ''}
                           newText={composed}
                         />
                       )}
@@ -549,8 +629,8 @@ const DropTicketDialogImpl = create<DropTicketDialogProps>(({ projectId }) => {
               disabled={busy || !form}
               data-testid="intake-accept"
             >
-              {updating
-                ? `Update ${view.existing_internal_id}`
+              {updateTarget
+                ? `Update ${updateTarget.internalId}`
                 : 'Create ticket'}
             </Button>
           )}

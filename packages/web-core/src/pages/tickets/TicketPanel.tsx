@@ -34,6 +34,7 @@ import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketComments } from './TicketComments';
 import { TicketHistory } from './TicketHistory';
+import { TicketRelated } from './TicketRelated';
 import { TicketTimeline } from './TicketTimeline';
 import { internalTicketId, ticketDisplayId } from './ticketIds';
 
@@ -713,6 +714,12 @@ export function TicketPanel({
             </button>
           ))}
         </Section>
+
+        <TicketRelated
+          issueId={issue.id}
+          refreshKey={issue.updated_at}
+          onSelectIssue={onSelectIssue}
+        />
 
         <TicketHistory
           issueId={issue.id}

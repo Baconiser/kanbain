@@ -33,6 +33,11 @@ export const Pages: Record<StaticPageId, CommandBarPage> = {
       },
       {
         type: 'group',
+        label: 'Tickets',
+        items: [{ type: 'action', action: Actions.SearchTickets }],
+      },
+      {
+        type: 'group',
         label: 'General',
         items: [
           { type: 'action', action: Actions.WorkspacesGuide },

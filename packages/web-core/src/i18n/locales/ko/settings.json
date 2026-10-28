@@ -23,6 +23,8 @@
         "agentsDesc": "코딩 에이전트 구성",
         "sandbox": "샌드박스",
         "sandboxDesc": "Docker 샌드박스, 모델 키, 실행 제한",
+        "search": "검색",
+        "searchDesc": "임베더, 리랭커 및 검색 색인",
         "mcp": "MCP 서버",
         "mcpDesc": "Model Context Protocol 서버",
         "organizations": "Organization Settings",
@@ -630,6 +632,79 @@
         "submit": "연결",
         "exchanging": "로그인을 마무리하는 중…",
         "costNote": "구독으로 실행한 비용은 API 기준 추정치이며, 예산은 이 추정치에 적용됩니다."
+      }
+    },
+    "search": {
+      "text": {
+        "title": "텍스트 임베더",
+        "description": "티켓, 댓글, 첨부 파일, 이전 작업, 실행 요약을 임베딩합니다. 없으면 검색은 키워드만 사용합니다.",
+        "enabled": "임베더 사용"
+      },
+      "code": {
+        "title": "코드 임베더",
+        "description": "코드를 임베딩합니다(3d 단계부터). 코드 전용 모델이 코드를 더 잘 찾습니다.",
+        "sameAsText": "텍스트 임베더 사용"
+      },
+      "reranker": {
+        "title": "리랭커",
+        "description": "상위 후보를 크로스 인코더로 다시 점수화합니다. 실패하면 기본 순위를 사용합니다.",
+        "enabled": "리랭커 사용",
+        "tei": "TEI (/rerank)",
+        "jina": "Jina 또는 Cohere 호환 (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "OpenAI 호환 (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "기본 URL",
+        "baseUrlHelper": "OpenAI 호환 API는 보통 /v1로 끝납니다.",
+        "model": "모델",
+        "prefixes": "쿼리 및 문서 접두사",
+        "prefixesHelper": "일부 모델은 \"search_query: \", \"search_document: \" 같은 접두사를 요구합니다.",
+        "dimensions": "차원",
+        "dimensionsHelper": "선택 사항이며, 벡터를 줄일 수 있는 모델에만 해당합니다.",
+        "batchSize": "배치 크기"
+      },
+      "apiKey": {
+        "label": "API 키",
+        "configured": "키가 암호화되어 저장되어 있습니다.",
+        "missing": "저장된 키가 없습니다. 로컬 서버는 보통 필요하지 않습니다.",
+        "placeholder": "키 붙여넣기",
+        "save": "키 저장",
+        "remove": "제거"
+      },
+      "test": {
+        "button": "연결 테스트",
+        "okEmbedder": "{{model}} · {{dimension}}차원 · {{ms}} ms",
+        "okReranker": "{{model}}이(가) {{ms}} ms 만에 응답했습니다"
+      },
+      "remote": {
+        "text": "티켓 텍스트가 {{host}}(으)로 전송됩니다.",
+        "code": "코드가 {{host}}(으)로 전송됩니다. 프로젝트는 허용하지 않는 한 원격 임베더로 코드를 보내지 않습니다."
+      },
+      "retrieval": {
+        "title": "검색 기본값",
+        "description": "모든 검색의 기본값입니다.",
+        "candidates": "검색당 후보 수",
+        "rrfK": "RRF k",
+        "limit": "결과 수",
+        "excerpt": "발췌 길이(문자)"
+      },
+      "index": {
+        "title": "색인",
+        "description": "색인은 데이터베이스 옆의 embeddings.sqlite에 있으며 언제든지 다시 만들 수 있습니다.",
+        "unavailable": "검색 색인을 사용할 수 없습니다.",
+        "summary": "{{sources}}개 소스의 {{chunks}}개 청크 · 대기 {{queued}} · 실패 {{failed}}",
+        "noSpaces": "아직 임베딩이 없습니다. 임베더를 설정할 때까지 검색은 키워드를 사용합니다.",
+        "space": "{{dimension}}차원 · {{state}} · {{chunks}}개 중 {{embedded}}개 임베딩됨",
+        "state": {
+          "building": "구축 중",
+          "active": "활성",
+          "retired": "폐기됨"
+        },
+        "reindex": "티켓 다시 색인",
+        "rebuild": "벡터 다시 만들기",
+        "queued": "티켓 {{count}}개가 대기열에 추가됨"
       }
     },
     "agentLibrary": {

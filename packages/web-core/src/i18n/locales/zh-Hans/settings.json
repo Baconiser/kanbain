@@ -23,6 +23,8 @@
         "agentsDesc": "编码代理配置",
         "sandbox": "沙箱",
         "sandboxDesc": "Docker 沙箱、模型密钥和运行限制",
+        "search": "搜索",
+        "searchDesc": "嵌入模型、重排序模型和搜索索引",
         "mcp": "MCP 服务器",
         "mcpDesc": "模型上下文协议服务器",
         "organizations": "组织设置",
@@ -630,6 +632,79 @@
         "submit": "连接",
         "exchanging": "正在完成登录…",
         "costNote": "订阅运行显示的费用是按 API 价格估算的,预算按此估算执行。"
+      }
+    },
+    "search": {
+      "text": {
+        "title": "文本嵌入模型",
+        "description": "为工单、评论、附件、先前工作和运行摘要生成嵌入。未配置时，搜索仅使用关键词。",
+        "enabled": "使用嵌入模型"
+      },
+      "code": {
+        "title": "代码嵌入模型",
+        "description": "为代码生成嵌入(从 3d 阶段开始)。专用代码模型能更好地找到代码。",
+        "sameAsText": "使用文本嵌入模型"
+      },
+      "reranker": {
+        "title": "重排序模型",
+        "description": "用交叉编码器为前几名候选重新打分。失败时使用普通排序。",
+        "enabled": "使用重排序模型",
+        "tei": "TEI (/rerank)",
+        "jina": "兼容 Jina 或 Cohere (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "兼容 OpenAI (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "基础 URL",
+        "baseUrlHelper": "兼容 OpenAI 的 API 通常以 /v1 结尾。",
+        "model": "模型",
+        "prefixes": "查询和文档前缀",
+        "prefixesHelper": "某些模型需要前缀，例如 \"search_query: \" 和 \"search_document: \"。",
+        "dimensions": "维度",
+        "dimensionsHelper": "可选；仅适用于可以缩短向量的模型。",
+        "batchSize": "批大小"
+      },
+      "apiKey": {
+        "label": "API 密钥",
+        "configured": "已加密保存密钥。",
+        "missing": "未保存密钥；本地服务器通常不需要。",
+        "placeholder": "粘贴密钥",
+        "save": "保存密钥",
+        "remove": "移除"
+      },
+      "test": {
+        "button": "测试连接",
+        "okEmbedder": "{{model}} · {{dimension}} 维 · {{ms}} 毫秒",
+        "okReranker": "{{model}} 在 {{ms}} 毫秒内响应"
+      },
+      "remote": {
+        "text": "工单文本将发送到 {{host}}。",
+        "code": "代码将发送到 {{host}}。除非项目允许，否则不会把代码发送到远程嵌入模型。"
+      },
+      "retrieval": {
+        "title": "检索",
+        "description": "每次搜索的默认值。",
+        "candidates": "每次搜索的候选数",
+        "rrfK": "RRF k",
+        "limit": "结果数",
+        "excerpt": "摘录长度(字符)"
+      },
+      "index": {
+        "title": "索引",
+        "description": "索引位于数据库旁边的 embeddings.sqlite 中，可随时重建。",
+        "unavailable": "搜索索引不可用。",
+        "summary": "来自 {{sources}} 个来源的 {{chunks}} 个片段 · 排队 {{queued}} · 失败 {{failed}}",
+        "noSpaces": "还没有嵌入。在配置嵌入模型之前，搜索使用关键词。",
+        "space": "{{dimension}} 维 · {{state}} · 已嵌入 {{embedded}}/{{chunks}}",
+        "state": {
+          "building": "构建中",
+          "active": "活动",
+          "retired": "已停用"
+        },
+        "reindex": "重新索引工单",
+        "rebuild": "重建向量",
+        "queued": "已将 {{count}} 个工单加入队列"
       }
     },
     "agentLibrary": {

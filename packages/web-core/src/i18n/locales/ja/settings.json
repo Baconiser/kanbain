@@ -23,6 +23,8 @@
         "agentsDesc": "コーディングエージェントの設定",
         "sandbox": "サンドボックス",
         "sandboxDesc": "Docker サンドボックス、モデルキー、実行制限",
+        "search": "検索",
+        "searchDesc": "埋め込みモデル、リランカー、検索インデックス",
         "mcp": "MCPサーバー",
         "mcpDesc": "モデルコンテキストプロトコルサーバー",
         "organizations": "Organization Settings",
@@ -630,6 +632,79 @@
         "submit": "接続",
         "exchanging": "サインインを完了しています…",
         "costNote": "サブスクリプションでの実行のコストは API 換算の見積もりで、予算はこの見積もりに適用されます。"
+      }
+    },
+    "search": {
+      "text": {
+        "title": "テキスト埋め込みモデル",
+        "description": "チケット、コメント、添付ファイル、過去の作業、実行サマリーを埋め込みます。未設定の場合、検索はキーワードのみになります。",
+        "enabled": "埋め込みモデルを使う"
+      },
+      "code": {
+        "title": "コード埋め込みモデル",
+        "description": "コードを埋め込みます(フェーズ 3d 以降)。コード専用モデルの方がコードをよく見つけます。",
+        "sameAsText": "テキスト埋め込みモデルを使う"
+      },
+      "reranker": {
+        "title": "リランカー",
+        "description": "上位の候補をクロスエンコーダーで再スコアします。失敗した場合は通常の順位を使います。",
+        "enabled": "リランカーを使う",
+        "tei": "TEI (/rerank)",
+        "jina": "Jina / Cohere 互換 (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "OpenAI 互換 (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "ベース URL",
+        "baseUrlHelper": "OpenAI 互換 API では通常 /v1 で終わります。",
+        "model": "モデル",
+        "prefixes": "クエリとドキュメントの接頭辞",
+        "prefixesHelper": "一部のモデルは \"search_query: \" や \"search_document: \" などを必要とします。",
+        "dimensions": "次元数",
+        "dimensionsHelper": "任意。ベクトルを短縮できるモデルのみ。",
+        "batchSize": "バッチサイズ"
+      },
+      "apiKey": {
+        "label": "API キー",
+        "configured": "キーは暗号化して保存されています。",
+        "missing": "キーは保存されていません。ローカルサーバーでは通常不要です。",
+        "placeholder": "キーを貼り付け",
+        "save": "キーを保存",
+        "remove": "削除"
+      },
+      "test": {
+        "button": "接続をテスト",
+        "okEmbedder": "{{model}} · {{dimension}} 次元 · {{ms}} ms",
+        "okReranker": "{{model}} が {{ms}} ms で応答しました"
+      },
+      "remote": {
+        "text": "チケットのテキストが {{host}} に送信されます。",
+        "code": "コードが {{host}} に送信されます。プロジェクトは許可しない限りリモートの埋め込みモデルにコードを送りません。"
+      },
+      "retrieval": {
+        "title": "検索の既定値",
+        "description": "すべての検索の既定値です。",
+        "candidates": "検索ごとの候補数",
+        "rrfK": "RRF の k",
+        "limit": "結果数",
+        "excerpt": "抜粋の長さ(文字)"
+      },
+      "index": {
+        "title": "インデックス",
+        "description": "インデックスはデータベースの隣の embeddings.sqlite にあり、いつでも再構築できます。",
+        "unavailable": "検索インデックスを利用できません。",
+        "summary": "{{sources}} ソースから {{chunks}} チャンク · 待機 {{queued}} · 失敗 {{failed}}",
+        "noSpaces": "まだ埋め込みはありません。埋め込みモデルを設定するまで検索はキーワードを使います。",
+        "space": "{{dimension}} 次元 · {{state}} · {{chunks}} 中 {{embedded}} 件を埋め込み済み",
+        "state": {
+          "building": "構築中",
+          "active": "有効",
+          "retired": "廃止"
+        },
+        "reindex": "チケットを再インデックス",
+        "rebuild": "ベクトルを再構築",
+        "queued": "{{count}} 件のチケットを待機列に追加しました"
       }
     },
     "agentLibrary": {

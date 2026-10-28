@@ -1372,7 +1372,7 @@ export const searchApi = {
     const repoIdsParam = repoIds.join(',');
     const modeParam = mode ? `&mode=${encodeURIComponent(mode)}` : '';
     const response = await makeRequest(
-      `/api/search?q=${encodeURIComponent(query)}&repo_ids=${encodeURIComponent(repoIdsParam)}${modeParam}`,
+      `/api/file-search?q=${encodeURIComponent(query)}&repo_ids=${encodeURIComponent(repoIdsParam)}${modeParam}`,
       options
     );
     return handleApiResponse<SearchResult[]>(response);

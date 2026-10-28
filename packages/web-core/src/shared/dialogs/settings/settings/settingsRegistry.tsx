@@ -1,5 +1,6 @@
 import {
   GearIcon,
+  MagnifyingGlassIcon,
   GitBranchIcon,
   CpuIcon,
   PlugIcon,
@@ -11,15 +12,17 @@ import { ReposSettingsSection } from './ReposSettingsSection';
 import { AgentsSettingsSection } from './AgentsSettingsSection';
 import { McpSettingsSection } from './McpSettingsSection';
 import { SandboxSettingsSection } from './SandboxSettingsSection';
+import { SearchSettingsSection } from './SearchSettingsSection';
 
 export type SettingsSectionType =
-  'general' | 'repos' | 'agents' | 'sandbox' | 'mcp';
+  'general' | 'repos' | 'agents' | 'sandbox' | 'search' | 'mcp';
 
 export type SettingsSectionInitialState = {
   general: undefined;
   repos: { repoId?: string } | undefined;
   agents: undefined;
   sandbox: undefined;
+  search: undefined;
   mcp: undefined;
 };
 
@@ -33,6 +36,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'repos', icon: GitBranchIcon },
   { id: 'agents', icon: CpuIcon },
   { id: 'sandbox', icon: ShieldCheckIcon },
+  { id: 'search', icon: MagnifyingGlassIcon },
   { id: 'mcp', icon: PlugIcon },
 ];
 
@@ -54,6 +58,8 @@ export function renderSettingsSection(
       return <AgentsSettingsSection onClose={onClose} />;
     case 'sandbox':
       return <SandboxSettingsSection />;
+    case 'search':
+      return <SearchSettingsSection />;
     case 'mcp':
       return <McpSettingsSection />;
     default:

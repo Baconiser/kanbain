@@ -23,6 +23,8 @@ import type { RepoSelectionResult } from './selections/repoSelection';
 import { useCommandBarState } from './commandBar/useCommandBarState';
 import { useResolvedPage } from './commandBar/useResolvedPage';
 
+const SEARCH_TICKETS_ID = 'search-tickets';
+
 export interface CommandBarDialogProps {
   page?: PageId;
   workspaceId?: string;
@@ -83,6 +85,14 @@ function CommandBarContent({
 
       modal.hide();
 
+      // Semantic search starts from what was typed into the bar.
+      if (effect.action.id === SEARCH_TICKETS_ID) {
+        const { TicketSearchDialog } =
+          await import('@/pages/tickets/TicketSearchDialog');
+        void TicketSearchDialog.show({ query: state.search });
+        return;
+      }
+
       if (effect.action.requiresTarget === ActionTargetType.GIT) {
         // Resolve repoId: use initialRepoId, single repo, or show selection dialog
         let repoId: string | undefined = initialRepoId;
@@ -110,7 +120,15 @@ function CommandBarContent({
         executeAction(effect.action, effectiveWorkspaceId);
       }
     },
-    [dispatch, modal, executeAction, effectiveWorkspaceId, repos, initialRepoId]
+    [
+      dispatch,
+      modal,
+      executeAction,
+      effectiveWorkspaceId,
+      repos,
+      initialRepoId,
+      state.search,
+    ]
   );
 
   // Restore focus when dialog closes (unless another dialog has taken focus)
@@ -135,7 +153,12 @@ function CommandBarContent({
         canGoBack={canGoBack}
         onGoBack={() => dispatch({ type: 'GO_BACK' })}
         onSelect={handleSelect}
-        getLabel={(action) => getLabel(action, workspace, visibilityContext)}
+        getLabel={(action) =>
+          // Typing into the bar always offers a ticket search for it.
+          action.id === SEARCH_TICKETS_ID && state.search.trim()
+            ? `Search tickets for “${state.search.trim()}”`
+            : getLabel(action, workspace, visibilityContext)
+        }
         search={state.search}
         onSearchChange={(query) => dispatch({ type: 'SEARCH_CHANGE', query })}
         renderSpecialActionIcon={(iconName) =>

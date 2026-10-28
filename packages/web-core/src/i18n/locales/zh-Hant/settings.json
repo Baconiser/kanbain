@@ -23,6 +23,8 @@
         "agentsDesc": "編碼代理設定",
         "sandbox": "沙箱",
         "sandboxDesc": "Docker 沙箱、模型金鑰和執行限制",
+        "search": "搜尋",
+        "searchDesc": "嵌入模型、重排序模型與搜尋索引",
         "mcp": "MCP 伺服器",
         "mcpDesc": "模型上下文協議伺服器",
         "organizations": "組織設定",
@@ -630,6 +632,79 @@
         "submit": "連結",
         "exchanging": "正在完成登入…",
         "costNote": "訂閱執行顯示的費用是依 API 價格估算的,預算依此估算執行。"
+      }
+    },
+    "search": {
+      "text": {
+        "title": "文字嵌入模型",
+        "description": "為工單、留言、附件、先前工作與執行摘要產生嵌入。未設定時，搜尋只使用關鍵字。",
+        "enabled": "使用嵌入模型"
+      },
+      "code": {
+        "title": "程式碼嵌入模型",
+        "description": "為程式碼產生嵌入(從 3d 階段開始)。專用程式碼模型能更好地找到程式碼。",
+        "sameAsText": "使用文字嵌入模型"
+      },
+      "reranker": {
+        "title": "重排序模型",
+        "description": "用交叉編碼器為前幾名候選重新評分。失敗時使用一般排序。",
+        "enabled": "使用重排序模型",
+        "tei": "TEI (/rerank)",
+        "jina": "相容 Jina 或 Cohere (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "相容 OpenAI (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "基礎 URL",
+        "baseUrlHelper": "相容 OpenAI 的 API 通常以 /v1 結尾。",
+        "model": "模型",
+        "prefixes": "查詢與文件前綴",
+        "prefixesHelper": "某些模型需要前綴，例如 \"search_query: \" 與 \"search_document: \"。",
+        "dimensions": "維度",
+        "dimensionsHelper": "選填；僅適用於可以縮短向量的模型。",
+        "batchSize": "批次大小"
+      },
+      "apiKey": {
+        "label": "API 金鑰",
+        "configured": "已加密儲存金鑰。",
+        "missing": "未儲存金鑰；本機伺服器通常不需要。",
+        "placeholder": "貼上金鑰",
+        "save": "儲存金鑰",
+        "remove": "移除"
+      },
+      "test": {
+        "button": "測試連線",
+        "okEmbedder": "{{model}} · {{dimension}} 維 · {{ms}} 毫秒",
+        "okReranker": "{{model}} 在 {{ms}} 毫秒內回應"
+      },
+      "remote": {
+        "text": "工單文字將傳送到 {{host}}。",
+        "code": "程式碼將傳送到 {{host}}。除非專案允許，否則不會把程式碼傳送到遠端嵌入模型。"
+      },
+      "retrieval": {
+        "title": "檢索",
+        "description": "每次搜尋的預設值。",
+        "candidates": "每次搜尋的候選數",
+        "rrfK": "RRF k",
+        "limit": "結果數",
+        "excerpt": "摘錄長度(字元)"
+      },
+      "index": {
+        "title": "索引",
+        "description": "索引位於資料庫旁的 embeddings.sqlite，可隨時重建。",
+        "unavailable": "搜尋索引無法使用。",
+        "summary": "來自 {{sources}} 個來源的 {{chunks}} 個片段 · 佇列 {{queued}} · 失敗 {{failed}}",
+        "noSpaces": "尚無嵌入。在設定嵌入模型之前，搜尋使用關鍵字。",
+        "space": "{{dimension}} 維 · {{state}} · 已嵌入 {{embedded}}/{{chunks}}",
+        "state": {
+          "building": "建置中",
+          "active": "使用中",
+          "retired": "已停用"
+        },
+        "reindex": "重新索引工單",
+        "rebuild": "重建向量",
+        "queued": "已將 {{count}} 張工單加入佇列"
       }
     },
     "agentLibrary": {

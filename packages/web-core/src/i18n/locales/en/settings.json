@@ -27,6 +27,8 @@
         "agentsDesc": "Coding agent configurations",
         "sandbox": "Sandbox",
         "sandboxDesc": "Docker sandbox, model keys and run limits",
+        "search": "Search",
+        "searchDesc": "Embedders, reranker and the search index",
         "mcp": "MCP Servers",
         "mcpDesc": "Model Context Protocol servers",
         "organizations": "Organization Settings",
@@ -630,6 +632,79 @@
         "submit": "Connect",
         "exchanging": "Finishing the sign-in…",
         "costNote": "Costs shown for subscription runs are API-equivalent estimates, and budgets apply to them."
+      }
+    },
+    "search": {
+      "text": {
+        "title": "Text embedder",
+        "description": "Embeds tickets, comments, attachments, prior work and run summaries. Without one, search uses keywords only.",
+        "enabled": "Use an embedder"
+      },
+      "code": {
+        "title": "Code embedder",
+        "description": "Embeds code (from Phase 3d). A code-specific model can find code better.",
+        "sameAsText": "Use the text embedder"
+      },
+      "reranker": {
+        "title": "Reranker",
+        "description": "Rescores the top candidates with a cross-encoder. A failure falls back to the plain ranking.",
+        "enabled": "Use a reranker",
+        "tei": "TEI (/rerank)",
+        "jina": "Jina or Cohere compatible (/rerank)"
+      },
+      "embedder": {
+        "provider": "API",
+        "openai": "OpenAI-compatible (/embeddings)",
+        "tei": "Hugging Face TEI (/embed)",
+        "baseUrl": "Base URL",
+        "baseUrlHelper": "For OpenAI-compatible APIs this usually ends in /v1.",
+        "model": "Model",
+        "prefixes": "Query and document prefixes",
+        "prefixesHelper": "Some models expect them, e.g. \"search_query: \" and \"search_document: \".",
+        "dimensions": "Dimensions",
+        "dimensionsHelper": "Optional; only for models that can shorten their vectors.",
+        "batchSize": "Batch size"
+      },
+      "apiKey": {
+        "label": "API key",
+        "configured": "A key is stored encrypted.",
+        "missing": "No key stored; local servers usually need none.",
+        "placeholder": "Paste a key",
+        "save": "Save key",
+        "remove": "Remove"
+      },
+      "test": {
+        "button": "Test connection",
+        "okEmbedder": "{{model}} · {{dimension}} dimensions · {{ms}} ms",
+        "okReranker": "{{model}} answered in {{ms}} ms"
+      },
+      "remote": {
+        "text": "Ticket text will be sent to {{host}}.",
+        "code": "Code will be sent to {{host}}. Projects never send code to a remote embedder unless they allow it."
+      },
+      "retrieval": {
+        "title": "Retrieval",
+        "description": "Defaults for every search.",
+        "candidates": "Candidates per search",
+        "rrfK": "RRF k",
+        "limit": "Results",
+        "excerpt": "Excerpt length (characters)"
+      },
+      "index": {
+        "title": "Index",
+        "description": "The index lives in embeddings.sqlite next to the database and can be rebuilt at any time.",
+        "unavailable": "The search index is not available.",
+        "summary": "{{chunks}} chunks from {{sources}} sources · {{queued}} queued · {{failed}} failed",
+        "noSpaces": "No embeddings yet. Search uses keywords until an embedder is set up.",
+        "space": "{{dimension}} dimensions · {{state}} · {{embedded}} of {{chunks}} embedded",
+        "state": {
+          "building": "building",
+          "active": "active",
+          "retired": "retired"
+        },
+        "reindex": "Re-index tickets",
+        "rebuild": "Rebuild vectors",
+        "queued": "{{count}} tickets queued"
       }
     },
     "agentLibrary": {
