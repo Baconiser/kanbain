@@ -2,17 +2,24 @@
 //! import and export.
 
 use axum::{
-    Router,
+    Json, Router,
     body::Body,
     extract::{DefaultBodyLimit, Multipart, Path, Query, State},
     http::{StatusCode, header},
     response::{IntoResponse, Json as ResponseJson, Response},
     routing::{get, post},
 };
-use executors::adapters::{
-    AgentDefinition, AgentRole, AgentRuntime, Capability, RuntimeModelOption, StyleBlock,
-    definition::{DEFAULT_TEST_COMMANDS, validate_name},
-    suggested_models,
+use db::models::requests::{
+    CreateAndStartWorkspaceRequest, CreateAndStartWorkspaceResponse, WorkspaceRepoInput,
+};
+use deployment::Deployment;
+use executors::{
+    adapters::{
+        AgentDefinition, AgentRole, AgentRuntime, Capability, RuntimeModelOption, StyleBlock,
+        definition::{DEFAULT_TEST_COMMANDS, validate_name},
+        executor_for, suggested_models,
+    },
+    profile::ExecutorConfig,
 };
 use serde::{Deserialize, Serialize};
 use services::services::agent_library::{
@@ -21,7 +28,13 @@ use services::services::agent_library::{
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
-use crate::{DeploymentImpl, error::ApiError};
+use crate::{
+    DeploymentImpl, error::ApiError, routes::workspaces::create::create_and_start_workspace,
+};
+
+const DEFAULT_TEST_PROMPT: &str = "This is a KanbAIn test run in a scratch repository. \
+List the tools and skills you can use, then reply with one short paragraph about how you \
+would approach a task in your role. Do not change any files.";
 
 /// Choices the agent editor offers.
 #[derive(Debug, Serialize, TS)]
@@ -38,6 +51,14 @@ pub struct AgentLibraryMeta {
 pub struct CreateSkill {
     pub name: String,
     pub description: String,
+}
+
+#[derive(Debug, Default, Deserialize, TS)]
+pub struct AgentTestRun {
+    /// Defaults to a prompt asking the agent to describe its tools.
+    #[serde(default)]
+    #[ts(optional)]
+    pub prompt: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -107,6 +128,55 @@ async fn delete_agent(
 ) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
     deployment.agent_library().delete_agent(&name).await?;
     Ok(ResponseJson(ApiResponse::success(())))
+}
+
+/// Run the agent in a workspace on a scratch repository in the data folder,
+/// so prompts, tools and skills can be checked without touching a project.
+async fn test_run(
+    State(deployment): State<DeploymentImpl>,
+    Path(name): Path<String>,
+    Json(payload): Json<AgentTestRun>,
+) -> Result<ResponseJson<ApiResponse<CreateAndStartWorkspaceResponse>>, ApiError> {
+    let def = deployment.agent_library().get_agent(&name).await?;
+    let repo_dir = utils::assets::asset_dir()
+        .join("scratch")
+        .join("agent-test");
+    if !repo_dir.join(".git").exists() {
+        let git = deployment.git().clone();
+        let dir = repo_dir.clone();
+        tokio::task::spawn_blocking(move || git.initialize_repo_with_main_branch(&dir))
+            .await
+            .map_err(|e| ApiError::BadRequest(e.to_string()))??;
+    }
+    let repo = deployment
+        .repo()
+        .register(
+            &deployment.db().pool,
+            &repo_dir.to_string_lossy(),
+            Some("agent-test"),
+        )
+        .await?;
+    let prompt = payload
+        .prompt
+        .filter(|p| !p.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_TEST_PROMPT.to_string());
+    let mut executor_config = ExecutorConfig::new(executor_for(def.runtime));
+    executor_config.agent_definition = Some(def.name.clone());
+    create_and_start_workspace(
+        State(deployment),
+        Json(CreateAndStartWorkspaceRequest {
+            name: Some(format!("Test run: {}", def.name)),
+            repos: vec![WorkspaceRepoInput {
+                repo_id: repo.id,
+                target_branch: "main".to_string(),
+            }],
+            linked_issue: None,
+            executor_config,
+            prompt,
+            attachment_ids: None,
+        }),
+    )
+    .await
 }
 
 async fn list_styles(
@@ -314,6 +384,7 @@ pub(super) fn router() -> Router<DeploymentImpl> {
             "/agents/{name}",
             get(get_agent).put(update_agent).delete(delete_agent),
         )
+        .route("/agents/{name}/test-run", post(test_run))
         .route("/styles", get(list_styles).post(create_style))
         .route(
             "/styles/{name}",

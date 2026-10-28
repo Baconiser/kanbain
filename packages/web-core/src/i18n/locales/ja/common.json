@@ -41,10 +41,6 @@
     "retry": "Retry",
     "add": "追加"
   },
-  "form": {
-    "notSpecified": "指定なし",
-    "selectOption": "オプションを選択..."
-  },
   "conversation": {
     "deniedByUser": "{{toolName}} がユーザーによって拒否されました",
     "output": "出力",

@@ -453,7 +453,9 @@
       "modified": "수정됨",
       "deleted": "삭제됨",
       "renamed": "이름 변경됨"
-    }
+    },
+    "agentDefinitions": "에이전트 정의",
+    "noAgentDefinition": "에이전트 정의 없음"
   },
   "scriptFixer": {
     "setupScriptTitle": "설정 스크립트 수정",

@@ -453,7 +453,9 @@
       "modified": "変更済み",
       "deleted": "削除済み",
       "renamed": "名前変更済み"
-    }
+    },
+    "agentDefinitions": "エージェント定義",
+    "noAgentDefinition": "エージェント定義なし"
   },
   "scriptFixer": {
     "setupScriptTitle": "セットアップスクリプトを修正",

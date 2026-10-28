@@ -310,60 +310,7 @@
       }
     },
     "agents": {
-      "title": "编码代理配置",
-      "description": "使用不同的配置自定义编码代理的行为。",
-      "loading": "加载代理配置中...",
-      "selectAgent": "选择代理",
-      "save": {
-        "button": "保存代理配置",
-        "success": "✓ 执行器配置保存成功！",
-        "unsavedChanges": "• 您有未保存的更改"
-      },
-      "availability": {
-        "checking": "检查中...",
-        "checkingAvailability": "正在检查可用性...",
-        "available": "代理可用",
-        "notFoundSimple": "未找到代理",
-        "loginDetected": "检测到最近使用",
-        "loginDetectedTooltip": "找到此代理的最近身份验证凭据",
-        "installationFound": "检测到以前使用",
-        "installationFoundTooltip": "找到代理配置。您可能需要登录才能使用它。"
-      },
-      "editor": {
-        "formLabel": "编辑 JSON",
-        "agentLabel": "代理",
-        "agentPlaceholder": "选择执行器类型",
-        "configLabel": "配置",
-        "configPlaceholder": "选择配置",
-        "createNew": "新建...",
-        "deleteTitle": "无法删除最后一个配置",
-        "deleteButton": "删除 {{name}}",
-        "deleteText": "删除",
-        "makeDefault": "设为默认",
-        "isDefault": "默认",
-        "jsonLabel": "代理配置（JSON）",
-        "jsonPlaceholder": "加载配置文件中...",
-        "jsonLoading": "加载中...",
-        "pathLabel": "配置文件位置："
-      },
-      "errors": {
-        "deleteFailed": "删除配置失败。请重试。",
-        "saveFailed": "保存代理配置失败。请重试。",
-        "saveConfigFailed": "保存配置失败。请重试。",
-        "schemaNotFound": "未找到执行器类型 {{executor}} 的架构"
-      },
-      "tree": {
-        "search": "搜索配置...",
-        "expandAll": "全部展开",
-        "collapseAll": "全部折叠",
-        "noResults": "没有匹配的配置",
-        "noConfigs": "没有可用的配置",
-        "selectConfig": "从侧边栏选择一个配置来查看和编辑其设置。"
-      },
-      "deleteConfigDialog": {
-        "title": "删除配置？",
-        "description": "这将从 {{executorType}} 执行器中永久删除\"{{configName}}\"。此操作无法撤销。"
-      }
+      "selectAgent": "选择代理"
     },
     "mcp": {
       "title": "MCP 服务器配置",
@@ -666,6 +613,121 @@
         "memory": "每个容器的内存（MB）",
         "allowedDomains": "额外允许的主机",
         "allowedDomainsHelper": "每行一个，在软件包仓库之外额外允许。*.example.com 匹配子域名。"
+      },
+      "claudeAccount": {
+        "title": "Claude 账户",
+        "description": "使用你的 Claude 订阅代替 API 密钥。登录在一次性容器中进行;令牌加密保存,绝不会传入代理容器。",
+        "connect": "连接 Claude 账户",
+        "reconnect": "重新连接",
+        "connected": "已连接。运行将使用你的 Claude 账户而不是 API 密钥。",
+        "disconnect": "断开连接",
+        "starting": "正在开始登录…",
+        "openLink": "打开链接并登录,然后粘贴随后显示的代码。",
+        "signIn": "登录 Claude",
+        "copyLink": "复制链接",
+        "copied": "已复制",
+        "code": "代码",
+        "submit": "连接",
+        "exchanging": "正在完成登录…",
+        "costNote": "订阅运行显示的费用是按 API 价格估算的,预算按此估算执行。"
+      }
+    },
+    "agentLibrary": {
+      "nameHelper": "仅限小写字母、数字和连字符。",
+      "save": "保存",
+      "cancel": "取消",
+      "delete": "删除",
+      "usedBy": "使用者:{{names}}",
+      "unused": "未使用",
+      "library": {
+        "title": "导入和导出",
+        "description": "代理、样式块和技能保存在 KanbAIn 数据文件夹中,绝不写入你的仓库。可导入 zip、YAML 或 Markdown 文件,或技能文件夹;导出后即可分享。",
+        "importFiles": "导入文件",
+        "importFolder": "导入文件夹",
+        "exportAll": "全部导出",
+        "imported": "导入完成:已添加或更新 {{count}} 项。",
+        "replaced": "已替换:{{items}}"
+      },
+      "agents": {
+        "title": "代理定义",
+        "description": "与运行时无关的代理:角色提示词、样式块、技能和工具权限。同一个代理可在 Claude Code 或 OpenCode 上运行,且始终在沙箱中。",
+        "new": "新建代理",
+        "empty": "还没有代理。",
+        "brokenFile": "无法读取此代理的文件:{{error}}",
+        "export": "连同样式和技能导出此代理",
+        "name": "名称",
+        "descriptionLabel": "描述",
+        "role": "角色",
+        "runtime": "运行时",
+        "model": "模型",
+        "modelHelper": "opus、sonnet、haiku 或完整的模型 ID。在 OpenCode 中,openai/<模型> 使用兼容 OpenAI 的提供方。",
+        "rolePrompt": "角色提示词",
+        "rolePromptHelper": "追加到运行时的系统提示词中。任务本身作为第一条消息发送。",
+        "styles": "样式块",
+        "stylesHelper": "按你选择的顺序追加在角色提示词之后。",
+        "skills": "技能",
+        "skillsHelper": "以只读方式放入代理的容器。",
+        "capabilities": "权限",
+        "capabilitiesHelper": "代理可以使用的工具。",
+        "bashAllow": "允许的测试命令",
+        "bashAllowHelper": "每行一个 shell 模式,例如 cargo test*。留空则允许默认的测试运行器。",
+        "maxSteps": "最大步数",
+        "budget": "每次运行预算 (USD)",
+        "wallMinutes": "时间限制(分钟)",
+        "limitsHelper": "留空的字段使用沙箱默认值。预算由模型代理强制执行。",
+        "mcpServers": "MCP 服务器 (JSON)",
+        "mcpServersHelper": "可选,使用 Claude Code 的 mcpServers 格式。代理只能使用这里列出的服务器。",
+        "mcpInvalid": "MCP 服务器必须是 JSON 对象。",
+        "testRun": "试运行",
+        "saveBeforeTest": "请先保存更改再试运行。",
+        "deleteTitle": "删除代理?",
+        "deleteMessage": "删除代理 {{name}}?其文件将从数据文件夹中移除。"
+      },
+      "roles": {
+        "planner": "规划者",
+        "coder": "编码者",
+        "tester": "测试者",
+        "scribe": "记录员",
+        "intake": "接收",
+        "history": "历史"
+      },
+      "runtimes": {
+        "claude-code": "Claude Code",
+        "opencode": "OpenCode"
+      },
+      "capabilities": {
+        "read": "读取文件",
+        "edit": "编辑文件",
+        "bash": "任意 shell 命令",
+        "test": "仅测试命令",
+        "web": "网络访问"
+      },
+      "styles": {
+        "title": "样式块",
+        "description": "追加到代理系统提示词中的可复用文本。编辑样式块会更改所有使用它的代理。",
+        "new": "新建样式块",
+        "empty": "还没有样式块。",
+        "name": "名称",
+        "body": "文本",
+        "bodyHelperUsed": "更改将应用于 {{names}}。",
+        "deleteTitle": "删除样式块?",
+        "deleteMessage": "删除样式块 {{name}}?"
+      },
+      "skills": {
+        "title": "技能",
+        "description": "包含 SKILL.md 的技能文件夹,可供列出它们的代理使用。",
+        "new": "新建技能",
+        "empty": "还没有技能。",
+        "name": "名称",
+        "descriptionLabel": "描述",
+        "descriptionHelper": "告诉代理何时使用该技能。",
+        "create": "创建技能",
+        "files": "文件",
+        "deleteFile": "删除文件",
+        "deleteSkill": "删除技能",
+        "deleteTitle": "删除技能?",
+        "deleteMessage": "删除技能 {{name}} 及其所有文件?",
+        "fileCount": "文件:{{count}}"
       }
     }
   },

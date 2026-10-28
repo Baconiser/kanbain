@@ -194,7 +194,9 @@
     },
     "updatedTodos": "Updated Todos",
     "viewInChangesPanel": "View in changes panel",
-    "unableToRenderDiff": "Unable to render diff."
+    "unableToRenderDiff": "Unable to render diff.",
+    "agentDefinitions": "Agent definitions",
+    "noAgentDefinition": "No agent definition"
   },
   "attempt": {
     "actions": {

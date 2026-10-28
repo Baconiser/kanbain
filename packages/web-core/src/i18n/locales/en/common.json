@@ -22,10 +22,6 @@
     "retry": "Retry",
     "add": "Add"
   },
-  "form": {
-    "notSpecified": "Not specified",
-    "selectOption": "Select an option..."
-  },
   "states": {
     "loading": "Loading..."
   },

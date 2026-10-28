@@ -310,60 +310,7 @@
       }
     },
     "agents": {
-      "title": "Configurations des agents de codage",
-      "description": "Personnalisez le comportement des agents de codage avec différentes configurations.",
-      "loading": "Chargement des configurations d'agents...",
-      "selectAgent": "Sélectionner un agent",
-      "save": {
-        "button": "Enregistrer les configurations d'agents",
-        "success": "✓ Configurations d'exécuteurs enregistrées avec succès !",
-        "unsavedChanges": "• Vous avez des modifications non enregistrées"
-      },
-      "availability": {
-        "checking": "Vérification...",
-        "checkingAvailability": "Vérification de la disponibilité...",
-        "available": "Agent disponible",
-        "notFoundSimple": "Agent non trouvé",
-        "loginDetected": "Utilisation récente détectée",
-        "loginDetectedTooltip": "Identifiants d'authentification récents trouvés pour cet agent",
-        "installationFound": "Utilisation précédente détectée",
-        "installationFoundTooltip": "Configuration d'agent trouvée. Vous devrez peut-être vous connecter pour l'utiliser."
-      },
-      "editor": {
-        "formLabel": "Modifier le JSON",
-        "agentLabel": "Agent",
-        "agentPlaceholder": "Sélectionner le type d'exécuteur",
-        "configLabel": "Configuration",
-        "configPlaceholder": "Sélectionner une configuration",
-        "createNew": "Créer une nouvelle...",
-        "deleteTitle": "Impossible de supprimer la dernière configuration",
-        "deleteButton": "Supprimer {{name}}",
-        "deleteText": "Supprimer",
-        "makeDefault": "Définir par défaut",
-        "isDefault": "Par défaut",
-        "jsonLabel": "Configuration de l'agent (JSON)",
-        "jsonPlaceholder": "Chargement des profils...",
-        "jsonLoading": "Chargement...",
-        "pathLabel": "Emplacement du fichier de configuration :"
-      },
-      "errors": {
-        "deleteFailed": "Échec de la suppression de la configuration. Veuillez réessayer.",
-        "saveFailed": "Échec de l'enregistrement des configurations d'agents. Veuillez réessayer.",
-        "saveConfigFailed": "Échec de l'enregistrement de la configuration. Veuillez réessayer.",
-        "schemaNotFound": "Schéma non trouvé pour le type d'exécuteur : {{executor}}"
-      },
-      "tree": {
-        "search": "Rechercher des configurations...",
-        "expandAll": "Tout développer",
-        "collapseAll": "Tout réduire",
-        "noResults": "Aucune configuration correspondante",
-        "noConfigs": "Aucune configuration disponible",
-        "selectConfig": "Sélectionnez une configuration dans la barre latérale pour afficher et modifier ses paramètres."
-      },
-      "deleteConfigDialog": {
-        "title": "Supprimer la configuration ?",
-        "description": "Cela supprimera définitivement \"{{configName}}\" de l'exécuteur {{executorType}}. Cette action est irréversible."
-      }
+      "selectAgent": "Sélectionner un agent"
     },
     "mcp": {
       "title": "Configuration des serveurs MCP",
@@ -666,6 +613,121 @@
         "memory": "Mémoire par conteneur (Mo)",
         "allowedDomains": "Hôtes autorisés supplémentaires",
         "allowedDomainsHelper": "Un par ligne, en plus des registres de paquets. *.example.com inclut les sous-domaines."
+      },
+      "claudeAccount": {
+        "title": "Compte Claude",
+        "description": "Utilisez votre abonnement Claude au lieu d'une clé d'API. La connexion se fait dans un conteneur jetable ; le jeton est stocké chiffré et n'atteint jamais les conteneurs des agents.",
+        "connect": "Connecter un compte Claude",
+        "reconnect": "Reconnecter",
+        "connected": "Connecté. Les exécutions utilisent votre compte Claude au lieu de la clé d'API.",
+        "disconnect": "Déconnecter",
+        "starting": "Démarrage de la connexion…",
+        "openLink": "Ouvrez le lien, connectez-vous, puis collez le code affiché ensuite.",
+        "signIn": "Se connecter à Claude",
+        "copyLink": "Copier le lien",
+        "copied": "Copié",
+        "code": "Code",
+        "submit": "Connecter",
+        "exchanging": "Finalisation de la connexion…",
+        "costNote": "Les coûts des exécutions avec abonnement sont des estimations équivalentes à l'API, et les budgets s'y appliquent."
+      }
+    },
+    "agentLibrary": {
+      "nameHelper": "Lettres minuscules, chiffres et tirets.",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "delete": "Supprimer",
+      "usedBy": "Utilisé par {{names}}",
+      "unused": "Non utilisé",
+      "library": {
+        "title": "Importer et exporter",
+        "description": "Les agents, blocs de style et skills sont stockés dans le dossier de données de KanbAIn, jamais dans vos dépôts. Importez un zip, des fichiers YAML ou Markdown, ou un dossier de skill ; exportez-les pour les partager.",
+        "importFiles": "Importer des fichiers",
+        "importFolder": "Importer un dossier",
+        "exportAll": "Tout exporter",
+        "imported": "Import terminé : {{count}} ajoutés ou mis à jour.",
+        "replaced": "Remplacés : {{items}}"
+      },
+      "agents": {
+        "title": "Définitions d'agents",
+        "description": "Des agents indépendants du runtime : un prompt de rôle, des blocs de style, des skills et des capacités d'outils. Le même agent tourne sur Claude Code ou OpenCode, toujours dans le sandbox.",
+        "new": "Nouvel agent",
+        "empty": "Aucun agent pour l'instant.",
+        "brokenFile": "Le fichier de cet agent est illisible : {{error}}",
+        "export": "Exporter cet agent avec ses styles et skills",
+        "name": "Nom",
+        "descriptionLabel": "Description",
+        "role": "Rôle",
+        "runtime": "Runtime",
+        "model": "Modèle",
+        "modelHelper": "opus, sonnet, haiku ou un identifiant de modèle complet. Sur OpenCode, openai/<modèle> utilise le fournisseur compatible OpenAI.",
+        "rolePrompt": "Prompt de rôle",
+        "rolePromptHelper": "Ajouté au prompt système du runtime. La tâche est envoyée comme premier message.",
+        "styles": "Blocs de style",
+        "stylesHelper": "Ajoutés après le prompt de rôle, dans l'ordre choisi.",
+        "skills": "Skills",
+        "skillsHelper": "Placés en lecture seule dans le conteneur de l'agent.",
+        "capabilities": "Capacités",
+        "capabilitiesHelper": "Les outils que l'agent peut utiliser.",
+        "bashAllow": "Commandes de test autorisées",
+        "bashAllowHelper": "Un motif shell par ligne, par exemple cargo test*. Laissez vide pour les lanceurs de tests par défaut.",
+        "maxSteps": "Étapes max.",
+        "budget": "Budget par exécution (USD)",
+        "wallMinutes": "Limite de temps (minutes)",
+        "limitsHelper": "Les champs vides reprennent les valeurs par défaut du sandbox. Le proxy de modèles applique le budget.",
+        "mcpServers": "Serveurs MCP (JSON)",
+        "mcpServersHelper": "Facultatif, au format mcpServers de Claude Code. Seuls ces serveurs sont disponibles pour l'agent.",
+        "mcpInvalid": "Les serveurs MCP doivent être un objet JSON.",
+        "testRun": "Exécution de test",
+        "saveBeforeTest": "Enregistrez vos modifications pour lancer un test.",
+        "deleteTitle": "Supprimer l'agent ?",
+        "deleteMessage": "Supprimer l'agent {{name}} ? Son fichier est retiré du dossier de données."
+      },
+      "roles": {
+        "planner": "Planificateur",
+        "coder": "Développeur",
+        "tester": "Testeur",
+        "scribe": "Scribe",
+        "intake": "Réception",
+        "history": "Historique"
+      },
+      "runtimes": {
+        "claude-code": "Claude Code",
+        "opencode": "OpenCode"
+      },
+      "capabilities": {
+        "read": "Lire des fichiers",
+        "edit": "Modifier des fichiers",
+        "bash": "Toute commande shell",
+        "test": "Commandes de test uniquement",
+        "web": "Accès web"
+      },
+      "styles": {
+        "title": "Blocs de style",
+        "description": "Texte réutilisable ajouté aux prompts système des agents. Modifier un bloc change tous les agents qui l'utilisent.",
+        "new": "Nouveau bloc de style",
+        "empty": "Aucun bloc de style pour l'instant.",
+        "name": "Nom",
+        "body": "Texte",
+        "bodyHelperUsed": "Les modifications s'appliquent à {{names}}.",
+        "deleteTitle": "Supprimer le bloc de style ?",
+        "deleteMessage": "Supprimer le bloc de style {{name}} ?"
+      },
+      "skills": {
+        "title": "Skills",
+        "description": "Des dossiers de skill avec un SKILL.md, disponibles pour les agents qui les listent.",
+        "new": "Nouveau skill",
+        "empty": "Aucun skill pour l'instant.",
+        "name": "Nom",
+        "descriptionLabel": "Description",
+        "descriptionHelper": "Indique à l'agent quand utiliser le skill.",
+        "create": "Créer le skill",
+        "files": "Fichiers",
+        "deleteFile": "Supprimer le fichier",
+        "deleteSkill": "Supprimer le skill",
+        "deleteTitle": "Supprimer le skill ?",
+        "deleteMessage": "Supprimer le skill {{name}} et tous ses fichiers ?",
+        "fileCount": "Fichiers : {{count}}"
       }
     }
   },

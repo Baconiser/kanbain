@@ -453,7 +453,9 @@
       "modified": "已修改",
       "deleted": "已刪除",
       "renamed": "已重新命名"
-    }
+    },
+    "agentDefinitions": "代理定義",
+    "noAgentDefinition": "無代理定義"
   },
   "scriptFixer": {
     "setupScriptTitle": "修復設定腳本",

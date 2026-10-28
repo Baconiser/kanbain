@@ -310,60 +310,7 @@
       }
     },
     "agents": {
-      "title": "編碼代理設定",
-      "description": "使用不同設定自訂編碼代理的行為。",
-      "loading": "載入代理設定中...",
-      "selectAgent": "選擇代理",
-      "save": {
-        "button": "儲存代理設定",
-        "success": "✓ 執行器設定儲存成功！",
-        "unsavedChanges": "• 您有未儲存的變更"
-      },
-      "availability": {
-        "checking": "檢查中...",
-        "checkingAvailability": "正在檢查可用性...",
-        "available": "代理可用",
-        "notFoundSimple": "找不到代理",
-        "loginDetected": "偵測到最近使用",
-        "loginDetectedTooltip": "找到此代理的最近驗證憑證",
-        "installationFound": "偵測到曾使用",
-        "installationFoundTooltip": "找到代理設定。您可能需要登入才能使用。"
-      },
-      "editor": {
-        "formLabel": "編輯 JSON",
-        "agentLabel": "代理",
-        "agentPlaceholder": "選擇執行器類型",
-        "configLabel": "設定",
-        "configPlaceholder": "選擇設定",
-        "createNew": "新建...",
-        "deleteTitle": "無法刪除最後一個設定",
-        "deleteButton": "刪除 {{name}}",
-        "deleteText": "刪除",
-        "makeDefault": "設為預設",
-        "isDefault": "預設",
-        "jsonLabel": "代理設定（JSON）",
-        "jsonPlaceholder": "載入設定檔中...",
-        "jsonLoading": "載入中...",
-        "pathLabel": "設定檔位置："
-      },
-      "errors": {
-        "deleteFailed": "刪除設定失敗。請重試。",
-        "saveFailed": "儲存代理設定失敗。請重試。",
-        "saveConfigFailed": "儲存設定失敗。請重試。",
-        "schemaNotFound": "找不到執行器類型 {{executor}} 的結構描述"
-      },
-      "tree": {
-        "search": "搜尋設定...",
-        "expandAll": "全部展開",
-        "collapseAll": "全部收合",
-        "noResults": "沒有符合的設定",
-        "noConfigs": "沒有可用的設定",
-        "selectConfig": "從側邊欄選擇一個設定來查看和編輯其設定。"
-      },
-      "deleteConfigDialog": {
-        "title": "刪除設定？",
-        "description": "這將從 {{executorType}} 執行器中永久刪除「{{configName}}」。此操作無法復原。"
-      }
+      "selectAgent": "選擇代理"
     },
     "mcp": {
       "title": "MCP 伺服器設定",
@@ -666,6 +613,121 @@
         "memory": "每個容器的記憶體（MB）",
         "allowedDomains": "額外允許的主機",
         "allowedDomainsHelper": "每行一個，在套件登錄庫之外額外允許。*.example.com 符合子網域。"
+      },
+      "claudeAccount": {
+        "title": "Claude 帳戶",
+        "description": "使用你的 Claude 訂閱代替 API 金鑰。登入在一次性容器中進行;權杖加密儲存,絕不會傳入代理容器。",
+        "connect": "連結 Claude 帳戶",
+        "reconnect": "重新連結",
+        "connected": "已連結。執行將使用你的 Claude 帳戶而非 API 金鑰。",
+        "disconnect": "中斷連結",
+        "starting": "正在開始登入…",
+        "openLink": "開啟連結並登入,然後貼上隨後顯示的代碼。",
+        "signIn": "登入 Claude",
+        "copyLink": "複製連結",
+        "copied": "已複製",
+        "code": "代碼",
+        "submit": "連結",
+        "exchanging": "正在完成登入…",
+        "costNote": "訂閱執行顯示的費用是依 API 價格估算的,預算依此估算執行。"
+      }
+    },
+    "agentLibrary": {
+      "nameHelper": "僅限小寫字母、數字和連字號。",
+      "save": "儲存",
+      "cancel": "取消",
+      "delete": "刪除",
+      "usedBy": "使用者:{{names}}",
+      "unused": "未使用",
+      "library": {
+        "title": "匯入與匯出",
+        "description": "代理、樣式區塊和技能儲存在 KanbAIn 資料資料夾中,絕不寫入你的儲存庫。可匯入 zip、YAML 或 Markdown 檔案,或技能資料夾;匯出後即可分享。",
+        "importFiles": "匯入檔案",
+        "importFolder": "匯入資料夾",
+        "exportAll": "全部匯出",
+        "imported": "匯入完成:已新增或更新 {{count}} 項。",
+        "replaced": "已取代:{{items}}"
+      },
+      "agents": {
+        "title": "代理定義",
+        "description": "與執行環境無關的代理:角色提示詞、樣式區塊、技能和工具權限。同一個代理可在 Claude Code 或 OpenCode 上執行,且一律在沙箱中。",
+        "new": "新增代理",
+        "empty": "尚無代理。",
+        "brokenFile": "無法讀取此代理的檔案:{{error}}",
+        "export": "連同樣式和技能匯出此代理",
+        "name": "名稱",
+        "descriptionLabel": "描述",
+        "role": "角色",
+        "runtime": "執行環境",
+        "model": "模型",
+        "modelHelper": "opus、sonnet、haiku 或完整的模型 ID。在 OpenCode 中,openai/<模型> 會使用相容 OpenAI 的提供者。",
+        "rolePrompt": "角色提示詞",
+        "rolePromptHelper": "附加到執行環境的系統提示詞。任務本身會作為第一則訊息傳送。",
+        "styles": "樣式區塊",
+        "stylesHelper": "依你選擇的順序附加在角色提示詞之後。",
+        "skills": "技能",
+        "skillsHelper": "以唯讀方式放入代理的容器。",
+        "capabilities": "權限",
+        "capabilitiesHelper": "代理可以使用的工具。",
+        "bashAllow": "允許的測試指令",
+        "bashAllowHelper": "每行一個 shell 樣式,例如 cargo test*。留空則允許預設的測試執行器。",
+        "maxSteps": "最大步數",
+        "budget": "每次執行預算 (USD)",
+        "wallMinutes": "時間限制(分鐘)",
+        "limitsHelper": "留空的欄位使用沙箱預設值。預算由模型代理伺服器強制執行。",
+        "mcpServers": "MCP 伺服器 (JSON)",
+        "mcpServersHelper": "選填,使用 Claude Code 的 mcpServers 格式。代理只能使用這裡列出的伺服器。",
+        "mcpInvalid": "MCP 伺服器必須是 JSON 物件。",
+        "testRun": "試執行",
+        "saveBeforeTest": "請先儲存變更再試執行。",
+        "deleteTitle": "刪除代理?",
+        "deleteMessage": "刪除代理 {{name}}?其檔案將從資料資料夾中移除。"
+      },
+      "roles": {
+        "planner": "規劃者",
+        "coder": "開發者",
+        "tester": "測試者",
+        "scribe": "記錄員",
+        "intake": "受理",
+        "history": "歷史"
+      },
+      "runtimes": {
+        "claude-code": "Claude Code",
+        "opencode": "OpenCode"
+      },
+      "capabilities": {
+        "read": "讀取檔案",
+        "edit": "編輯檔案",
+        "bash": "任意 shell 指令",
+        "test": "僅測試指令",
+        "web": "網路存取"
+      },
+      "styles": {
+        "title": "樣式區塊",
+        "description": "附加到代理系統提示詞中的可重複使用文字。編輯樣式區塊會變更所有使用它的代理。",
+        "new": "新增樣式區塊",
+        "empty": "尚無樣式區塊。",
+        "name": "名稱",
+        "body": "文字",
+        "bodyHelperUsed": "變更將套用到 {{names}}。",
+        "deleteTitle": "刪除樣式區塊?",
+        "deleteMessage": "刪除樣式區塊 {{name}}?"
+      },
+      "skills": {
+        "title": "技能",
+        "description": "包含 SKILL.md 的技能資料夾,可供列出它們的代理使用。",
+        "new": "新增技能",
+        "empty": "尚無技能。",
+        "name": "名稱",
+        "descriptionLabel": "描述",
+        "descriptionHelper": "告訴代理何時使用該技能。",
+        "create": "建立技能",
+        "files": "檔案",
+        "deleteFile": "刪除檔案",
+        "deleteSkill": "刪除技能",
+        "deleteTitle": "刪除技能?",
+        "deleteMessage": "刪除技能 {{name}} 及其所有檔案?",
+        "fileCount": "檔案:{{count}}"
       }
     }
   },

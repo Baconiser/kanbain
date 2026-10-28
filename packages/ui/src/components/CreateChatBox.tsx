@@ -29,6 +29,19 @@ export interface ExecutorProps<TExecutor extends string = string> {
   onChange: (executor: TExecutor) => void;
 }
 
+export interface AgentDefinitionOption {
+  name: string;
+  /** Runtime and model, shown next to the name. */
+  detail: string;
+}
+
+/** KanbAIn agent definitions; picking one decides executor and model. */
+export interface AgentDefinitionProps {
+  selected: string | null;
+  options: AgentDefinitionOption[];
+  onChange: (name: string | null) => void;
+}
+
 export interface SaveAsDefaultProps {
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -63,6 +76,7 @@ interface CreateChatBoxProps<TExecutor extends string = string> {
   isSending: boolean;
   disabled?: boolean;
   executor: ExecutorProps<TExecutor>;
+  agentDefinition?: AgentDefinitionProps;
   formatExecutorLabel?: (executor: TExecutor) => string;
   emptyExecutorLabel?: string;
   saveAsDefault?: SaveAsDefaultProps;
@@ -98,6 +112,7 @@ export function CreateChatBox<TExecutor extends string = string>({
   isSending,
   disabled = false,
   executor,
+  agentDefinition,
   formatExecutorLabel = defaultExecutorLabel,
   emptyExecutorLabel = 'Select Executor',
   saveAsDefault,
@@ -174,6 +189,39 @@ export function CreateChatBox<TExecutor extends string = string>({
               </DropdownMenuItem>
             ))}
           </ToolbarDropdown>
+          {agentDefinition && agentDefinition.options.length > 0 && (
+            <ToolbarDropdown
+              label={
+                agentDefinition.selected ??
+                t('tasks:conversation.noAgentDefinition')
+              }
+              disabled={isDisabled}
+            >
+              <DropdownMenuLabel>
+                {t('tasks:conversation.agentDefinitions')}
+              </DropdownMenuLabel>
+              <DropdownMenuItem
+                icon={agentDefinition.selected === null ? CheckIcon : undefined}
+                onClick={() => agentDefinition.onChange(null)}
+              >
+                {t('tasks:conversation.noAgentDefinition')}
+              </DropdownMenuItem>
+              {agentDefinition.options.map((option) => (
+                <DropdownMenuItem
+                  key={option.name}
+                  icon={
+                    agentDefinition.selected === option.name
+                      ? CheckIcon
+                      : undefined
+                  }
+                  onClick={() => agentDefinition.onChange(option.name)}
+                >
+                  <span className="font-mono">{option.name}</span>
+                  <span className="ml-half text-low">{option.detail}</span>
+                </DropdownMenuItem>
+              ))}
+            </ToolbarDropdown>
+          )}
           {saveAsDefault?.visible && (
             <label className="flex items-center gap-1.5 text-sm text-low cursor-pointer ml-2">
               <Checkbox

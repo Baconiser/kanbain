@@ -194,7 +194,9 @@
     },
     "updatedTodos": "À faire mis à jour",
     "viewInChangesPanel": "Voir dans le panneau des modifications",
-    "unableToRenderDiff": "Impossible d'afficher le diff."
+    "unableToRenderDiff": "Impossible d'afficher le diff.",
+    "agentDefinitions": "Définitions d'agents",
+    "noAgentDefinition": "Aucune définition d'agent"
   },
   "attempt": {
     "actions": {

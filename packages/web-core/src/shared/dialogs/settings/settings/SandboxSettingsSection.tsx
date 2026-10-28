@@ -20,6 +20,7 @@ import {
   SettingsTextarea,
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
+import { ClaudeAccountCard } from './ClaudeAccountCard';
 
 function parseNumber(value: string): number | null {
   const n = Number.parseFloat(value);
@@ -246,6 +247,8 @@ export function SandboxSettingsSection() {
           configured={status?.openai_key_configured ?? false}
         />
       </SettingsCard>
+
+      <ClaudeAccountCard />
 
       <SettingsCard
         title={t('settings.sandbox.limits.title')}

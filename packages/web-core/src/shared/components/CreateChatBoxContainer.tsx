@@ -8,17 +8,24 @@ import WYSIWYGEditor from '@/shared/components/WYSIWYGEditor';
 import { useCreateWorkspace } from '@/shared/hooks/useCreateWorkspace';
 import { useCreateAttachments } from '@/shared/hooks/useCreateAttachments';
 import { useExecutorConfig } from '@/shared/hooks/useExecutorConfig';
+import { useAgents } from '@/shared/hooks/useAgentLibrary';
 import { saveProjectRepoDefaults } from '@/shared/hooks/useProjectRepoDefaults';
 import { getSortedExecutorVariantKeys } from '@/shared/lib/executor';
 import {
   toPrettyCase,
   splitMessageToTitleDescription,
 } from '@/shared/lib/string';
-import type { BaseCodingAgent, Repo } from 'shared/types';
+import { BaseCodingAgent } from 'shared/types';
+import type { AgentRuntime, ExecutorConfig, Repo } from 'shared/types';
 import { CreateChatBox } from '@kanbain/ui/components/CreateChatBox';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { CreateModeRepoPickerBar } from './CreateModeRepoPickerBar';
 import { ModelSelectorContainer } from '@/shared/components/ModelSelectorContainer';
+
+const RUNTIME_EXECUTORS: Record<AgentRuntime, BaseCodingAgent> = {
+  'claude-code': BaseCodingAgent.CLAUDE_CODE,
+  opencode: BaseCodingAgent.OPENCODE,
+};
 
 function getRepoDisplayName(repo: Repo) {
   return repo.display_name || repo.name;
@@ -135,6 +142,51 @@ export function CreateChatBoxContainer({
     onPersist: (cfg) => setDraftConfig(cfg),
   });
 
+  // A KanbAIn agent definition decides executor, model and prompts.
+  const { data: agents = [] } = useAgents();
+  const agentOptions = useMemo(
+    () =>
+      agents.flatMap((agent) =>
+        agent.definition
+          ? [
+              {
+                name: agent.name,
+                detail: `${toPrettyCase(
+                  RUNTIME_EXECUTORS[agent.definition.runtime]
+                )} · ${agent.definition.model}`,
+              },
+            ]
+          : []
+      ),
+    [agents]
+  );
+  const selectedAgent =
+    draftConfig?.agent_definition &&
+    agentOptions.some((o) => o.name === draftConfig.agent_definition)
+      ? draftConfig.agent_definition
+      : null;
+
+  const handleAgentChange = useCallback(
+    (name: string | null) => {
+      const runtime = agents.find((a) => a.name === name)?.definition?.runtime;
+      if (name && runtime) {
+        setDraftConfig({
+          executor: RUNTIME_EXECUTORS[runtime],
+          variant: null,
+          agent_definition: name,
+        });
+      } else if (draftConfig) {
+        setDraftConfig({ ...draftConfig, agent_definition: null });
+      }
+    },
+    [agents, draftConfig, setDraftConfig]
+  );
+
+  const submitConfig: ExecutorConfig | null =
+    selectedAgent && effectiveExecutor
+      ? { executor: effectiveExecutor, agent_definition: selectedAgent }
+      : executorConfig;
+
   const repoId = repos.length === 1 ? repos[0]?.id : undefined;
   const repoSummaryLabel = useMemo(() => {
     if (repos.length === 1) {
@@ -223,11 +275,11 @@ export function CreateChatBoxContainer({
   // Handle submit
   const handleSubmit = useCallback(async () => {
     setHasAttemptedSubmit(true);
-    if (!canSubmit || !executorConfig) return;
+    if (!canSubmit || !submitConfig) return;
 
     const { title } = splitMessageToTitleDescription(message);
     const data = {
-      executor_config: executorConfig,
+      executor_config: submitConfig,
       name: title,
       prompt: message,
       repos: repos.map((r) => ({
@@ -253,7 +305,7 @@ export function CreateChatBoxContainer({
     await clearDraft();
   }, [
     canSubmit,
-    executorConfig,
+    submitConfig,
     message,
     repos,
     targetBranches,
@@ -351,12 +403,17 @@ export function CreateChatBoxContainer({
                     options: executorOptions,
                     onChange: handleExecutorChange,
                   }}
+                  agentDefinition={{
+                    selected: selectedAgent,
+                    options: agentOptions,
+                    onChange: handleAgentChange,
+                  }}
                   formatExecutorLabel={toPrettyCase}
                   error={displayError}
                   repoIds={repos.map((r) => r.id)}
                   repoId={repoId}
                   modelSelector={
-                    effectiveExecutor ? (
+                    effectiveExecutor && !selectedAgent ? (
                       <ModelSelectorContainer
                         agent={effectiveExecutor}
                         workspaceId={undefined}

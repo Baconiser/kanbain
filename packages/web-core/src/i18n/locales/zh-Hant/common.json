@@ -22,10 +22,6 @@
     "retry": "Retry",
     "add": "新增"
   },
-  "form": {
-    "notSpecified": "未指定",
-    "selectOption": "選擇一個選項..."
-  },
   "states": {
     "loading": "載入中..."
   },

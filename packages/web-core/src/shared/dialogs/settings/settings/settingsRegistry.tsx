@@ -18,7 +18,7 @@ export type SettingsSectionType =
 export type SettingsSectionInitialState = {
   general: undefined;
   repos: { repoId?: string } | undefined;
-  agents: { executor?: string; variant?: string } | undefined;
+  agents: undefined;
   sandbox: undefined;
   mcp: undefined;
 };
@@ -38,7 +38,8 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
 
 export function renderSettingsSection(
   type: SettingsSectionType,
-  initialState?: SettingsSectionInitialState[SettingsSectionType]
+  initialState?: SettingsSectionInitialState[SettingsSectionType],
+  onClose?: () => void
 ) {
   switch (type) {
     case 'general':
@@ -50,7 +51,7 @@ export function renderSettingsSection(
         />
       );
     case 'agents':
-      return <AgentsSettingsSection />;
+      return <AgentsSettingsSection onClose={onClose} />;
     case 'sandbox':
       return <SandboxSettingsSection />;
     case 'mcp':

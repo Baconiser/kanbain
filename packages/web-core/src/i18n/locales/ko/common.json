@@ -41,10 +41,6 @@
     "retry": "Retry",
     "add": "추가"
   },
-  "form": {
-    "notSpecified": "지정되지 않음",
-    "selectOption": "옵션 선택..."
-  },
   "conversation": {
     "deniedByUser": "{{toolName}} 사용자에 의해 거부됨",
     "output": "출력",

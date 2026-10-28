@@ -318,60 +318,7 @@
       }
     },
     "agents": {
-      "title": "Coding Agent Configurations",
-      "description": "Customize the behavior of coding agents with different configurations.",
-      "loading": "Loading agent configurations...",
-      "selectAgent": "Select agent",
-      "save": {
-        "button": "Save Agent Configurations",
-        "success": "✓ Executor configurations saved successfully!",
-        "unsavedChanges": "• You have unsaved changes"
-      },
-      "availability": {
-        "checking": "Checking...",
-        "checkingAvailability": "Checking availability...",
-        "available": "Agent available",
-        "notFoundSimple": "Agent not found",
-        "loginDetected": "Recent Usage Detected",
-        "loginDetectedTooltip": "Recent authentication credentials found for this agent",
-        "installationFound": "Previous Usage Detected",
-        "installationFoundTooltip": "Agent configuration found. You may need to log in to use it."
-      },
-      "editor": {
-        "formLabel": "Edit JSON",
-        "agentLabel": "Agent",
-        "agentPlaceholder": "Select executor type",
-        "configLabel": "Configuration",
-        "configPlaceholder": "Select configuration",
-        "createNew": "Create new...",
-        "deleteTitle": "Cannot delete the last configuration",
-        "deleteButton": "Delete {{name}}",
-        "deleteText": "Delete",
-        "makeDefault": "Make Default",
-        "isDefault": "Default",
-        "jsonLabel": "Agent Configuration (JSON)",
-        "jsonPlaceholder": "Loading profiles...",
-        "jsonLoading": "Loading...",
-        "pathLabel": "Configuration file location:"
-      },
-      "errors": {
-        "deleteFailed": "Failed to delete configuration. Please try again.",
-        "saveFailed": "Failed to save agent configurations. Please try again.",
-        "saveConfigFailed": "Failed to save configuration. Please try again.",
-        "schemaNotFound": "Schema not found for executor type: {{executor}}"
-      },
-      "tree": {
-        "search": "Search configurations...",
-        "expandAll": "Expand All",
-        "collapseAll": "Collapse All",
-        "noResults": "No matching configurations",
-        "noConfigs": "No configurations available",
-        "selectConfig": "Select a configuration from the sidebar to view and edit its settings."
-      },
-      "deleteConfigDialog": {
-        "title": "Delete Configuration?",
-        "description": "This will permanently remove \"{{configName}}\" from the {{executorType}} executor. You can't undo this action."
-      }
+      "selectAgent": "Select agent"
     },
     "mcp": {
       "title": "MCP Server Configuration",
@@ -666,6 +613,121 @@
         "memory": "Memory per container (MB)",
         "allowedDomains": "Extra allowed hosts",
         "allowedDomainsHelper": "One per line, on top of the package registries. *.example.com matches subdomains."
+      },
+      "claudeAccount": {
+        "title": "Claude account",
+        "description": "Use your Claude subscription instead of an API key. Sign-in runs in a throwaway container; the token is stored encrypted and never reaches agent containers.",
+        "connect": "Connect Claude account",
+        "reconnect": "Connect again",
+        "connected": "Connected. Runs use your Claude account instead of the API key.",
+        "disconnect": "Disconnect",
+        "starting": "Starting the sign-in…",
+        "openLink": "Open the link, sign in, and paste the code shown afterwards.",
+        "signIn": "Sign in to Claude",
+        "copyLink": "Copy link",
+        "copied": "Copied",
+        "code": "Code",
+        "submit": "Connect",
+        "exchanging": "Finishing the sign-in…",
+        "costNote": "Costs shown for subscription runs are API-equivalent estimates, and budgets apply to them."
+      }
+    },
+    "agentLibrary": {
+      "nameHelper": "Lowercase letters, digits and dashes.",
+      "save": "Save",
+      "cancel": "Cancel",
+      "delete": "Delete",
+      "usedBy": "Used by {{names}}",
+      "unused": "Not used",
+      "library": {
+        "title": "Import and export",
+        "description": "Agents, style blocks and skills live in the KanbAIn data folder, never in your repositories. Import a zip, YAML or Markdown files, or a skill folder; export to share them.",
+        "importFiles": "Import files",
+        "importFolder": "Import folder",
+        "exportAll": "Export all",
+        "replaced": "Replaced: {{items}}",
+        "imported": "Import finished: {{count}} added or updated."
+      },
+      "agents": {
+        "title": "Agent definitions",
+        "description": "Runtime-neutral agents: a role prompt, style blocks, skills and tool capabilities. The same agent runs on Claude Code or OpenCode, always in the sandbox.",
+        "new": "New agent",
+        "empty": "No agents yet.",
+        "brokenFile": "This agent's file can't be read: {{error}}",
+        "export": "Export this agent with its styles and skills",
+        "name": "Name",
+        "descriptionLabel": "Description",
+        "role": "Role",
+        "runtime": "Runtime",
+        "model": "Model",
+        "modelHelper": "opus, sonnet, haiku or a full model ID. On OpenCode, openai/<model> uses the OpenAI-compatible provider.",
+        "rolePrompt": "Role prompt",
+        "rolePromptHelper": "Added to the runtime's system prompt. The task itself is sent as the first message.",
+        "styles": "Style blocks",
+        "stylesHelper": "Appended after the role prompt, in the order you pick them.",
+        "skills": "Skills",
+        "skillsHelper": "Placed read-only in the agent's container.",
+        "capabilities": "Capabilities",
+        "capabilitiesHelper": "Which tools the agent may use.",
+        "bashAllow": "Allowed test commands",
+        "bashAllowHelper": "One shell pattern per line, such as cargo test*. Leave empty for the default test runners.",
+        "maxSteps": "Max steps",
+        "budget": "Budget per run (USD)",
+        "wallMinutes": "Time limit (minutes)",
+        "limitsHelper": "Empty fields use the sandbox defaults. The model proxy enforces the budget.",
+        "mcpServers": "MCP servers (JSON)",
+        "mcpServersHelper": "Optional, in Claude Code's mcpServers format. Only these servers are available to the agent.",
+        "mcpInvalid": "MCP servers must be a JSON object.",
+        "testRun": "Test run",
+        "saveBeforeTest": "Save your changes to run a test.",
+        "deleteTitle": "Delete agent?",
+        "deleteMessage": "Delete the agent {{name}}? Its file is removed from the data folder."
+      },
+      "roles": {
+        "planner": "Planner",
+        "coder": "Coder",
+        "tester": "Tester",
+        "scribe": "Scribe",
+        "intake": "Intake",
+        "history": "History"
+      },
+      "runtimes": {
+        "claude-code": "Claude Code",
+        "opencode": "OpenCode"
+      },
+      "capabilities": {
+        "read": "Read files",
+        "edit": "Edit files",
+        "bash": "Any shell command",
+        "test": "Test commands only",
+        "web": "Web access"
+      },
+      "styles": {
+        "title": "Style blocks",
+        "description": "Reusable text appended to agents' system prompts. Editing a block changes every agent that uses it.",
+        "new": "New style block",
+        "empty": "No style blocks yet.",
+        "name": "Name",
+        "body": "Text",
+        "bodyHelperUsed": "Changes apply to {{names}}.",
+        "deleteTitle": "Delete style block?",
+        "deleteMessage": "Delete the style block {{name}}?"
+      },
+      "skills": {
+        "title": "Skills",
+        "description": "Skill folders with a SKILL.md, available to the agents that list them.",
+        "new": "New skill",
+        "empty": "No skills yet.",
+        "name": "Name",
+        "descriptionLabel": "Description",
+        "descriptionHelper": "Tells the agent when to use the skill.",
+        "create": "Create skill",
+        "files": "Files",
+        "deleteFile": "Delete file",
+        "deleteSkill": "Delete skill",
+        "deleteTitle": "Delete skill?",
+        "deleteMessage": "Delete the skill {{name}} and all its files?",
+        "fileCount": "Files: {{count}}"
       }
     }
   },

@@ -453,7 +453,9 @@
       "modified": "Modificado",
       "deleted": "Eliminado",
       "renamed": "Renombrado"
-    }
+    },
+    "agentDefinitions": "Definiciones de agentes",
+    "noAgentDefinition": "Sin definición de agente"
   },
   "scriptFixer": {
     "setupScriptTitle": "Corregir Script de Configuración",

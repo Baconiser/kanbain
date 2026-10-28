@@ -16,6 +16,17 @@ import {
   ExecutionProcessRepoState,
   SandboxStatus,
   SetModelCredential,
+  AgentDefinition,
+  AgentLibraryMeta,
+  AgentSummary,
+  AgentTestRun,
+  ClaudeLoginState,
+  CreateSkill,
+  ImportSummary,
+  SkillFileInfo,
+  SkillSummary,
+  StyleBlock,
+  StyleSummary,
   GitBranch,
   Repo,
   RepoWithTargetBranch,
@@ -703,6 +714,214 @@ export const sandboxApi = {
     });
     return handleApiResponse<SandboxStatus>(response);
   },
+
+  getClaudeLogin: async (): Promise<ClaudeLoginState> => {
+    const response = await makeRequest('/api/sandbox/claude-login', {
+      cache: 'no-store',
+    });
+    return handleApiResponse<ClaudeLoginState>(response);
+  },
+
+  startClaudeLogin: async (): Promise<ClaudeLoginState> => {
+    const response = await makeRequest('/api/sandbox/claude-login', {
+      method: 'POST',
+    });
+    return handleApiResponse<ClaudeLoginState>(response);
+  },
+
+  submitClaudeLoginCode: async (code: string): Promise<ClaudeLoginState> => {
+    const response = await makeRequest('/api/sandbox/claude-login/code', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+    return handleApiResponse<ClaudeLoginState>(response);
+  },
+
+  cancelClaudeLogin: async (): Promise<ClaudeLoginState> => {
+    const response = await makeRequest('/api/sandbox/claude-login', {
+      method: 'DELETE',
+    });
+    return handleApiResponse<ClaudeLoginState>(response);
+  },
+
+  disconnectClaudeAccount: async (): Promise<SandboxStatus> => {
+    const response = await makeRequest('/api/sandbox/claude-account', {
+      method: 'DELETE',
+    });
+    return handleApiResponse<SandboxStatus>(response);
+  },
+};
+
+const libraryPath = (path: string) => `/api/agent-library${path}`;
+const skillFilePath = (skill: string, path: string) =>
+  libraryPath(
+    `/skills/${encodeURIComponent(skill)}/file?path=${encodeURIComponent(path)}`
+  );
+
+// Agent library APIs (agents, style blocks, skills)
+export const agentLibraryApi = {
+  meta: async (): Promise<AgentLibraryMeta> => {
+    const response = await makeRequest(libraryPath('/meta'));
+    return handleApiResponse<AgentLibraryMeta>(response);
+  },
+
+  listAgents: async (): Promise<AgentSummary[]> => {
+    const response = await makeRequest(libraryPath('/agents'), {
+      cache: 'no-store',
+    });
+    return handleApiResponse<AgentSummary[]>(response);
+  },
+
+  createAgent: async (agent: AgentDefinition): Promise<AgentDefinition> => {
+    const response = await makeRequest(libraryPath('/agents'), {
+      method: 'POST',
+      body: JSON.stringify(agent),
+    });
+    return handleApiResponse<AgentDefinition>(response);
+  },
+
+  updateAgent: async (
+    name: string,
+    agent: AgentDefinition
+  ): Promise<AgentDefinition> => {
+    const response = await makeRequest(
+      libraryPath(`/agents/${encodeURIComponent(name)}`),
+      { method: 'PUT', body: JSON.stringify(agent) }
+    );
+    return handleApiResponse<AgentDefinition>(response);
+  },
+
+  deleteAgent: async (name: string): Promise<void> => {
+    const response = await makeRequest(
+      libraryPath(`/agents/${encodeURIComponent(name)}`),
+      { method: 'DELETE' }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  testRun: async (
+    name: string,
+    data: AgentTestRun
+  ): Promise<CreateAndStartWorkspaceResponse> => {
+    const response = await makeRequest(
+      libraryPath(`/agents/${encodeURIComponent(name)}/test-run`),
+      { method: 'POST', body: JSON.stringify(data) }
+    );
+    return handleApiResponse<CreateAndStartWorkspaceResponse>(response);
+  },
+
+  listStyles: async (): Promise<StyleSummary[]> => {
+    const response = await makeRequest(libraryPath('/styles'), {
+      cache: 'no-store',
+    });
+    return handleApiResponse<StyleSummary[]>(response);
+  },
+
+  createStyle: async (style: StyleBlock): Promise<StyleBlock> => {
+    const response = await makeRequest(libraryPath('/styles'), {
+      method: 'POST',
+      body: JSON.stringify(style),
+    });
+    return handleApiResponse<StyleBlock>(response);
+  },
+
+  updateStyle: async (name: string, style: StyleBlock): Promise<StyleBlock> => {
+    const response = await makeRequest(
+      libraryPath(`/styles/${encodeURIComponent(name)}`),
+      { method: 'PUT', body: JSON.stringify(style) }
+    );
+    return handleApiResponse<StyleBlock>(response);
+  },
+
+  deleteStyle: async (name: string): Promise<void> => {
+    const response = await makeRequest(
+      libraryPath(`/styles/${encodeURIComponent(name)}`),
+      { method: 'DELETE' }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  listSkills: async (): Promise<SkillSummary[]> => {
+    const response = await makeRequest(libraryPath('/skills'), {
+      cache: 'no-store',
+    });
+    return handleApiResponse<SkillSummary[]>(response);
+  },
+
+  createSkill: async (data: CreateSkill): Promise<void> => {
+    const response = await makeRequest(libraryPath('/skills'), {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<void>(response);
+  },
+
+  deleteSkill: async (name: string): Promise<void> => {
+    const response = await makeRequest(
+      libraryPath(`/skills/${encodeURIComponent(name)}`),
+      { method: 'DELETE' }
+    );
+    return handleApiResponse<void>(response);
+  },
+
+  listSkillFiles: async (name: string): Promise<SkillFileInfo[]> => {
+    const response = await makeRequest(
+      libraryPath(`/skills/${encodeURIComponent(name)}/files`),
+      { cache: 'no-store' }
+    );
+    return handleApiResponse<SkillFileInfo[]>(response);
+  },
+
+  readSkillFile: async (name: string, path: string): Promise<string> => {
+    const response = await makeRequest(skillFilePath(name, path), {
+      cache: 'no-store',
+    });
+    if (!response.ok) {
+      throw new ApiError(`Failed to read ${path}`, response.status, response);
+    }
+    return response.text();
+  },
+
+  writeSkillFile: async (
+    name: string,
+    path: string,
+    contents: string
+  ): Promise<void> => {
+    const response = await makeRequest(skillFilePath(name, path), {
+      method: 'PUT',
+      body: contents,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    });
+    return handleApiResponse<void>(response);
+  },
+
+  deleteSkillFile: async (name: string, path: string): Promise<void> => {
+    const response = await makeRequest(skillFilePath(name, path), {
+      method: 'DELETE',
+    });
+    return handleApiResponse<void>(response);
+  },
+
+  /** Import zips, or files named by their path in a chosen folder. */
+  importFiles: async (
+    files: { file: File; path: string }[]
+  ): Promise<ImportSummary> => {
+    const formData = new FormData();
+    for (const { file, path } of files) {
+      formData.append('file', file, path);
+    }
+    const response = await makeLocalApiRequest(libraryPath('/import'), {
+      method: 'POST',
+      body: formData,
+      credentials: 'include',
+    });
+    return handleApiResponse<ImportSummary>(response);
+  },
+
+  exportUrl: (agents?: string[]): string =>
+    agents?.length
+      ? libraryPath(`/export?agents=${encodeURIComponent(agents.join(','))}`)
+      : libraryPath('/export'),
 };
 
 // File System APIs

@@ -642,6 +642,12 @@ export type AgentLibraryMeta = { roles: Array<AgentRole>, runtimes: Array<AgentR
 
 export type CreateSkill = { name: string, description: string, };
 
+export type AgentTestRun = { 
+/**
+ * Defaults to a prompt asking the agent to describe its tools.
+ */
+prompt?: string, };
+
 export type CredentialProvider = "anthropic" | "openai";
 
 export type SetModelCredential = { provider: CredentialProvider, 

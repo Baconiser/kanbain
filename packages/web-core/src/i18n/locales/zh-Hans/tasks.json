@@ -453,7 +453,9 @@
     "saveAsDefault": "设为默认",
     "updatedTodos": "更新的待办事项",
     "viewInChangesPanel": "在更改面板中查看",
-    "unableToRenderDiff": "无法显示差异。"
+    "unableToRenderDiff": "无法显示差异。",
+    "agentDefinitions": "代理定义",
+    "noAgentDefinition": "无代理定义"
   },
   "scriptFixer": {
     "setupScriptTitle": "修复设置脚本",

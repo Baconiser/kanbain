@@ -41,10 +41,6 @@
     "retry": "Retry",
     "add": "Agregar"
   },
-  "form": {
-    "notSpecified": "No especificado",
-    "selectOption": "Seleccionar una opción..."
-  },
   "conversation": {
     "deniedByUser": "{{toolName}} denegado por el usuario",
     "output": "Salida",

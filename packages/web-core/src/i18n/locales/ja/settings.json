@@ -310,60 +310,7 @@
       }
     },
     "agents": {
-      "title": "コーディングエージェント設定",
-      "description": "コーディングエージェントの動作を異なる設定でカスタマイズします。",
-      "loading": "エージェント設定を読み込み中...",
-      "selectAgent": "エージェントを選択",
-      "save": {
-        "button": "エージェント設定を保存",
-        "success": "✓ 実行設定が正常に保存されました！",
-        "unsavedChanges": "• 未保存の変更があります"
-      },
-      "availability": {
-        "checking": "確認中...",
-        "checkingAvailability": "利用可能性を確認中...",
-        "available": "エージェント利用可能",
-        "notFoundSimple": "エージェントが見つかりません",
-        "loginDetected": "最近の使用を検出",
-        "loginDetectedTooltip": "このエージェントの最近の認証情報が見つかりました",
-        "installationFound": "以前の使用を検出",
-        "installationFoundTooltip": "エージェント設定が見つかりました。使用するにはログインが必要な場合があります。"
-      },
-      "editor": {
-        "formLabel": "JSONを編集",
-        "agentLabel": "エージェント",
-        "agentPlaceholder": "実行タイプを選択",
-        "configLabel": "設定",
-        "configPlaceholder": "設定を選択",
-        "createNew": "新規作成...",
-        "deleteTitle": "最後の設定は削除できません",
-        "deleteButton": "{{name}}を削除",
-        "deleteText": "削除",
-        "makeDefault": "デフォルトに設定",
-        "isDefault": "デフォルト",
-        "jsonLabel": "エージェント設定（JSON）",
-        "jsonPlaceholder": "プロファイルを読み込み中...",
-        "jsonLoading": "読み込み中...",
-        "pathLabel": "設定ファイルの場所："
-      },
-      "errors": {
-        "deleteFailed": "設定の削除に失敗しました。もう一度お試しください。",
-        "saveFailed": "エージェント設定の保存に失敗しました。もう一度お試しください。",
-        "saveConfigFailed": "設定の保存に失敗しました。もう一度お試しください。",
-        "schemaNotFound": "実行タイプ {{executor}} のスキーマが見つかりません"
-      },
-      "tree": {
-        "search": "設定を検索...",
-        "expandAll": "すべて展開",
-        "collapseAll": "すべて折りたたむ",
-        "noResults": "一致する設定がありません",
-        "noConfigs": "利用可能な設定がありません",
-        "selectConfig": "サイドバーから設定を選択して、その設定を表示・編集できます。"
-      },
-      "deleteConfigDialog": {
-        "title": "設定を削除しますか？",
-        "description": "「{{configName}}」を{{executorType}}エグゼキューターから完全に削除します。この操作は元に戻せません。"
-      }
+      "selectAgent": "エージェントを選択"
     },
     "mcp": {
       "title": "MCPサーバー設定",
@@ -666,6 +613,121 @@
         "memory": "コンテナあたりのメモリ（MB）",
         "allowedDomains": "追加で許可するホスト",
         "allowedDomainsHelper": "1 行に 1 つ。パッケージレジストリに加えて許可されます。*.example.com はサブドメインに一致します。"
+      },
+      "claudeAccount": {
+        "title": "Claude アカウント",
+        "description": "API キーの代わりに Claude のサブスクリプションを使います。サインインは使い捨てのコンテナーで行われ、トークンは暗号化して保存され、エージェントのコンテナーには渡りません。",
+        "connect": "Claude アカウントを接続",
+        "reconnect": "再接続",
+        "connected": "接続済み。実行には API キーではなく Claude アカウントが使われます。",
+        "disconnect": "接続を解除",
+        "starting": "サインインを開始しています…",
+        "openLink": "リンクを開いてサインインし、表示されたコードを貼り付けてください。",
+        "signIn": "Claude にサインイン",
+        "copyLink": "リンクをコピー",
+        "copied": "コピーしました",
+        "code": "コード",
+        "submit": "接続",
+        "exchanging": "サインインを完了しています…",
+        "costNote": "サブスクリプションでの実行のコストは API 換算の見積もりで、予算はこの見積もりに適用されます。"
+      }
+    },
+    "agentLibrary": {
+      "nameHelper": "小文字の英字、数字、ハイフンのみ。",
+      "save": "保存",
+      "cancel": "キャンセル",
+      "delete": "削除",
+      "usedBy": "使用中: {{names}}",
+      "unused": "未使用",
+      "library": {
+        "title": "インポートとエクスポート",
+        "description": "エージェント、スタイルブロック、スキルは KanbAIn のデータフォルダーに保存され、リポジトリには書き込まれません。zip、YAML / Markdown ファイル、スキルフォルダーをインポートでき、エクスポートして共有できます。",
+        "importFiles": "ファイルをインポート",
+        "importFolder": "フォルダーをインポート",
+        "exportAll": "すべてエクスポート",
+        "imported": "インポート完了: {{count}} 件を追加または更新しました。",
+        "replaced": "置き換え: {{items}}"
+      },
+      "agents": {
+        "title": "エージェント定義",
+        "description": "ランタイムに依存しないエージェント: ロールプロンプト、スタイルブロック、スキル、ツール権限。同じエージェントを Claude Code でも OpenCode でも、常にサンドボックス内で実行します。",
+        "new": "新しいエージェント",
+        "empty": "エージェントはまだありません。",
+        "brokenFile": "このエージェントのファイルを読み込めません: {{error}}",
+        "export": "このエージェントをスタイルとスキルごとエクスポート",
+        "name": "名前",
+        "descriptionLabel": "説明",
+        "role": "ロール",
+        "runtime": "ランタイム",
+        "model": "モデル",
+        "modelHelper": "opus、sonnet、haiku、または完全なモデル ID。OpenCode では openai/<モデル> で OpenAI 互換プロバイダーを使います。",
+        "rolePrompt": "ロールプロンプト",
+        "rolePromptHelper": "ランタイムのシステムプロンプトに追加されます。タスク自体は最初のメッセージとして送信されます。",
+        "styles": "スタイルブロック",
+        "stylesHelper": "選んだ順にロールプロンプトの後へ追加されます。",
+        "skills": "スキル",
+        "skillsHelper": "エージェントのコンテナーに読み取り専用で配置されます。",
+        "capabilities": "権限",
+        "capabilitiesHelper": "エージェントが使えるツール。",
+        "bashAllow": "許可するテストコマンド",
+        "bashAllowHelper": "1 行に 1 つのシェルパターン(例: cargo test*)。空欄の場合は既定のテストランナーを許可します。",
+        "maxSteps": "最大ステップ数",
+        "budget": "実行あたりの予算 (USD)",
+        "wallMinutes": "時間制限 (分)",
+        "limitsHelper": "空欄の項目にはサンドボックスの既定値が使われます。予算はモデルプロキシが強制します。",
+        "mcpServers": "MCP サーバー (JSON)",
+        "mcpServersHelper": "任意。Claude Code の mcpServers 形式で指定します。エージェントはここに挙げたサーバーだけを使えます。",
+        "mcpInvalid": "MCP サーバーは JSON オブジェクトで指定してください。",
+        "testRun": "テスト実行",
+        "saveBeforeTest": "テスト実行の前に変更を保存してください。",
+        "deleteTitle": "エージェントを削除しますか?",
+        "deleteMessage": "エージェント {{name}} を削除しますか? ファイルはデータフォルダーから削除されます。"
+      },
+      "roles": {
+        "planner": "プランナー",
+        "coder": "コーダー",
+        "tester": "テスター",
+        "scribe": "記録係",
+        "intake": "受付",
+        "history": "履歴"
+      },
+      "runtimes": {
+        "claude-code": "Claude Code",
+        "opencode": "OpenCode"
+      },
+      "capabilities": {
+        "read": "ファイルの読み取り",
+        "edit": "ファイルの編集",
+        "bash": "任意のシェルコマンド",
+        "test": "テストコマンドのみ",
+        "web": "Web アクセス"
+      },
+      "styles": {
+        "title": "スタイルブロック",
+        "description": "エージェントのシステムプロンプトに追加する再利用可能なテキスト。ブロックを編集すると、それを使うすべてのエージェントに反映されます。",
+        "new": "新しいスタイルブロック",
+        "empty": "スタイルブロックはまだありません。",
+        "name": "名前",
+        "body": "テキスト",
+        "bodyHelperUsed": "変更は {{names}} に反映されます。",
+        "deleteTitle": "スタイルブロックを削除しますか?",
+        "deleteMessage": "スタイルブロック {{name}} を削除しますか?"
+      },
+      "skills": {
+        "title": "スキル",
+        "description": "SKILL.md を含むスキルフォルダー。スキルを指定したエージェントが使えます。",
+        "new": "新しいスキル",
+        "empty": "スキルはまだありません。",
+        "name": "名前",
+        "descriptionLabel": "説明",
+        "descriptionHelper": "スキルを使うタイミングをエージェントに伝えます。",
+        "create": "スキルを作成",
+        "files": "ファイル",
+        "deleteFile": "ファイルを削除",
+        "deleteSkill": "スキルを削除",
+        "deleteTitle": "スキルを削除しますか?",
+        "deleteMessage": "スキル {{name}} とそのすべてのファイルを削除しますか?",
+        "fileCount": "ファイル: {{count}}"
       }
     }
   },
