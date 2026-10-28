@@ -26,6 +26,7 @@ use workspace_manager::WorkspaceManager;
 use worktree_manager::WorktreeManager;
 
 use crate::{container::LocalContainerService, pty::PtyService};
+pub mod claude_login;
 mod command;
 pub mod container;
 mod copy;
@@ -52,6 +53,7 @@ pub struct LocalDeployment {
     pr_sync_notify: Arc<Notify>,
     secrets: Arc<services::services::secrets::SecretStore>,
     agent_library: Arc<services::services::agent_library::AgentLibrary>,
+    claude_login: claude_login::ClaudeLogin,
 }
 
 #[async_trait]
@@ -164,6 +166,8 @@ impl Deployment for LocalDeployment {
             tracing::error!("Failed to load the agent library: {e}");
         }
 
+        let claude_login = claude_login::ClaudeLogin::new(sandbox.clone(), secrets.clone());
+
         let workspace_manager = WorkspaceManager::new(db.clone());
         let container = LocalContainerService::new(
             db.clone(),
@@ -211,6 +215,7 @@ impl Deployment for LocalDeployment {
             pr_sync_notify,
             secrets,
             agent_library,
+            claude_login,
         };
 
         Ok(deployment)
@@ -288,6 +293,10 @@ impl LocalDeployment {
 
     pub fn agent_library(&self) -> &Arc<services::services::agent_library::AgentLibrary> {
         &self.agent_library
+    }
+
+    pub fn claude_login(&self) -> &claude_login::ClaudeLogin {
+        &self.claude_login
     }
 
     pub fn trigger_pr_sync(&self) {

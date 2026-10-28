@@ -42,7 +42,7 @@ use serde::Serialize;
 use serde_json::json;
 use services::services::{
     config::Config,
-    secrets::{ANTHROPIC_API_KEY, OPENAI_API_KEY, SecretStore},
+    secrets::{ANTHROPIC_API_KEY, CLAUDE_OAUTH_TOKEN, OPENAI_API_KEY, SecretStore},
 };
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore, mpsc};
 use ts_rs::TS;
@@ -77,6 +77,8 @@ pub struct SandboxStatus {
     pub image_building: bool,
     pub image_error: Option<String>,
     pub anthropic_key_configured: bool,
+    /// A Claude account is connected; it is used instead of the API key.
+    pub claude_account_connected: bool,
     pub openai_key_configured: bool,
     pub running_containers: usize,
 }
@@ -131,6 +133,23 @@ struct Inner {
 #[derive(Clone)]
 pub struct SandboxRuntime {
     inner: Arc<Inner>,
+}
+
+/// Hosts `claude setup-token` needs from inside the container. The browser
+/// part of the login happens on the host.
+pub const CLAUDE_LOGIN_HOSTS: &[&str] = &[
+    "platform.claude.com",
+    "claude.com",
+    "claude.ai",
+    "console.anthropic.com",
+    "api.anthropic.com",
+];
+
+/// A throwaway login container and its environment.
+pub struct LoginContainer {
+    pub container: String,
+    pub env: Vec<(String, String)>,
+    egress_token: String,
 }
 
 /// One run to prepare in a workspace container.
@@ -328,12 +347,19 @@ impl SandboxRuntime {
                 .await
                 .unwrap_or(false)
                 || std::env::var("ANTHROPIC_API_KEY").is_ok(),
+            claude_account_connected: self
+                .inner
+                .secrets
+                .contains(CLAUDE_OAUTH_TOKEN)
+                .await
+                .unwrap_or(false),
             openai_key_configured: self
                 .inner
                 .secrets
                 .contains(OPENAI_API_KEY)
                 .await
-                .unwrap_or(false),
+                .unwrap_or(false)
+                || std::env::var("OPENAI_API_KEY").is_ok(),
             running_containers,
         }
     }
@@ -639,6 +665,72 @@ impl SandboxRuntime {
             vars,
             process_key: run.execution.id.to_string(),
         })
+    }
+
+    /// A throwaway container for `claude setup-token` (D33). It reaches
+    /// only the Anthropic login hosts, through the egress proxy.
+    pub async fn create_login_container(&self) -> Result<LoginContainer, SandboxRunError> {
+        let base_tag = self.ensure_image_and_gateway(&|_| {}).await?;
+        let ready = self.ready()?;
+        let token = random_token("kbl-");
+        let spec = ContainerSpec {
+            name: format!(
+                "kanbain-login-{}-{}",
+                &token[4..12].to_ascii_lowercase(),
+                self.inner.instance
+            ),
+            image: base_tag,
+            labels: HashMap::from([
+                (LABEL_MANAGED.to_string(), "true".to_string()),
+                (LABEL_INSTANCE.to_string(), self.inner.instance.clone()),
+                (LABEL_KIND.to_string(), "login".to_string()),
+            ]),
+            limits: Limits {
+                cpus: 1.0,
+                memory_mb: 1024,
+                pids: 256,
+            },
+            networks: vec![(ready.network.internal_network.clone(), vec![])],
+            user: Some(AGENT_USER.to_string()),
+            ..Default::default()
+        };
+        let container = ready.docker.create(&spec).await?;
+        self.inner.egress_grants.write().unwrap().insert(
+            token.clone(),
+            EgressGrant {
+                run_id: Uuid::nil(),
+                allowlist: Allowlist::new(CLAUDE_LOGIN_HOSTS),
+            },
+        );
+        let proxy_url = ready.network.egress_proxy_url("login", &token);
+        let no_proxy = format!("{GATEWAY_HOST},localhost,127.0.0.1");
+        Ok(LoginContainer {
+            container,
+            egress_token: token,
+            env: vec![
+                ("HTTPS_PROXY".into(), proxy_url.clone()),
+                ("https_proxy".into(), proxy_url.clone()),
+                ("HTTP_PROXY".into(), proxy_url.clone()),
+                ("http_proxy".into(), proxy_url),
+                ("NO_PROXY".into(), no_proxy.clone()),
+                ("no_proxy".into(), no_proxy),
+                ("DISABLE_AUTOUPDATER".into(), "1".into()),
+                ("BROWSER".into(), "/bin/false".into()),
+            ],
+        })
+    }
+
+    pub async fn remove_login_container(&self, login: &LoginContainer) {
+        self.inner
+            .egress_grants
+            .write()
+            .unwrap()
+            .remove(&login.egress_token);
+        if let Ok(ready) = self.ready()
+            && let Err(e) = ready.docker.remove(&login.container).await
+        {
+            tracing::warn!("Removing the login container failed: {e}");
+        }
     }
 
     /// Put an agent definition's generated files and skills into the
@@ -1079,6 +1171,15 @@ impl model_proxy::Credentials for SecretCredentials {
                 OPENAI_DEFAULT_BASE_URL,
             ),
         };
+        let base = std::env::var(base_env).unwrap_or_else(|_| default_base.to_string());
+        // A connected Claude account takes precedence over an API key.
+        if provider == Provider::Anthropic {
+            match self.secrets.get(CLAUDE_OAUTH_TOKEN).await {
+                Ok(Some(token)) => return Some(StaticCredentials::anthropic_oauth(&base, &token)),
+                Ok(None) => {}
+                Err(e) => tracing::error!("Reading the Claude account token failed: {e}"),
+            }
+        }
         let key = match self.secrets.get(secret).await {
             Ok(Some(key)) => key,
             Ok(None) => std::env::var(env_key).ok()?,
@@ -1087,7 +1188,6 @@ impl model_proxy::Credentials for SecretCredentials {
                 return None;
             }
         };
-        let base = std::env::var(base_env).unwrap_or_else(|_| default_base.to_string());
         Some(match provider {
             Provider::Anthropic => StaticCredentials::anthropic_api_key(&base, &key),
             Provider::OpenAi => StaticCredentials::bearer(&base, &key),

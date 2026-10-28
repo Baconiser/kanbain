@@ -554,7 +554,11 @@ export type SandboxStatus = { enabled: boolean, docker_available: boolean, docke
 /**
  * Why Docker can't be used, when it can't.
  */
-error: string | null, image: string | null, image_ready: boolean, image_building: boolean, image_error: string | null, anthropic_key_configured: boolean, openai_key_configured: boolean, running_containers: number, };
+error: string | null, image: string | null, image_ready: boolean, image_building: boolean, image_error: string | null, anthropic_key_configured: boolean, 
+/**
+ * A Claude account is connected; it is used instead of the API key.
+ */
+claude_account_connected: boolean, openai_key_configured: boolean, running_containers: number, };
 
 export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history";
 
@@ -645,6 +649,10 @@ export type SetModelCredential = { provider: CredentialProvider,
  * The API key; `null` removes the stored key.
  */
 api_key: string | null, };
+
+export type ClaudeLoginCode = { code: string, };
+
+export type ClaudeLoginState = { "state": "idle" } | { "state": "starting" } | { "state": "waiting_for_code", url: string, } | { "state": "exchanging" } | { "state": "connected" } | { "state": "failed", message: string, };
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };
 

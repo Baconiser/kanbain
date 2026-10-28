@@ -258,3 +258,68 @@ async fn revoked_token_is_refused() {
         .unwrap();
     assert_eq!(res.status(), 401);
 }
+
+/// A Claude account token goes upstream as a Bearer token with the OAuth
+/// beta flag merged into the client's own flags; the run token never does.
+#[tokio::test]
+async fn oauth_credential_merges_beta_flags() {
+    let seen = Arc::new(StdMutex::new(None::<(String, String)>));
+    let seen_in = seen.clone();
+    let app = Router::new().route(
+        "/v1/messages",
+        post(move |headers: HeaderMap| {
+            let seen = seen_in.clone();
+            async move {
+                let get = |name: &str| {
+                    headers
+                        .get_all(name)
+                        .iter()
+                        .map(|v| v.to_str().unwrap().to_string())
+                        .collect::<Vec<_>>()
+                        .join("|")
+                };
+                *seen.lock().unwrap() = Some((get("authorization"), get("anthropic-beta")));
+                Json(json!({"type": "message", "model": "claude-sonnet-5-5",
+                            "usage": {"input_tokens": 10, "output_tokens": 5}}))
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+
+    let proxy = ModelProxy::new(
+        PriceTable::default(),
+        Arc::new(StaticCredentials {
+            anthropic: Some(StaticCredentials::anthropic_oauth(
+                &upstream,
+                "sk-ant-oat01-real",
+            )),
+            openai: None,
+        }),
+        Arc::new(RecordingEvents::default()),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(proxy.clone().serve(listener));
+    let token = proxy.issue_token(Uuid::new_v4(), None, 0.0);
+
+    let response = reqwest::Client::new()
+        .post(format!("http://{addr}/v1/messages"))
+        .header("authorization", format!("Bearer {token}"))
+        .header(
+            "anthropic-beta",
+            "fine-grained-tool-streaming-2025-05-14,oauth-2025-04-20",
+        )
+        .json(&message_request(false))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let (auth, beta) = seen.lock().unwrap().clone().unwrap();
+    assert_eq!(auth, "Bearer sk-ant-oat01-real");
+    assert_eq!(
+        beta,
+        "fine-grained-tool-streaming-2025-05-14,oauth-2025-04-20"
+    );
+}

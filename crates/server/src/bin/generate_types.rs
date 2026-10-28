@@ -190,6 +190,8 @@ fn generate_types_content() -> String {
         server::routes::agents::CreateSkill::decl(),
         server::routes::sandbox::CredentialProvider::decl(),
         server::routes::sandbox::SetModelCredential::decl(),
+        server::routes::sandbox::ClaudeLoginCode::decl(),
+        local_deployment::claude_login::ClaudeLoginState::decl(),
         git::GitBranch::decl(),
         services::services::queued_message::QueuedMessage::decl(),
         services::services::queued_message::QueueStatus::decl(),

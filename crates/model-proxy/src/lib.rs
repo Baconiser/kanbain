@@ -326,14 +326,25 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
         upstream_path
     );
     let mut builder = inner.client.request(parts.method.clone(), &url);
+    // Beta flags the credential needs (OAuth) join the client's own.
+    let mut betas: Vec<String> = Vec::new();
     for (name, value) in parts.headers.iter() {
-        if !is_dropped_request_header(name) {
+        if name.as_str() == ANTHROPIC_BETA {
+            betas.extend(value.to_str().ok().map(str::to_string));
+        } else if !is_dropped_request_header(name) {
             builder = builder.header(name, value);
         }
     }
     builder = builder.header(header::ACCEPT_ENCODING, "identity");
     for (name, value) in &upstream.headers {
-        builder = builder.header(name, value);
+        if name.eq_ignore_ascii_case(ANTHROPIC_BETA) {
+            betas.push(value.clone());
+        } else {
+            builder = builder.header(name, value);
+        }
+    }
+    if let Some(beta) = merge_betas(&betas) {
+        builder = builder.header(ANTHROPIC_BETA, beta);
     }
 
     let upstream_response = match builder.body(body).send().await {
@@ -400,6 +411,21 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
     *response.status_mut() = status;
     *response.headers_mut() = response_headers;
     response
+}
+
+const ANTHROPIC_BETA: &str = "anthropic-beta";
+/// Beta flag that lets a Claude account's OAuth token call the API.
+pub const OAUTH_BETA: &str = "oauth-2025-04-20";
+
+/// Comma-separated, de-duplicated beta flags, in first-seen order.
+fn merge_betas(values: &[String]) -> Option<String> {
+    let mut flags: Vec<&str> = Vec::new();
+    for flag in values.iter().flat_map(|v| v.split(',')).map(str::trim) {
+        if !flag.is_empty() && !flags.contains(&flag) {
+            flags.push(flag);
+        }
+    }
+    (!flags.is_empty()).then(|| flags.join(","))
 }
 
 fn is_metered(provider: Provider, path: &str) -> bool {
@@ -591,6 +617,17 @@ impl StaticCredentials {
         Upstream {
             base_url: base_url.to_string(),
             headers: vec![("x-api-key".into(), key.to_string())],
+        }
+    }
+
+    /// A Claude account (subscription) token from `claude setup-token`.
+    pub fn anthropic_oauth(base_url: &str, token: &str) -> Upstream {
+        Upstream {
+            base_url: base_url.to_string(),
+            headers: vec![
+                ("authorization".into(), format!("Bearer {token}")),
+                (ANTHROPIC_BETA.into(), OAUTH_BETA.into()),
+            ],
         }
     }
 

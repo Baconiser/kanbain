@@ -5,13 +5,13 @@ use axum::{
     extract::State,
     middleware::from_fn_with_state,
     response::Json as ResponseJson,
-    routing::{get, put},
+    routing::{get, post, put},
 };
 use db::models::{
     execution_process::ExecutionProcess, execution_process_event::ExecutionProcessEvent,
 };
 use deployment::Deployment;
-use local_deployment::sandbox::SandboxStatus;
+use local_deployment::{claude_login::ClaudeLoginState, sandbox::SandboxStatus};
 use serde::Deserialize;
 use services::services::secrets::{ANTHROPIC_API_KEY, OPENAI_API_KEY};
 use ts_rs::TS;
@@ -62,6 +62,60 @@ async fn set_credential(
     )))
 }
 
+#[derive(Debug, Deserialize, TS)]
+pub struct ClaudeLoginCode {
+    pub code: String,
+}
+
+async fn get_claude_login(
+    State(deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<ClaudeLoginState>> {
+    ResponseJson(ApiResponse::success(deployment.claude_login().state()))
+}
+
+/// Start "Connect Claude account": `claude setup-token` in a throwaway
+/// container. Poll the state for the sign-in URL.
+async fn start_claude_login(
+    State(deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<ClaudeLoginState>> {
+    ResponseJson(ApiResponse::success(
+        deployment.claude_login().start().await,
+    ))
+}
+
+async fn submit_claude_login_code(
+    State(deployment): State<DeploymentImpl>,
+    ResponseJson(payload): ResponseJson<ClaudeLoginCode>,
+) -> Result<ResponseJson<ApiResponse<ClaudeLoginState>>, ApiError> {
+    let state = deployment
+        .claude_login()
+        .submit_code(&payload.code)
+        .await
+        .map_err(ApiError::BadRequest)?;
+    Ok(ResponseJson(ApiResponse::success(state)))
+}
+
+async fn cancel_claude_login(
+    State(deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<ClaudeLoginState>> {
+    deployment.claude_login().cancel();
+    ResponseJson(ApiResponse::success(deployment.claude_login().state()))
+}
+
+/// Forget the connected Claude account; runs fall back to the API key.
+async fn disconnect_claude_account(
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<SandboxStatus>>, ApiError> {
+    deployment
+        .claude_login()
+        .disconnect()
+        .await
+        .map_err(ApiError::BadRequest)?;
+    Ok(ResponseJson(ApiResponse::success(
+        deployment.sandbox().status().await,
+    )))
+}
+
 async fn get_events(
     Extension(execution_process): Extension<ExecutionProcess>,
     State(deployment): State<DeploymentImpl>,
@@ -84,5 +138,16 @@ pub(super) fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     Router::new()
         .route("/sandbox/status", get(get_status))
         .route("/sandbox/credentials", put(set_credential))
+        .route(
+            "/sandbox/claude-login",
+            get(get_claude_login)
+                .post(start_claude_login)
+                .delete(cancel_claude_login),
+        )
+        .route("/sandbox/claude-login/code", post(submit_claude_login_code))
+        .route(
+            "/sandbox/claude-account",
+            axum::routing::delete(disconnect_claude_account),
+        )
         .merge(events)
 }

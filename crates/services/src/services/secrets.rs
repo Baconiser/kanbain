@@ -17,6 +17,8 @@ use tokio::sync::Mutex;
 
 pub const ANTHROPIC_API_KEY: &str = "anthropic_api_key";
 pub const OPENAI_API_KEY: &str = "openai_api_key";
+/// Long-lived Claude account token from `claude setup-token` (D33).
+pub const CLAUDE_OAUTH_TOKEN: &str = "claude_oauth_token";
 
 const NONCE_LEN: usize = 12;
 

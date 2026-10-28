@@ -25,6 +25,7 @@ futures = "0.3"
 tokio = { workspace = true }
 globwalk = "0.9"
 portable-pty = "0.8"
+strip-ansi-escapes = "0.2.1"
 sandbox = { path = "../sandbox" , version = "0.1.45" }
 model-proxy = { path = "../model-proxy" , version = "0.1.45" }
 rand = "0.9"
