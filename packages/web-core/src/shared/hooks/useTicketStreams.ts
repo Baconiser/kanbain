@@ -3,6 +3,7 @@ import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import type {
   Issue,
   IssueComment,
+  IssueEvent,
   IssueRelationship,
   IssueTag,
   Project,
@@ -123,4 +124,29 @@ export function useIssueComments(issueId: string | undefined) {
   );
 
   return { comments, isLoading: !!issueId && !isInitialized };
+}
+
+type TimelineState = { events: Record<string, IssueEvent> };
+
+const initialTimeline = (): TimelineState => ({ events: {} });
+
+/** One ticket's timeline, live, oldest first. */
+export function useIssueTimeline(issueId: string | undefined) {
+  const { data, isInitialized } = useJsonPatchWsStream<TimelineState>(
+    issueId ? `/api/issues/${issueId}/timeline/stream/ws` : undefined,
+    !!issueId,
+    initialTimeline
+  );
+
+  const events = useMemo(
+    () =>
+      Object.values(data?.events ?? {}).sort(
+        (a, b) =>
+          Date.parse(a.occurred_at) - Date.parse(b.occurred_at) ||
+          a.created_at.localeCompare(b.created_at)
+      ),
+    [data]
+  );
+
+  return { events, isLoading: !!issueId && !isInitialized };
 }

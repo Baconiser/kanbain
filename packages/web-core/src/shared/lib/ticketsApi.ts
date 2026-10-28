@@ -1,5 +1,7 @@
 import type {
+  AcceptIntake,
   AttachmentResponse,
+  AttachmentText,
   BulkUpdateIssueItem,
   CreateIssue,
   CreateIssueComment,
@@ -9,12 +11,17 @@ import type {
   CreateProjectTag,
   Issue,
   IssueComment,
+  IssueDescription,
+  IssueEvent,
   IssueRelationship,
+  IntakeView,
   IssueTag,
   Project,
   ProjectStatus,
   ProjectTag,
   Repo,
+  StartIntake,
+  TextDiffLine,
   UpdateIssue,
   UpdateProject,
   UpdateProjectStatus,
@@ -71,7 +78,32 @@ export const projectsApi = {
     request<Issue>(`/api/projects/${id}/issues`, 'POST', data),
   bulkUpdateIssues: (id: string, items: BulkUpdateIssueItem[]) =>
     request<Issue[]>(`/api/projects/${id}/issues/bulk`, 'POST', items),
+  findIssueByExternalId: (id: string, externalId: string) =>
+    request<Issue | null>(
+      `/api/projects/${id}/issues/by-external-id?external_id=${encodeURIComponent(externalId)}`
+    ),
+  detectExternalId: (id: string, text: string) =>
+    request<string | null>(`/api/projects/${id}/detect-external-id`, 'POST', {
+      text,
+    }),
 };
+
+export const intakeApi = {
+  start: (projectId: string, data: StartIntake) =>
+    request<IntakeView>(`/api/projects/${projectId}/intakes`, 'POST', data),
+  get: (id: string) => request<IntakeView>(`/api/intakes/${id}`),
+  retry: (id: string) =>
+    request<IntakeView>(`/api/intakes/${id}/retry`, 'POST'),
+  accept: (id: string, data: AcceptIntake) =>
+    request<Issue>(`/api/intakes/${id}/accept`, 'POST', data),
+  discard: (id: string) => request<void>(`/api/intakes/${id}/discard`, 'POST'),
+};
+
+export const textDiff = (oldText: string, newText: string) =>
+  request<TextDiffLine[]>('/api/text-diff', 'POST', {
+    old: oldText,
+    new: newText,
+  });
 
 export const issuesApi = {
   update: (id: string, data: UpdateIssue) =>
@@ -99,6 +131,12 @@ export const issuesApi = {
 
   listAttachments: (id: string) =>
     request<AttachmentResponse[]>(`/api/issues/${id}/attachments`),
+  listAttachmentTexts: (id: string) =>
+    request<AttachmentText[]>(`/api/issues/${id}/attachment-texts`),
+  listDescriptions: (id: string) =>
+    request<IssueDescription[]>(`/api/issues/${id}/descriptions`),
+  listTimeline: (id: string) =>
+    request<IssueEvent[]>(`/api/issues/${id}/timeline`),
   linkAttachments: (id: string, attachmentIds: string[]) =>
     request<AttachmentResponse[]>(`/api/issues/${id}/attachments`, 'POST', {
       attachment_ids: attachmentIds,

@@ -30,7 +30,10 @@ import { attachmentsApi } from '@/shared/lib/api';
 import { issuesApi, projectsApi } from '@/shared/lib/ticketsApi';
 import { buildWorkspaceCreateInitialState } from '@/shared/lib/workspaceCreateState';
 import { setCreateModeSeedState } from '@/features/create-mode/model/createModeSeedStore';
+import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
+import { TicketAttachments } from './TicketAttachments';
 import { TicketComments } from './TicketComments';
+import { TicketTimeline } from './TicketTimeline';
 import { internalTicketId, ticketDisplayId } from './ticketIds';
 
 const NONE = '__none__';
@@ -129,6 +132,24 @@ export function TicketPanel({
     setExternalId(issue.external_id ?? '');
     setBudget(issue.budget_usd?.toString() ?? '');
   }, [issue.title, issue.external_id, issue.budget_usd]);
+
+  // A description changed elsewhere (an intake update) replaces the local
+  // one unless it has unsaved edits.
+  useEffect(() => {
+    const remote = issue.description ?? '';
+    setDescription((local) => {
+      // The backend trims; that alone is not a change.
+      if (local !== savedDescription.current) return local;
+      if (local.trim() === remote.trim()) return local;
+      savedDescription.current = remote;
+      return remote;
+    });
+  }, [issue.description]);
+
+  const timeline = useIssueTimeline(issue.id);
+  const attachmentEvents = timeline.events.filter(
+    (e) => e.event_type === 'attachment_added'
+  ).length;
 
   const update = useCallback(
     (data: UpdateIssue) =>
@@ -686,7 +707,20 @@ export function TicketPanel({
           ))}
         </Section>
 
+        <TicketAttachments
+          issueId={issue.id}
+          refreshKey={attachmentEvents}
+          onError={onError}
+        />
+
         <TicketComments issueId={issue.id} onError={onError} />
+
+        <TicketTimeline
+          issueId={issue.id}
+          createdAt={issue.created_at}
+          events={timeline.events}
+          isLoading={timeline.isLoading}
+        />
       </div>
     </aside>
   );

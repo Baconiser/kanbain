@@ -3,6 +3,7 @@ import {
   GearSixIcon,
   KanbanIcon,
   PlusIcon,
+  UploadSimpleIcon,
   XIcon,
 } from '@phosphor-icons/react';
 import { Button } from '@kanbain/ui/components/Button';
@@ -10,6 +11,7 @@ import { Input } from '@kanbain/ui/components/Input';
 import { usePageTitle } from '@/shared/hooks/usePageTitle';
 import { useProjectBoard, useProjects } from '@/shared/hooks/useTicketStreams';
 import { CreateTicketDialog } from './CreateTicketDialog';
+import { DropTicketDialog } from './DropTicketDialog';
 import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { TicketBoard } from './TicketBoard';
 import { TicketPanel } from './TicketPanel';
@@ -81,6 +83,12 @@ export function TicketsPage() {
       projectId: project.id,
       statusId,
     });
+    if (issue) setSelectedIssueId(issue.id);
+  };
+
+  const dropTicket = async () => {
+    if (!project) return;
+    const issue = await DropTicketDialog.show({ projectId: project.id });
     if (issue) setSelectedIssueId(issue.id);
   };
 
@@ -158,6 +166,10 @@ export function TicketsPage() {
             />
             Hidden columns
           </label>
+          <Button size="sm" variant="outline" onClick={() => void dropTicket()}>
+            <UploadSimpleIcon className="mr-half size-icon-xs" weight="bold" />
+            Drop ticket
+          </Button>
           <Button size="sm" onClick={() => void addIssue()}>
             <PlusIcon className="mr-half size-icon-xs" weight="bold" />
             New ticket

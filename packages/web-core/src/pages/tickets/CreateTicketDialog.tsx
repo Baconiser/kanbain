@@ -29,6 +29,20 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
     const [mode, setMode] = useState<IssueMode>('ask');
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // A ticket that already has the External ID; creating again needs a
+    // second click (D17).
+    const [duplicate, setDuplicate] = useState<Issue | null>(null);
+
+    // Fill the External ID from the text with the project's pattern (D16).
+    const detectExternalId = () => {
+      if (externalId.trim() || !(title.trim() || description.trim())) return;
+      projectsApi
+        .detectExternalId(projectId, `${title}\n${description}`)
+        .then((id) => {
+          if (id) setExternalId((current) => current || id);
+        })
+        .catch(() => {});
+    };
 
     const close = (result: Issue | null) => {
       modal.resolve(result);
@@ -43,6 +57,17 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
       setSaving(true);
       setError(null);
       try {
+        const trimmedId = externalId.trim();
+        if (trimmedId && duplicate?.external_id !== trimmedId) {
+          const existing = await projectsApi.findIssueByExternalId(
+            projectId,
+            trimmedId
+          );
+          if (existing) {
+            setDuplicate(existing);
+            return;
+          }
+        }
         const issue = await projectsApi.createIssue(projectId, {
           title,
           description: description.trim() || undefined,
@@ -83,6 +108,7 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
                 autoFocus
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
+                onBlur={detectExternalId}
               />
             </div>
             <div className="flex flex-col gap-half">
@@ -93,6 +119,7 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
                 placeholder="Markdown supported"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
+                onBlur={detectExternalId}
               />
             </div>
             <div className="grid grid-cols-2 gap-base">
@@ -118,6 +145,16 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
                 </select>
               </div>
             </div>
+            {duplicate && duplicate.external_id === externalId.trim() && (
+              <p
+                className="rounded-sm border border-brand/40 bg-brand/10 p-base text-sm"
+                data-testid="duplicate-external-id"
+              >
+                A ticket with {duplicate.external_id} already exists: “
+                {duplicate.title}”. Use Drop ticket to add a new version of it,
+                or create another ticket anyway.
+              </p>
+            )}
             {error && <p className="text-sm text-error">{error}</p>}
             <DialogFooter>
               <Button
@@ -128,7 +165,9 @@ const CreateTicketDialogImpl = create<CreateTicketDialogProps>(
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                Create ticket
+                {duplicate && duplicate.external_id === externalId.trim()
+                  ? 'Create anyway'
+                  : 'Create ticket'}
               </Button>
             </DialogFooter>
           </form>
