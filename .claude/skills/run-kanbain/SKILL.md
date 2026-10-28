@@ -143,7 +143,30 @@ as well to route OpenCode's `openai/<model>` agents to it.
 interface snapshots the adapter drift tests use; run it after bumping a
 version in `crates/executors/src/versions.rs`.
 
-## 7. Stop
+## 7. Ticket intake (Phase 3a)
+
+Intake and history jobs are headless agent runs in throwaway containers
+(`kanbain-job-*`); they need the sandbox too. The mock's `text_replies`
+answer them (first `when` found in the request's messages wins):
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-intake.json /tmp/mock.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as above
+node $D/intake.mjs http://localhost:$FRONTEND_PORT /tmp/shots /path/to/update.pdf
+```
+
+`intake.mjs` drops a Jira ticket containing `[PROJEKTNAME-123]`, reviews
+and creates it, drops it again with the PDF (whose text must contain
+"Update: the reset link must expire after 30 minutes") to add description
+version 2, and checks the diff, the extracted PDF text, the timeline and
+the New ticket dialog's External ID warning. Any one-page PDF with that
+text works (`text_extract.rs` tests show how to write one).
+
+API checks without the UI: `POST /api/projects/{id}/intakes`, poll
+`GET /api/intakes/{id}`, then `POST /api/intakes/{id}/accept`;
+`GET /api/issues/{id}/descriptions` and `/timeline`.
+
+## 8. Stop
 
 ```bash
 lsof -ti:$FRONTEND_PORT -sTCP:LISTEN | xargs -r kill

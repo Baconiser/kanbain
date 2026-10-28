@@ -1,0 +1,13 @@
+{
+  "commands": [],
+  "text_replies": [
+    {
+      "when": "Update: the reset link",
+      "text": "```json\n{\"title\": \"Password reset email never arrives\", \"description\": \"Users who request a password reset never receive the email. The reset link must also expire after 30 minutes.\", \"acceptance_criteria\": [\"The reset email arrives within one minute\", \"The reset link expires after 30 minutes\"], \"open_questions\": [\"Which mail provider is used in production?\"], \"external_id\": \"PROJEKTNAME-123\", \"priority\": \"high\"}\n```"
+    },
+    {
+      "when": "dropped into the project",
+      "text": "{\"title\": \"Password reset email never arrives\", \"description\": \"Users who request a password reset never receive the email.\", \"acceptance_criteria\": [\"The reset email arrives within one minute\"], \"open_questions\": [\"Which mail provider is used in production?\"], \"external_id\": \"PROJEKTNAME-123\", \"priority\": \"high\"}"
+    }
+  ]
+}

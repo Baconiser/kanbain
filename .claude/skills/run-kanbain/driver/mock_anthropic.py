@@ -7,7 +7,11 @@ usage, so the proxy can price it. OpenAI-compatible `/v1/chat/completions`
 works the same way (for OpenCode's OpenAI-compatible provider).
 Usage: mock_anthropic.py PORT SCRIPT.json [LOG]
 SCRIPT.json: {"commands": ["...", ...], "output_tokens": 50000,
-              "markers": ["text to look for in the system prompt", ...]}
+              "markers": ["text to look for in the system prompt", ...],
+              "text_replies": [{"when": "text in the request", "text": "answer"}, ...]}
+Text answers (no tool call left) use the first `text_replies` entry whose
+`when` appears in the request's messages; headless intake and history jobs
+get their JSON or Markdown answers this way.
 Each request is logged with its tool names, and which markers appear in the
 system prompt (`system_markers`) or anywhere in the request (`markers`).
 """
@@ -69,7 +73,7 @@ class Handler(BaseHTTPRequestHandler):
                      "input": {"command": commands[tool_results], "description": "scripted step"}}
             stop = "tool_use"
         else:
-            block = {"type": "text", "text": "Done. KAN work committed."}
+            block = {"type": "text", "text": scripted_text(body)}
             stop = "end_turn"
         out_tokens = SCRIPT.get("output_tokens", 200) if bash in tools else 20
         usage_start = {"input_tokens": 1500, "output_tokens": 1,
@@ -134,7 +138,7 @@ class Handler(BaseHTTPRequestHandler):
                         {"command": commands[tool_results], "description": "scripted step"})}}
             message, finish = {"role": "assistant", "content": None, "tool_calls": [call]}, "tool_calls"
         else:
-            message, finish = {"role": "assistant", "content": "Done. KAN work committed."}, "stop"
+            message, finish = {"role": "assistant", "content": scripted_text(body)}, "stop"
         usage = {"prompt_tokens": 1500, "completion_tokens": SCRIPT.get("output_tokens", 200),
                  "total_tokens": 1500 + SCRIPT.get("output_tokens", 200)}
         cid = "chatcmpl-" + uuid.uuid4().hex
@@ -171,6 +175,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+
+def scripted_text(body):
+    messages = json.dumps(body.get("messages", []))
+    for reply in SCRIPT.get("text_replies", []):
+        if json.dumps(reply["when"])[1:-1] in messages:
+            return reply["text"]
+    return "Done. KAN work committed."
 
 
 def system_text(body, openai):

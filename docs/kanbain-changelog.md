@@ -426,3 +426,123 @@ the container.
 - **Profiles.** `default_profiles.json` and a user `profiles.json` still
   configure runs without an agent definition, but have no UI any more.
   The `@rjsf` packages are unused and can be removed from `package.json`.
+
+## Phase 3a: Intake, External ID, description versions, timeline (2026-10-28)
+
+**Goal:** a dropped Jira ticket becomes a structured ticket after review,
+dropping it again adds a description version, and every ticket has a
+live timeline.
+
+### What changed
+
+- **Headless agent jobs (D34).** Intake and history analysis run an agent
+  definition of that role in a throwaway sandbox container with no repo
+  and no tools (`SandboxRuntime::run_job`, `local-deployment/src/jobs.rs`).
+  The task, with all the text the agent needs, is the first message (a
+  tool-less agent can't read `/kanbain/context`, which still gets copies);
+  the final message is the result. Claude Code runs as
+  `claude -p --output-format json` with the task on stdin, OpenCode as
+  `opencode run --format json` with the task attached as a file.
+  - The container takes a sandbox slot, reaches only the model proxy and
+    the default package registries, and is removed afterwards.
+  - Jobs are rows in a new `agent_jobs` table with the same token and cost
+    columns as runs. The model proxy books a job's calls there.
+  - **Deviation from D41:** runs are still execution processes, but jobs
+    have no workspace or session to hang an execution process on, so they
+    get their own table instead.
+- **Attachment text (D15).** PDF (`pdf-extract`), HTML and Jira's "Word"
+  export (HTML saved as `.doc`, `html2text`), DOCX (`zip` + `quick-xml`),
+  Jira XML exports (element labels plus the escaped HTML in descriptions
+  converted) and plain text. All of these are pure Rust. The text is stored
+  in `attachment_texts` for the intake agent and for search (3c). Linking
+  a file to a ticket extracts it too.
+- **Intake (D15).**
+  - **Drop ticket** on the board opens a dialog for pasted text (Jira
+    wiki markup included) plus dropped, chosen or pasted files.
+  - The intake agent answers with the `enhanced_ticket.json` shape: title,
+    clean description, acceptance criteria, open questions, External ID and
+    a priority guess.
+  - The review screen shows the original text and each attachment's
+    extracted text next to the editable result, with the agent, model,
+    tokens and cost.
+  - If the agent fails, the ticket can still be made from the original,
+    or the agent retried.
+  - Acceptance criteria and open questions become Markdown sections of the
+    description.
+  - The intake is kept in `ticket_intakes` (with `intake_attachments`, which
+    protects its files from the orphan cleanup).
+- **External ID (D16, D17).**
+  - Detection uses the project's pattern (default
+    `\[?[A-Z][A-Z0-9]*-\d+\]?`) and key, and never matches the project's
+    own prefix.
+  - An External ID the agent invents is replaced by the detected one.
+  - A dropped ticket whose ID exists offers "Update KAN-n (new
+    description version)" with a line diff, or "Create a new ticket".
+  - The New ticket dialog fills the ID from the title and description and
+    warns before creating a second ticket with the same ID.
+  - Tickets' workspaces now branch as `kanbain/<ID>-<slug>` (numbered when
+    another workspace has the name). Leftover commits are prefixed
+    `<ID>: `, and the sandbox's `ticket.md` asks agents to do the same.
+- **Description versions (D17).**
+  - `issue_descriptions` stores each version's title and description, its
+    kind (`original`, `enhanced` or `edited`), the dropped text and the
+    agent's version.
+  - Existing tickets got version 1 in the migration.
+  - Edits in the ticket panel become an `edited` version; edits within ten
+    minutes of it update it, so the autosave doesn't make a version per
+    pause.
+- **Timeline (D19).**
+  - `issue_events` is filled by SQLite triggers for created, status,
+    title, priority, External ID, mode, description versions, comments,
+    attachments, and runs started and finished (agent, duration, tokens,
+    cost). Board drags and bulk updates are recorded like every other path.
+  - Code adds intake events, and Phase 3b adds history ones.
+  - `occurred_at` lets prior commits sort before the ticket's creation.
+  - The ticket panel shows the timeline live (a new WebSocket stream).
+    Description versions open a diff against the previous version and the
+    dropped text.
+  - The panel also lists attachments with their extracted text.
+
+### Demo (Linux dev container)
+
+The model upstream was the scripted mock with `mock-script-intake.json`
+(new `text_replies`). The intake agent was the seeded `intake` (Claude Code
+2.1.119, Haiku) in the real sandbox.
+
+- Pasting a Jira ticket with `h2. [PROJEKTNAME-123] …` detected
+  `PROJEKTNAME-123`. The agent's request carried no tools and reached the
+  upstream with the real key, the job container was removed, and the
+  review showed the original next to the enhanced ticket with
+  "intake · haiku · 1520 tokens · $0.0016".
+- Editing the title and creating the ticket gave KAN-1 with version 1
+  (`edited`), and its timeline listed created, version 1 and the intake
+  with cost.
+- Dropping it again with a PDF offered "Update KAN-1". The PDF's text was
+  extracted and shown, and the diff showed the new acceptance criterion.
+  Updating created version 2 (`enhanced`). The timeline showed the rename,
+  version 2 with its diff, and the attachment. The PDF text shows on the
+  ticket.
+- The New ticket dialog filled `PROJEKTNAME-123` from the title and warned
+  that it exists.
+- `intake.mjs` passed with no console errors or failed API calls.
+- `cargo test --workspace` (extraction, ID detection, branch and commit
+  helpers, headless command and output parsing, intake parsing, version and
+  trigger tests), `pnpm run check`, `pnpm run lint` and the i18n checks
+  pass.
+
+### Not verified here
+
+- **Windows.** The new crates (`pdf-extract`, `html2text`) are pure Rust
+  but haven't been through the Windows CI job yet.
+- **A real model.** The mock answers with fixed JSON; a real Haiku answer
+  may wrap it in prose. Such answers are handled (the first JSON object is
+  taken), but no real model was run.
+- **OpenCode intake.** The OpenCode command and its JSON event parsing have
+  unit tests, but the seeded intake agent runs on Claude Code and no
+  OpenCode job ran here.
+
+### Known leftovers
+
+- Ticket pages are not translated (as in 0b).
+- Run events on the timeline come from triggers on `execution_processes`.
+  They were checked in 3b's run demo, not here.
