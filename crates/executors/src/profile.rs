@@ -141,6 +141,10 @@ pub struct ExecutorConfig {
     /// Permission policy override
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permission_policy: Option<PermissionPolicy>,
+    /// KanbAIn agent definition to run. Its runtime, model, prompts and
+    /// tools replace the executor, model and agent fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_definition: Option<String>,
 }
 
 impl ExecutorConfig {
@@ -153,6 +157,7 @@ impl ExecutorConfig {
             agent_id: None,
             reasoning_id: None,
             permission_policy: None,
+            agent_definition: None,
         }
     }
 
@@ -182,6 +187,7 @@ impl From<ExecutorProfileId> for ExecutorConfig {
             agent_id: None,
             reasoning_id: None,
             permission_policy: None,
+            agent_definition: None,
         }
     }
 }

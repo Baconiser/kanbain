@@ -111,6 +111,7 @@ impl McpServer {
                 agent_id: None,
                 reasoning_id: None,
                 permission_policy: None,
+                agent_definition: None,
             },
             prompt: workspace_prompt,
             attachment_ids: None,

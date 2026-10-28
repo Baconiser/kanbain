@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO style_blocks (name, body, content_hash)\n               VALUES ($1, $2, $3)\n               ON CONFLICT(name) DO UPDATE SET\n                   body = excluded.body,\n                   content_hash = excluded.content_hash,\n                   updated_at = datetime('now', 'subsec')\n               WHERE style_blocks.content_hash != excluded.content_hash",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "42c013ca85632a2eb53c450050bb277abefa7f08a25f4562b39ed7cd069644f2"
+}

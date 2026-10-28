@@ -158,6 +158,8 @@ pub struct ExecutionEnv {
     pub commit_reminder_prompt: String,
     /// Run inside this container instead of on the host.
     pub sandbox: Option<SandboxTarget>,
+    /// Extra CLI arguments from a KanbAIn agent definition's adapter.
+    pub agent_args: Vec<String>,
 }
 
 impl ExecutionEnv {
@@ -172,6 +174,7 @@ impl ExecutionEnv {
             commit_reminder,
             commit_reminder_prompt,
             sandbox: None,
+            agent_args: Vec::new(),
         }
     }
 

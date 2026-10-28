@@ -1,3 +1,4 @@
+pub mod agent_library;
 pub mod approvals;
 pub mod config;
 pub mod container;

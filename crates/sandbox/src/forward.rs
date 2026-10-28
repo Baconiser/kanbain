@@ -38,7 +38,23 @@ pub fn detect_local_ports(line: &str) -> Vec<u16> {
 /// inside `container`. Fails if the host port is taken.
 pub async fn forward_port(container: String, port: u16) -> std::io::Result<JoinHandle<()>> {
     let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], port))).await?;
-    Ok(tokio::spawn(async move {
+    Ok(serve(listener, container, port))
+}
+
+/// Tunnel a free `127.0.0.1` port to `port` inside `container`; returns the
+/// host port. For servers the backend itself talks to, such as
+/// `opencode serve`.
+pub async fn forward_ephemeral(
+    container: String,
+    port: u16,
+) -> std::io::Result<(u16, JoinHandle<()>)> {
+    let listener = TcpListener::bind(SocketAddr::from(([127, 0, 0, 1], 0))).await?;
+    let host_port = listener.local_addr()?.port();
+    Ok((host_port, serve(listener, container, port)))
+}
+
+fn serve(listener: TcpListener, container: String, port: u16) -> JoinHandle<()> {
+    tokio::spawn(async move {
         loop {
             let Ok((stream, _)) = listener.accept().await else {
                 continue;
@@ -50,7 +66,7 @@ pub async fn forward_port(container: String, port: u16) -> std::io::Result<JoinH
                 }
             });
         }
-    }))
+    })
 }
 
 async fn tunnel(stream: TcpStream, container: &str, port: u16) -> std::io::Result<()> {

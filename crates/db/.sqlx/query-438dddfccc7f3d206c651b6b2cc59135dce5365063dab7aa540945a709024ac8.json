@@ -1,0 +1,44 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name as \"name!\", definition, error, content_hash,\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM agent_definitions ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "definition",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "content_hash",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "438dddfccc7f3d206c651b6b2cc59135dce5365063dab7aa540945a709024ac8"
+}

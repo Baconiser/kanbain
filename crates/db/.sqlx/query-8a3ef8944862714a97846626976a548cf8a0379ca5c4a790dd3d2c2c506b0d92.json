@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT name as \"name!\", description, file_count, total_bytes, error,\n                      content_hash, updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM skills ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "name": "name!",
+        "ordinal": 0,
+        "type_info": "Text"
+      },
+      {
+        "name": "description",
+        "ordinal": 1,
+        "type_info": "Text"
+      },
+      {
+        "name": "file_count",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "total_bytes",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "error",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "content_hash",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "8a3ef8944862714a97846626976a548cf8a0379ca5c4a790dd3d2c2c506b0d92"
+}

@@ -556,6 +556,88 @@ export type SandboxStatus = { enabled: boolean, docker_available: boolean, docke
  */
 error: string | null, image: string | null, image_ready: boolean, image_building: boolean, image_error: string | null, anthropic_key_configured: boolean, openai_key_configured: boolean, running_containers: number, };
 
+export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history";
+
+export type AgentRuntime = "claude-code" | "opencode";
+
+export type Capability = "read" | "edit" | "bash" | "test" | "web";
+
+export type AgentLimits = { 
+/**
+ * Agentic turns before the runtime stops (`--max-turns` / `steps`).
+ */
+max_steps?: number | null, 
+/**
+ * Model spend per run in USD. The model proxy enforces it.
+ */
+budget_usd?: number | null, 
+/**
+ * Minutes of agent activity per run.
+ */
+wall_minutes?: number | null, };
+
+export type AgentDefinition = { name: string, description?: string | null, role: AgentRole, runtime: AgentRuntime, 
+/**
+ * `opus`, `sonnet`, `haiku`, a full model id, or `openai/<model>` for
+ * the OpenAI-compatible provider (OpenCode only).
+ */
+model: string, 
+/**
+ * The role layer of the system prompt.
+ */
+role_prompt: string, 
+/**
+ * Style blocks appended to the system prompt, in order.
+ */
+styles: Array<string>, 
+/**
+ * Skills available in the container.
+ */
+skills: Array<string>, capabilities: Array<Capability>, 
+/**
+ * Shell glob patterns allowed with the `test` capability, e.g.
+ * `cargo test*`. Empty means the default test runners.
+ */
+bash_allow?: Array<string>, limits: AgentLimits, 
+/**
+ * MCP servers for this agent, in Claude Code's `mcpServers` shape.
+ */
+mcp_servers?: Record<string, unknown> | null, };
+
+export type StyleBlock = { name: string, body: string, };
+
+export type RuntimeModelOption = { id: string, label: string, };
+
+export type AgentSummary = { name: string, 
+/**
+ * `None` when the file doesn't parse; see `error`.
+ */
+definition: AgentDefinition | null, error: string | null, 
+/**
+ * Referenced styles and skills that don't exist.
+ */
+missing: Array<string>, updated_at: string, };
+
+export type StyleSummary = { name: string, body: string, used_by: Array<string>, updated_at: string, };
+
+export type SkillSummary = { name: string, description: string | null, file_count: bigint, total_bytes: bigint, error: string | null, used_by: Array<string>, updated_at: string, };
+
+export type SkillFileInfo = { path: string, size: bigint, };
+
+export type ImportSummary = { agents: Array<string>, styles: Array<string>, skills: Array<string>, 
+/**
+ * Names that replaced an existing item.
+ */
+replaced: Array<string>, 
+/**
+ * Files that were not imported, with the reason.
+ */
+skipped: Array<string>, };
+
+export type AgentLibraryMeta = { roles: Array<AgentRole>, runtimes: Array<AgentRuntime>, capabilities: Array<Capability>, claude_code_models: Array<RuntimeModelOption>, opencode_models: Array<RuntimeModelOption>, default_test_commands: Array<string>, };
+
+export type CreateSkill = { name: string, description: string, };
+
 export type CredentialProvider = "anthropic" | "openai";
 
 export type SetModelCredential = { provider: CredentialProvider, 
@@ -614,7 +696,12 @@ reasoning_id?: string | null,
 /**
  * Permission policy override
  */
-permission_policy?: PermissionPolicy | null, };
+permission_policy?: PermissionPolicy | null, 
+/**
+ * KanbAIn agent definition to run. Its runtime, model, prompts and
+ * tools replace the executor, model and agent fields.
+ */
+agent_definition?: string | null, };
 
 export type ScriptContext = "SetupScript" | "CleanupScript" | "ArchiveScript" | "DevServer" | "ToolInstallScript";
 

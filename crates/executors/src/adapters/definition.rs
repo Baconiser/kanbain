@@ -88,6 +88,18 @@ pub enum Capability {
     Web,
 }
 
+impl AgentRole {
+    pub fn all() -> Vec<Self> {
+        <Self as strum::IntoEnumIterator>::iter().collect()
+    }
+}
+
+impl Capability {
+    pub fn all() -> Vec<Self> {
+        <Self as strum::IntoEnumIterator>::iter().collect()
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 pub struct AgentLimits {
     /// Agentic turns before the runtime stops (`--max-turns` / `steps`).

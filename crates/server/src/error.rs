@@ -14,6 +14,7 @@ use git::GitServiceError;
 use git_host::GitHostError;
 use local_deployment::pty::PtyError;
 use services::services::{
+    agent_library::AgentLibraryError,
     config::{ConfigError, EditorOpenError},
     container::ContainerError,
     file::FileError,
@@ -67,6 +68,8 @@ pub enum ApiError {
     BadRequest(String),
     #[error("Conflict: {0}")]
     Conflict(String),
+    #[error(transparent)]
+    AgentLibrary(#[from] AgentLibraryError),
     #[error("Forbidden: {0}")]
     Forbidden(String),
     #[error("Too many requests: {0}")]
@@ -331,6 +334,23 @@ impl IntoResponse for ApiError {
                 "Unauthorized. Please sign in again.",
             ),
             ApiError::BadRequest(msg) => ErrorInfo::bad_request("BadRequest", msg.clone()),
+            ApiError::AgentLibrary(e) => match e {
+                AgentLibraryError::NotFound(_) => {
+                    ErrorInfo::not_found("AgentLibrary", e.to_string())
+                }
+                AgentLibraryError::Invalid(_) => {
+                    ErrorInfo::bad_request("AgentLibrary", e.to_string())
+                }
+                AgentLibraryError::Conflict(_) => {
+                    ErrorInfo::conflict("AgentLibrary", e.to_string())
+                }
+                AgentLibraryError::Zip(_) => {
+                    ErrorInfo::bad_request("AgentLibrary", format!("Invalid archive: {e}"))
+                }
+                AgentLibraryError::Io(_) | AgentLibraryError::Database(_) => {
+                    ErrorInfo::internal("AgentLibrary")
+                }
+            },
             ApiError::Conflict(msg) => ErrorInfo::conflict("ConflictError", msg.clone()),
             ApiError::Forbidden(msg) => {
                 ErrorInfo::with_status(StatusCode::FORBIDDEN, "ForbiddenError", msg.clone())

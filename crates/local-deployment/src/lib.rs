@@ -51,6 +51,7 @@ pub struct LocalDeployment {
     pty: PtyService,
     pr_sync_notify: Arc<Notify>,
     secrets: Arc<services::services::secrets::SecretStore>,
+    agent_library: Arc<services::services::agent_library::AgentLibrary>,
 }
 
 #[async_trait]
@@ -155,6 +156,14 @@ impl Deployment for LocalDeployment {
         let (sandbox, budget_rx) =
             crate::sandbox::SandboxRuntime::new(db.clone(), config.clone(), secrets.clone()).await;
 
+        let agent_library = services::services::agent_library::AgentLibrary::new(
+            utils::assets::asset_dir(),
+            db.pool.clone(),
+        );
+        if let Err(e) = agent_library.init().await {
+            tracing::error!("Failed to load the agent library: {e}");
+        }
+
         let workspace_manager = WorkspaceManager::new(db.clone());
         let container = LocalContainerService::new(
             db.clone(),
@@ -167,6 +176,7 @@ impl Deployment for LocalDeployment {
             queued_message_service.clone(),
             sandbox,
             budget_rx,
+            agent_library.clone(),
         )
         .await;
 
@@ -200,6 +210,7 @@ impl Deployment for LocalDeployment {
             pty,
             pr_sync_notify,
             secrets,
+            agent_library,
         };
 
         Ok(deployment)
@@ -273,6 +284,10 @@ impl LocalDeployment {
 
     pub fn secrets(&self) -> &Arc<services::services::secrets::SecretStore> {
         &self.secrets
+    }
+
+    pub fn agent_library(&self) -> &Arc<services::services::agent_library::AgentLibrary> {
+        &self.agent_library
     }
 
     pub fn trigger_pr_sync(&self) {

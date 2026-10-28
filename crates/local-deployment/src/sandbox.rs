@@ -20,6 +20,7 @@ use db::{
     },
 };
 use executors::{
+    adapters::{AGENT_DIR, AgentLaunch, SKILLS_DIR},
     env::{SANDBOX_PID_DIR, SandboxTarget},
     versions::{CLAUDE_CODE_PACKAGE, CLAUDE_CODE_VERSION, OPENCODE_PACKAGE, OPENCODE_VERSION},
 };
@@ -638,6 +639,82 @@ impl SandboxRuntime {
             vars,
             process_key: run.execution.id.to_string(),
         })
+    }
+
+    /// Put an agent definition's generated files and skills into the
+    /// container, replacing the previous run's. Both are root-owned and
+    /// read-only for the agent; `~/.claude/skills` points at the skills,
+    /// which Claude Code and OpenCode both scan.
+    pub async fn install_agent(
+        &self,
+        container: &str,
+        launch: &AgentLaunch,
+    ) -> Result<(), SandboxRunError> {
+        let ready = self.ready()?;
+        let agent_dir = format!("{KANBAIN_DIR}/{AGENT_DIR}");
+        let skills_dir = format!("{KANBAIN_DIR}/{SKILLS_DIR}");
+        sandbox::exec_ok(
+            &ready.docker,
+            container,
+            &[
+                "sh",
+                "-c",
+                &format!("rm -rf {agent_dir} {skills_dir} && mkdir -p {agent_dir} {skills_dir}"),
+            ],
+            &ExecOptions {
+                user: Some("root".into()),
+                ..Default::default()
+            },
+        )
+        .await?;
+
+        let mut files: Vec<FileEntry> = launch
+            .files
+            .iter()
+            .map(|file| {
+                let mut entry = FileEntry::new(&file.path, file.contents.clone()).owned_by_root();
+                if file.executable {
+                    entry.mode = 0o755;
+                }
+                entry
+            })
+            .collect();
+        for skill in &launch.skills {
+            for file in &skill.files {
+                let mut entry = FileEntry::new(
+                    format!("{SKILLS_DIR}/{}/{}", skill.name, file.path),
+                    file.contents.clone(),
+                )
+                .owned_by_root();
+                // Skills may ship scripts.
+                if file.contents.starts_with(b"#!") {
+                    entry.mode = 0o755;
+                }
+                files.push(entry);
+            }
+        }
+        if !files.is_empty() {
+            ready.docker.copy_in(container, KANBAIN_DIR, files).await?;
+        }
+
+        sandbox::exec_ok(
+            &ready.docker,
+            container,
+            &[
+                "sh",
+                "-c",
+                &format!(
+                    "mkdir -p \"$HOME/.claude\" && rm -rf \"$HOME/.claude/skills\" \
+                     && ln -s {skills_dir} \"$HOME/.claude/skills\""
+                ),
+            ],
+            &ExecOptions {
+                user: Some(AGENT_USER.into()),
+                ..Default::default()
+            },
+        )
+        .await?;
+        Ok(())
     }
 
     /// Container shell for a workspace terminal: same container as the

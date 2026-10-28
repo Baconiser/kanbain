@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM skills WHERE name NOT IN (SELECT value FROM json_each($1))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "44f9943019ac94112864ddfa958960d762afeab25bdf7e355e3cbccffd4aff46"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT agent_def_id FROM execution_processes\n               WHERE session_id = ? AND agent_def_id IS NOT NULL\n               ORDER BY created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "name": "agent_def_id",
+        "ordinal": 0,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "69636ccc51b80368f4ecc0304f2584a6382819f2ef78756392f74a6edd00414d"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO agent_definitions (name, definition, error, content_hash)\n               VALUES ($1, $2, $3, $4)\n               ON CONFLICT(name) DO UPDATE SET\n                   definition = excluded.definition,\n                   error = excluded.error,\n                   content_hash = excluded.content_hash,\n                   updated_at = datetime('now', 'subsec')\n               WHERE agent_definitions.content_hash != excluded.content_hash",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "6230d22a829e31aed1ccdcf67d0fc5a8f6c0eda5b34286458a966d8e49354fbf"
+}

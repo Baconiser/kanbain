@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM style_blocks WHERE name NOT IN (SELECT value FROM json_each($1))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "33ba43b3d581d53aa0a194195cf650937c250ee2121177897a6b92d24dabe876"
+}

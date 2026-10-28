@@ -589,6 +589,7 @@ impl StandardCodingAgentExecutor for ClaudeCode {
             agent_id: None,
             reasoning_id: self.effort.as_ref().map(|e| e.as_ref().to_owned()),
             permission_policy: Some(permission_policy),
+            agent_definition: None,
         }
     }
 
@@ -624,7 +625,8 @@ impl ClaudeCode {
         command_parts: CommandParts,
         env: &ExecutionEnv,
     ) -> Result<SpawnedChild, ExecutorError> {
-        let (program, args) = command_parts.into_parts();
+        let (program, mut args) = command_parts.into_parts();
+        args.extend(env.agent_args.iter().cloned());
         let combined_prompt = self.append_prompt.combine_prompt(prompt);
 
         let mut process_env = env.clone();

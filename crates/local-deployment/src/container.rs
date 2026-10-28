@@ -35,6 +35,7 @@ use executors::{
         coding_agent_follow_up::CodingAgentFollowUpRequest,
         coding_agent_initial::CodingAgentInitialRequest,
     },
+    adapters::{RunSettings, adapter_for},
     approvals::{ExecutorApprovalService, NoopExecutorApprovalService},
     env::{ExecutionEnv, RepoContext, SandboxTarget},
     executors::{BaseCodingAgent, CancellationToken, ExecutorExitResult, ExecutorExitSignal},
@@ -43,6 +44,7 @@ use executors::{
 use futures::{FutureExt, TryStreamExt, stream::select};
 use git::GitService;
 use services::services::{
+    agent_library::AgentLibrary,
     approvals::{Approvals, executor_approvals::ExecutorApprovalBridge},
     config::{Config, DEFAULT_COMMIT_REMINDER_PROMPT},
     container::{ContainerError, ContainerRef, ContainerService},
@@ -90,6 +92,7 @@ pub struct LocalContainerService {
     queued_message_service: QueuedMessageService,
     notification_service: NotificationService,
     sandbox: SandboxRuntime,
+    agent_library: Arc<AgentLibrary>,
 }
 
 impl LocalContainerService {
@@ -105,6 +108,7 @@ impl LocalContainerService {
         queued_message_service: QueuedMessageService,
         sandbox: SandboxRuntime,
         budget_rx: mpsc::UnboundedReceiver<Uuid>,
+        agent_library: Arc<AgentLibrary>,
     ) -> Self {
         let child_store = Arc::new(RwLock::new(HashMap::new()));
         let cancellation_tokens = Arc::new(RwLock::new(HashMap::new()));
@@ -129,6 +133,7 @@ impl LocalContainerService {
             queued_message_service,
             notification_service,
             sandbox,
+            agent_library,
         };
 
         container.spawn_workspace_cleanup();
@@ -384,7 +389,8 @@ impl LocalContainerService {
         execution_process: &ExecutionProcess,
         repos: &[Repo],
         workspace_root: &Path,
-    ) -> Result<SandboxTarget, ContainerError> {
+        agent_budget: Option<f64>,
+    ) -> Result<(SandboxTarget, Option<f64>), ContainerError> {
         let pool = &self.db.pool;
         let agent_run = execution_process.run_reason == ExecutionProcessRunReason::CodingAgent;
         let issue = match workspace.issue_id {
@@ -397,9 +403,13 @@ impl LocalContainerService {
         };
         let settings = self.config.read().await.sandbox.clone();
 
-        // Scripts get no model budget at all.
+        // Scripts get no model budget at all; an agent definition's budget
+        // caps the run budget.
         let mut budget = if agent_run {
-            settings.run_budget_usd
+            match (settings.run_budget_usd, agent_budget) {
+                (Some(run), Some(agent)) => Some(run.min(agent)),
+                (run, agent) => run.or(agent),
+            }
         } else {
             Some(0.0)
         };
@@ -426,7 +436,8 @@ impl LocalContainerService {
             .get(&execution_process.id)
             .cloned();
         let log = move |line: String| Self::push_run_note(store.as_ref(), &line);
-        self.sandbox
+        let target = self
+            .sandbox
             .prepare(
                 PrepareRun {
                     execution: execution_process,
@@ -441,7 +452,35 @@ impl LocalContainerService {
                 &log,
             )
             .await
-            .map_err(|e| ContainerError::Other(anyhow!(e)))
+            .map_err(|e| ContainerError::Other(anyhow!(e)))?;
+        Ok((target, budget))
+    }
+
+    /// The agent definition a coding run uses: the one it names, or for a
+    /// follow-up the one its session ran last.
+    async fn agent_definition_for(
+        &self,
+        action: &ExecutorAction,
+        execution_process: &ExecutionProcess,
+    ) -> Result<Option<String>, ContainerError> {
+        let Some(config) = action.executor_config() else {
+            return Ok(None);
+        };
+        if let Some(name) = &config.agent_definition {
+            return Ok(Some(name.clone()));
+        }
+        if matches!(
+            action.typ(),
+            ExecutorActionType::CodingAgentFollowUpRequest(_)
+                | ExecutorActionType::ReviewRequest(_)
+        ) {
+            return Ok(ExecutionProcess::latest_agent_definition_for_session(
+                &self.db.pool,
+                execution_process.session_id,
+            )
+            .await?);
+        }
+        Ok(None)
     }
 
     /// Bring a sandboxed run's work back to the host worktree and release
@@ -1193,8 +1232,11 @@ impl LocalContainerService {
 
     /// Start a follow-up execution from a queued message
     /// Stop an agent run after the configured number of minutes (D28).
-    async fn spawn_run_time_limit(&self, exec_id: Uuid) {
-        let minutes = self.config.read().await.sandbox.max_run_minutes;
+    async fn spawn_run_time_limit(&self, exec_id: Uuid, agent_minutes: Option<u32>) {
+        let minutes = match agent_minutes {
+            Some(minutes) => minutes,
+            None => self.config.read().await.sandbox.max_run_minutes,
+        };
         if minutes == 0 {
             return;
         }
@@ -1540,11 +1582,88 @@ impl ContainerService for LocalContainerService {
         env.insert("KANBAIN_WORKSPACE_BRANCH", &workspace.branch);
 
         let sandboxed = self.sandbox.enabled().await;
+        let mut executor_action = executor_action.clone();
+        let agent = match self
+            .agent_definition_for(&executor_action, execution_process)
+            .await?
+        {
+            Some(name) if !sandboxed => {
+                return Err(ContainerError::Other(anyhow!(
+                    "Agent `{name}` runs in the sandbox; turn the sandbox on in Settings → Sandbox"
+                )));
+            }
+            Some(name) => Some(
+                self.agent_library
+                    .resolve(&name)
+                    .await
+                    .map_err(|e| ContainerError::Other(anyhow!("Agent `{name}`: {e}")))?,
+            ),
+            None => None,
+        };
+
         if sandboxed {
-            env.sandbox = Some(
-                self.prepare_sandbox(workspace, execution_process, &repos, &current_dir)
-                    .await?,
-            );
+            let (target, budget) = self
+                .prepare_sandbox(
+                    workspace,
+                    execution_process,
+                    &repos,
+                    &current_dir,
+                    agent.as_ref().and_then(|a| a.definition.limits.budget_usd),
+                )
+                .await?;
+            if let Some(agent) = &agent {
+                let def = &agent.definition;
+                let launch =
+                    adapter_for(def.runtime).launch(agent, &RunSettings { budget_usd: budget });
+                if let Err(e) = self.sandbox.install_agent(&target.container, &launch).await {
+                    self.sandbox.release(execution_process.id).await;
+                    return Err(ContainerError::Other(anyhow!(e)));
+                }
+                env.merge(&launch.env);
+                env.agent_args = launch.args.clone();
+                if let Some(config) = executor_action.executor_config_mut() {
+                    config.executor = launch.executor;
+                    config.variant = None;
+                    config.model_id = Some(launch.model.clone());
+                    config.agent_id = launch.runtime_agent.clone();
+                    config.agent_definition = Some(def.name.clone());
+                }
+                ExecutionProcess::set_agent_definition(
+                    &self.db.pool,
+                    execution_process.id,
+                    &def.name,
+                )
+                .await?;
+                let store = self
+                    .msg_stores
+                    .read()
+                    .await
+                    .get(&execution_process.id)
+                    .cloned();
+                Self::push_run_note(
+                    store.as_ref(),
+                    &format!(
+                        "Agent {} ({}, {}){}",
+                        def.name,
+                        def.runtime,
+                        launch.model,
+                        if launch.skills.is_empty() {
+                            String::new()
+                        } else {
+                            format!(
+                                ", skills: {}",
+                                launch
+                                    .skills
+                                    .iter()
+                                    .map(|s| s.name.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join(", ")
+                            )
+                        }
+                    ),
+                );
+            }
+            env.sandbox = Some(target);
         }
 
         // Create the child and stream, add to execution tracker with timeout
@@ -1591,7 +1710,13 @@ impl ContainerService for LocalContainerService {
         self.add_exit_monitor_handle(execution_process.id, hn).await;
 
         if sandboxed && execution_process.run_reason == ExecutionProcessRunReason::CodingAgent {
-            self.spawn_run_time_limit(execution_process.id).await;
+            self.spawn_run_time_limit(
+                execution_process.id,
+                agent
+                    .as_ref()
+                    .and_then(|a| a.definition.limits.wall_minutes),
+            )
+            .await;
         }
         if execution_process.run_reason == ExecutionProcessRunReason::DevServer
             && let Some(target) = &env.sandbox

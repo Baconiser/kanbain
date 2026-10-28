@@ -108,12 +108,6 @@ impl Opencode {
         current_dir: &Path,
         env: &ExecutionEnv,
     ) -> Result<(AsyncGroupChild, ServerPassword), ExecutorError> {
-        // The backend talks to `opencode serve` over HTTP on 127.0.0.1, which
-        // a sandbox container does not expose; the OpenCode adapter (Phase 2)
-        // routes it through the sandbox.
-        if env.sandbox.is_some() {
-            return Err(ExecutorError::SandboxUnsupported("OpenCode".into()));
-        }
         let command_parts = self.build_command_builder()?.build_initial()?;
         let (program, args) = command_parts.into_parts();
 
@@ -185,8 +179,14 @@ impl Opencode {
         let (exit_signal_tx, exit_signal_rx) = tokio::sync::oneshot::channel();
         let cancel = tokio_util::sync::CancellationToken::new();
 
-        // Prepare config values that will be moved into the spawned task
-        let directory = current_dir.to_string_lossy().to_string();
+        // Prepare config values that will be moved into the spawned task.
+        // In the sandbox, the server sees container paths and listens inside
+        // the container, so it is reached through a tunnelled host port.
+        let sandbox = env.sandbox.clone();
+        let directory = match &sandbox {
+            Some(target) => target.container_path(current_dir),
+            None => current_dir.to_string_lossy().to_string(),
+        };
         let approvals = self.approvals.clone();
         let model = self.model.clone();
         let model_variant = self.variant.clone();
@@ -211,6 +211,23 @@ impl Opencode {
                     let _ = exit_signal_tx.send(ExecutorExitResult::Failure);
                     return;
                 }
+            };
+            let mut tunnel = None;
+            let base_url = match &sandbox {
+                Some(target) => match tunnel_to_container(&target.container, &base_url).await {
+                    Ok((url, handle)) => {
+                        tunnel = Some(handle);
+                        url
+                    }
+                    Err(err) => {
+                        let _ = log_writer
+                            .log_error(format!("OpenCode sandbox tunnel error: {err}"))
+                            .await;
+                        let _ = exit_signal_tx.send(ExecutorExitResult::Failure);
+                        return;
+                    }
+                },
+                None => base_url,
             };
 
             let config = RunConfig {
@@ -245,6 +262,9 @@ impl Opencode {
                     ExecutorExitResult::Failure
                 }
             };
+            if let Some(tunnel) = tunnel {
+                tunnel.abort();
+            }
             let _ = exit_signal_tx.send(exit_result);
         });
 
@@ -320,6 +340,28 @@ fn format_tail(captured: Vec<String>) -> String {
         .rev()
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// Forward a host port to the port in `url` (an `opencode serve` address
+/// inside the container) and return the host URL.
+async fn tunnel_to_container(
+    container: &str,
+    url: &str,
+) -> Result<(String, tokio::task::JoinHandle<()>), ExecutorError> {
+    let port = url
+        .trim_end_matches('/')
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.parse::<u16>().ok())
+        .ok_or_else(|| {
+            ExecutorError::Io(std::io::Error::other(format!(
+                "no port in OpenCode server URL {url}"
+            )))
+        })?;
+    let (host_port, handle) = sandbox::forward::forward_ephemeral(container.to_string(), port)
+        .await
+        .map_err(ExecutorError::Io)?;
+    Ok((format!("http://127.0.0.1:{host_port}"), handle))
 }
 
 async fn wait_for_server_url(
@@ -770,6 +812,7 @@ impl StandardCodingAgentExecutor for Opencode {
             } else {
                 PermissionPolicy::Supervised
             }),
+            agent_definition: None,
         }
     }
 }

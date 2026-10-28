@@ -14,6 +14,7 @@ use crate::{
     approvals::ExecutorApprovalService,
     env::ExecutionEnv,
     executors::{BaseCodingAgent, ExecutorError, SpawnedChild},
+    profile::ExecutorConfig,
 };
 pub mod coding_agent_follow_up;
 pub mod coding_agent_initial;
@@ -57,6 +58,33 @@ impl ExecutorAction {
 
     pub fn next_action(&self) -> Option<&ExecutorAction> {
         self.next_action.as_deref()
+    }
+
+    /// The executor config of a coding agent or review action.
+    pub fn executor_config(&self) -> Option<&ExecutorConfig> {
+        match &self.typ {
+            ExecutorActionType::CodingAgentInitialRequest(request) => {
+                Some(&request.executor_config)
+            }
+            ExecutorActionType::CodingAgentFollowUpRequest(request) => {
+                Some(&request.executor_config)
+            }
+            ExecutorActionType::ReviewRequest(request) => Some(&request.executor_config),
+            ExecutorActionType::ScriptRequest(_) => None,
+        }
+    }
+
+    pub fn executor_config_mut(&mut self) -> Option<&mut ExecutorConfig> {
+        match &mut self.typ {
+            ExecutorActionType::CodingAgentInitialRequest(request) => {
+                Some(&mut request.executor_config)
+            }
+            ExecutorActionType::CodingAgentFollowUpRequest(request) => {
+                Some(&mut request.executor_config)
+            }
+            ExecutorActionType::ReviewRequest(request) => Some(&mut request.executor_config),
+            ExecutorActionType::ScriptRequest(_) => None,
+        }
     }
 
     pub fn base_executor(&self) -> Option<BaseCodingAgent> {

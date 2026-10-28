@@ -535,6 +535,39 @@ impl ExecutionProcess {
         Ok(())
     }
 
+    /// Record which agent definition ran this process.
+    pub async fn set_agent_definition(
+        pool: &SqlitePool,
+        id: Uuid,
+        agent: &str,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE execution_processes SET agent_def_id = ? WHERE id = ?",
+            agent,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// The agent definition of the session's latest agent run, so
+    /// follow-ups keep running the same agent.
+    pub async fn latest_agent_definition_for_session(
+        pool: &SqlitePool,
+        session_id: Uuid,
+    ) -> Result<Option<String>, sqlx::Error> {
+        let row = sqlx::query_scalar!(
+            r#"SELECT agent_def_id FROM execution_processes
+               WHERE session_id = ? AND agent_def_id IS NOT NULL
+               ORDER BY created_at DESC LIMIT 1"#,
+            session_id
+        )
+        .fetch_optional(pool)
+        .await?;
+        Ok(row.flatten())
+    }
+
     /// Add one model call's tokens and cost to the run's totals.
     pub async fn add_usage(
         pool: &SqlitePool,
