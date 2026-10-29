@@ -177,6 +177,21 @@ code: EmbedderConfig | null, reranker: RerankerConfig | null,
  */
 candidates: number, 
 /**
+ * Top fused candidates the reranker rescores (E10).
+ */
+rerank_candidates: number, 
+/**
+ * Characters of each candidate sent to the reranker. Cross-encoders
+ * read every token, so this sets the rerank latency.
+ */
+rerank_doc_chars: number, 
+/**
+ * How much the reranker's order counts against the fused order (1.0 =
+ * as much). Below 1 an off-domain reranker can't overturn a clear
+ * keyword-and-vector winner.
+ */
+rerank_weight: number, 
+/**
  * Reciprocal rank fusion constant.
  */
 rrf_k: number, 
@@ -299,7 +314,11 @@ tickets: { [key in string]?: TicketRef },
 /**
  * Names of the repos of code hits, by id.
  */
-repos: { [key in string]?: string }, semantic: boolean, notice: string | null, took_ms: number, };
+repos: { [key in string]?: string }, semantic: boolean, 
+/**
+ * The reranker reordered the results (E10).
+ */
+reranked: boolean, notice: string | null, took_ms: number, };
 
 export type RelatedTicket = { ticket: TicketRef, score: number, kinds: Array<string>, excerpt: string, 
 /**

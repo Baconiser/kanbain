@@ -115,6 +115,8 @@ pub struct SearchResults {
     /// Names of the repos of code hits, by id.
     pub repos: HashMap<Uuid, String>,
     pub semantic: bool,
+    /// The reranker reordered the results (E10).
+    pub reranked: bool,
     pub notice: Option<String>,
     #[ts(type = "number")]
     pub took_ms: u64,
@@ -136,6 +138,7 @@ async fn search(
         tickets,
         repos,
         semantic: response.semantic,
+        reranked: response.reranked,
         notice: response.notice,
         took_ms: response.took_ms,
     })))

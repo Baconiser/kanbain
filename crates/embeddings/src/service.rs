@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use crate::{
     chunk,
-    client::{ClientError, Embedder, HttpEmbedder, InputKind},
+    client::{ClientError, Embedder, HttpEmbedder, HttpReranker, InputKind, Reranker},
     config::{EmbedderConfig, EmbedderProvider, SearchConfig, is_remote_url},
     repo_index,
     sources::{self, KIND_COMMENT, TEXT_KINDS},
@@ -184,10 +184,16 @@ fn space_config(space: &Space) -> EmbedderConfig {
 
 /// Reciprocal rank fusion of ranked candidate lists (E5).
 pub fn rrf(lists: &[&[i64]], k: f64) -> Vec<(i64, f64)> {
+    let weighted: Vec<(&[i64], f64)> = lists.iter().map(|l| (*l, 1.0)).collect();
+    weighted_rrf(&weighted, k)
+}
+
+/// [`rrf`] where each list counts with its own weight.
+pub fn weighted_rrf(lists: &[(&[i64], f64)], k: f64) -> Vec<(i64, f64)> {
     let mut scores: HashMap<i64, f64> = HashMap::new();
-    for list in lists {
+    for (list, weight) in lists {
         for (rank, id) in list.iter().enumerate() {
-            *scores.entry(*id).or_default() += 1.0 / (k + rank as f64 + 1.0);
+            *scores.entry(*id).or_default() += weight / (k + rank as f64 + 1.0);
         }
     }
     let mut out: Vec<(i64, f64)> = scores.into_iter().collect();
@@ -1060,7 +1066,7 @@ impl SearchService {
         };
         let exclude = request.exclude_issue_id.map(|i| i.to_string());
         let rank = |list: &[i64], id: i64| list.iter().position(|x| *x == id).map(|p| p as u32 + 1);
-        let ordered: Vec<(i64, f64)> = fused
+        let candidates_kept: Vec<(i64, f64)> = fused
             .into_iter()
             .filter(|(id, _)| {
                 let Some(row) = rows.get(id) else {
@@ -1076,6 +1082,56 @@ impl SearchService {
                         .any(|(r, p)| *r == row.repo_id && *p == row.path))
             })
             .collect();
+
+        // E10: rescore the top candidates; on failure keep the RRF order.
+        let mut reranked = false;
+        let mut ordered = candidates_kept;
+        if request.rerank.unwrap_or(true)
+            && let Some(reranker) = config
+                .reranker
+                .clone()
+                .filter(|r| !r.base_url.trim().is_empty())
+        {
+            let n = ordered.len().min(config.rerank_candidates.max(1) as usize);
+            let doc_chars = config.rerank_doc_chars.max(1) as usize;
+            let documents: Vec<String> = ordered[..n]
+                .iter()
+                .map(|(id, _)| rows[id].text.chars().take(doc_chars).collect())
+                .collect();
+            let client = HttpReranker::new(reranker, self.keys.key(RERANKER_KEY_SLOT).await);
+            let t = Instant::now();
+            match client.rerank(&request.query, &documents).await {
+                Ok(scores) if !scores.is_empty() => {
+                    // The reranker's order is fused with the RRF order, not
+                    // swapped in for it. Common cross-encoders learned on web
+                    // passages and score code near zero, so on their own they
+                    // scramble a good code ranking; fused (and weighted, see
+                    // `rerank_weight`), they can only nudge it. Anything the
+                    // reranker left out still has its RRF rank.
+                    let fused_order: Vec<i64> = ordered[..n].iter().map(|(id, _)| *id).collect();
+                    let reranked_order: Vec<i64> = scores
+                        .iter()
+                        .filter(|(i, _)| *i < n)
+                        .map(|(i, _)| ordered[*i].0)
+                        .collect();
+                    let mut head = weighted_rrf(
+                        &[
+                            (&fused_order, 1.0),
+                            (&reranked_order, f64::from(config.rerank_weight)),
+                        ],
+                        config.rrf_k as f64,
+                    );
+                    head.extend_from_slice(&ordered[n..]);
+                    ordered = head;
+                    reranked = true;
+                    tracing::debug!("Reranked {n} candidates in {:?}", t.elapsed());
+                }
+                Ok(_) => {}
+                Err(e) => {
+                    tracing::warn!("Reranking failed; using the fused ranking: {e}");
+                }
+            }
+        }
 
         let hits: Vec<SearchHit> = ordered
             .into_iter()
@@ -1094,7 +1150,7 @@ impl SearchService {
         Ok(SearchResponse {
             hits,
             semantic,
-            reranked: false,
+            reranked,
             notice,
             took_ms: started.elapsed().as_millis() as u64,
         })
@@ -1339,6 +1395,13 @@ mod tests {
         assert_eq!(fused[0].0, 3, "in both lists");
         assert_eq!(fused.len(), 4);
         assert!(fused[1].0 == 1);
+    }
+
+    #[test]
+    fn a_light_list_only_nudges() {
+        let (base, other): (&[i64], &[i64]) = (&[1, 2, 3], &[2, 3, 1]);
+        assert_eq!(weighted_rrf(&[(base, 1.0), (other, 1.0)], 60.0)[0].0, 2);
+        assert_eq!(weighted_rrf(&[(base, 1.0), (other, 0.25)], 60.0)[0].0, 1);
     }
 
     #[test]
@@ -1865,5 +1928,84 @@ mod service_tests {
                 .iter()
                 .all(|h| h.path.as_deref() != Some("src/numbering.rs"))
         );
+    }
+
+    #[tokio::test]
+    async fn reranks_and_falls_back() {
+        let state = MockState {
+            dim: 32,
+            ..Default::default()
+        };
+        let base = mock_server(state).await;
+        let main = main_db().await;
+        let project = Project::create(
+            &main,
+            &CreateProject {
+                name: "R".into(),
+                id_prefix: Some("R".into()),
+                repo_ids: vec![],
+            },
+        )
+        .await
+        .unwrap();
+        let a = issue(
+            &main,
+            project.id,
+            "Mail settings",
+            "Configure mail delivery.",
+        )
+        .await;
+        let b = issue(
+            &main,
+            project.id,
+            "Mail queue",
+            "The mail queue stalls on retry.",
+        )
+        .await;
+        let dir = tempfile::tempdir().unwrap();
+        let config = Arc::new(RwLock::new(SearchConfig {
+            text: Some(embedder(&base, "m")),
+            reranker: Some(crate::config::RerankerConfig {
+                provider: crate::config::RerankerProvider::Tei,
+                base_url: base.clone(),
+                model: "r".into(),
+                timeout_secs: 2,
+            }),
+            ..Default::default()
+        }));
+        let service = SearchService::open(
+            &dir.path().join("e.sqlite"),
+            main.clone(),
+            config.clone(),
+            Arc::new(NoKeys),
+        )
+        .await
+        .unwrap();
+        service.enqueue_all(None).await.unwrap();
+        settle(&service).await;
+        // The mock reranker scores documents containing the query highest.
+        let request = SearchRequest {
+            query: "stalls on retry".into(),
+            project_id: Some(project.id),
+            ..Default::default()
+        };
+        let response = service.search(&request).await.unwrap();
+        assert!(response.reranked);
+        assert_eq!(response.hits[0].issue_id, Some(b.id));
+        let plain = service
+            .search(&SearchRequest {
+                rerank: Some(false),
+                ..request.clone()
+            })
+            .await
+            .unwrap();
+        assert!(!plain.reranked);
+
+        // A dead reranker falls back to the fused order without an error.
+        config.write().await.reranker.as_mut().unwrap().base_url = "http://127.0.0.1:9".into();
+        let fallback = service.search(&request).await.unwrap();
+        assert!(!fallback.reranked);
+        assert!(!fallback.hits.is_empty());
+        let _ = a;
     }
 }

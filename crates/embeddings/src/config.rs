@@ -91,6 +91,15 @@ pub struct SearchConfig {
     pub reranker: Option<RerankerConfig>,
     /// Candidates taken from each of the vector and keyword searches.
     pub candidates: u32,
+    /// Top fused candidates the reranker rescores (E10).
+    pub rerank_candidates: u32,
+    /// Characters of each candidate sent to the reranker. Cross-encoders
+    /// read every token, so this sets the rerank latency.
+    pub rerank_doc_chars: u32,
+    /// How much the reranker's order counts against the fused order (1.0 =
+    /// as much). Below 1 an off-domain reranker can't overturn a clear
+    /// keyword-and-vector winner.
+    pub rerank_weight: f32,
     /// Reciprocal rank fusion constant.
     pub rrf_k: u32,
     /// Hits returned when the request names no limit.
@@ -106,6 +115,15 @@ impl Default for SearchConfig {
             code: None,
             reranker: None,
             candidates: 50,
+            // Tuned on the 3e evaluation set with a CPU cross-encoder: 20
+            // candidates of 500 characters matched recall@10 of 30 x 800 at
+            // 70% of the latency; 50 x 2000 never finished inside a timeout.
+            rerank_candidates: 20,
+            rerank_doc_chars: 500,
+            // 0.5 and 0.75 tied on the 3e set (MRR 0.821, against 0.808 at
+            // 1.0 and 0.784 without a reranker); only 0.5 kept the 3d
+            // benchmark's target first, a query outside the set.
+            rerank_weight: 0.5,
             rrf_k: 60,
             limit: 10,
             excerpt_chars: 1500,

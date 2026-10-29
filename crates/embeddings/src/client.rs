@@ -79,6 +79,7 @@ async fn post_json(
     api_key: Option<&str>,
     body: &Value,
     timeout: Duration,
+    attempts: u32,
 ) -> Result<Value, ClientError> {
     let mut attempt = 0;
     loop {
@@ -109,7 +110,7 @@ async fn post_json(
             }),
         };
         match result {
-            Err(e) if e.retryable() && attempt + 1 < RETRIES => {
+            Err(e) if e.retryable() && attempt + 1 < attempts => {
                 attempt += 1;
                 tokio::time::sleep(Duration::from_millis(500 * 2u64.pow(attempt - 1))).await;
             }
@@ -160,8 +161,15 @@ impl HttpEmbedder {
                 if let Some(dimensions) = self.config.dimensions {
                     body["dimensions"] = json!(dimensions);
                 }
-                let value =
-                    post_json(&self.http, &url, self.api_key.as_deref(), &body, timeout).await?;
+                let value = post_json(
+                    &self.http,
+                    &url,
+                    self.api_key.as_deref(),
+                    &body,
+                    timeout,
+                    RETRIES,
+                )
+                .await?;
                 let decode = |message: &str| ClientError::Decode {
                     url: url.clone(),
                     message: message.to_string(),
@@ -202,8 +210,15 @@ impl HttpEmbedder {
             EmbedderProvider::Tei => {
                 let url = endpoint(&self.config.base_url, "embed");
                 let body = json!({ "inputs": inputs, "truncate": true });
-                let value =
-                    post_json(&self.http, &url, self.api_key.as_deref(), &body, timeout).await?;
+                let value = post_json(
+                    &self.http,
+                    &url,
+                    self.api_key.as_deref(),
+                    &body,
+                    timeout,
+                    RETRIES,
+                )
+                .await?;
                 let vectors: Vec<Vec<f32>> =
                     serde_json::from_value(value).map_err(|e| ClientError::Decode {
                         url,
@@ -288,17 +303,16 @@ impl HttpReranker {
     }
 }
 
-#[async_trait]
-impl Reranker for HttpReranker {
-    async fn rerank(
+/// Documents per rerank request; TEI's default maximum batch is 32.
+const RERANK_BATCH: usize = 32;
+
+impl HttpReranker {
+    async fn rerank_batch(
         &self,
         query: &str,
         documents: &[String],
+        timeout: Duration,
     ) -> Result<Vec<(usize, f32)>, ClientError> {
-        if documents.is_empty() {
-            return Ok(vec![]);
-        }
-        let timeout = Duration::from_secs(self.config.timeout_secs.max(1) as u64);
         let url = endpoint(&self.config.base_url, "rerank");
         let (body, list_key, score_key) = match self.config.provider {
             RerankerProvider::Tei => (
@@ -317,12 +331,15 @@ impl Reranker for HttpReranker {
                 "relevance_score",
             ),
         };
-        let value = post_json(&self.http, &url, self.api_key.as_deref(), &body, timeout).await?;
+        // One shot: a search waiting on a slow reranker is better off with
+        // the fused order now, and a retry would only queue more work on a
+        // reranker that's already behind.
+        let value = post_json(&self.http, &url, self.api_key.as_deref(), &body, timeout, 1).await?;
         let items = match list_key {
             Some(key) => value.get(key).cloned().unwrap_or(Value::Null),
             None => value,
         };
-        let mut scores: Vec<(usize, f32)> = items
+        Ok(items
             .as_array()
             .ok_or_else(|| ClientError::Decode {
                 url: url.clone(),
@@ -334,7 +351,37 @@ impl Reranker for HttpReranker {
                 let score = item.get(score_key)?.as_f64()? as f32;
                 (index < documents.len()).then_some((index, score))
             })
-            .collect();
+            .collect())
+    }
+}
+
+#[async_trait]
+impl Reranker for HttpReranker {
+    async fn rerank(
+        &self,
+        query: &str,
+        documents: &[String],
+    ) -> Result<Vec<(usize, f32)>, ClientError> {
+        // The timeout covers the whole rerank, however many batches it takes.
+        let deadline = Instant::now() + Duration::from_secs(self.config.timeout_secs.max(1) as u64);
+        let url = endpoint(&self.config.base_url, "rerank");
+        let mut scores = Vec::with_capacity(documents.len());
+        for (b, batch) in documents.chunks(RERANK_BATCH).enumerate() {
+            let offset = b * RERANK_BATCH;
+            let left = deadline.saturating_duration_since(Instant::now());
+            if left.is_zero() {
+                return Err(ClientError::Transport {
+                    url,
+                    message: "timed out".into(),
+                });
+            }
+            scores.extend(
+                self.rerank_batch(query, batch, left)
+                    .await?
+                    .into_iter()
+                    .map(|(i, score)| (i + offset, score)),
+            );
+        }
         scores.sort_by(|a, b| b.1.total_cmp(&a.1));
         Ok(scores)
     }
@@ -589,6 +636,50 @@ pub(crate) mod tests {
             scores.iter().map(|s| s.0).collect::<Vec<_>>(),
             vec![2, 1, 0]
         );
+    }
+
+    #[tokio::test]
+    async fn rerank_batches_once_within_one_deadline() {
+        let base = mock_server(MockState::default()).await;
+        let tei = |base_url: String, timeout_secs| {
+            HttpReranker::new(
+                RerankerConfig {
+                    provider: RerankerProvider::Tei,
+                    base_url,
+                    timeout_secs,
+                    ..Default::default()
+                },
+                None,
+            )
+        };
+        // 40 documents take two batches; offsets survive the split.
+        let mut docs: Vec<String> = (0..40).map(|i| format!("doc {i}")).collect();
+        docs[35] = "the needle".into();
+        let scores = tei(base, 5).rerank("needle", &docs).await.unwrap();
+        assert_eq!(scores.len(), 40);
+        assert_eq!(scores[0].0, 35);
+
+        // A reranker slower than the timeout: one request, no retry, and
+        // the second batch is never sent.
+        let calls = Arc::new(AtomicUsize::new(0));
+        let app = Router::new()
+            .route(
+                "/rerank",
+                post(|State(calls): State<Arc<AtomicUsize>>| async move {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                    Json(json!([]))
+                }),
+            )
+            .with_state(calls.clone());
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let started = Instant::now();
+        let result = tei(format!("http://{addr}"), 1).rerank("q", &docs).await;
+        assert!(result.is_err());
+        assert!(started.elapsed() < Duration::from_millis(1400));
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]
