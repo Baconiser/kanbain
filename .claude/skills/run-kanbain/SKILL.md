@@ -194,6 +194,28 @@ part against an earlier run's project (one TEI container is enough then).
 Memory is tight with two TEI containers, Vite, Chromium and a Rust build;
 build with `CARGO_BUILD_JOBS=2` and stop TEI containers you don't need.
 
+## 8b. Code search and the token benchmark (Phase 3d)
+
+One TEI container is enough: pass it as both the text and the code
+embedder. The code slot without the query prefix is a different
+configuration, so it still forces a code-space rebuild.
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-benchmark.json /tmp/mock.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as in section 5
+node $D/code-search.mjs $BACKEND_PORT $KANBAIN_LAUNCH_TOKEN dev_assets/embeddings.sqlite \
+  /path/to/workdir http://localhost:8090 BAAI/bge-small-en-v1.5 http://localhost:8090 BAAI/bge-small-en-v1.5 3
+```
+
+Part A clones this repo into `<workdir>/kanbain-src` and indexes it. That
+is about 6,400 chunks and **about 30 minutes per pass** on CPU TEI, and the
+code-embedder switch adds a second pass. `PART=B` skips Part A and runs
+only the sandboxed benchmark and the overlay check (a few minutes).
+
+Every Part A run creates a new full-repo project. Delete old "KanbAIn
+code <n>" projects first, or each pass embeds every copy: the index once
+grew to 13k chunks this way.
+
 ## 9. Stop
 
 ```bash

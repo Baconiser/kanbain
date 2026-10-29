@@ -768,3 +768,120 @@ dimensions), then `BAAI/bge-base-en-v1.5` (768):
   containers, the IDE's rust-analyzer and leftover OpenCode servers from
   earlier sessions, all at the same time. The UI half of the demo ran
   afterwards (`UI_PROJECT=…`) against the data the API half seeded.
+
+## Phase 3d: Code index and agent search (2026-10-29)
+
+**Goal:** agents look code up instead of grepping through it, and we can
+measure what that saves.
+
+### What changed
+
+- **Code chunking (E12–E14).**
+  - tree-sitter 0.27 with pinned grammars and their tags queries for Rust,
+    TypeScript/TSX, JavaScript, Python, Go, Java, C#, C and C++.
+  - One chunk per function, method, class/struct/impl/interface, enum and
+    type. A container over the 512-token budget is split into its members,
+    each under the container's signature. A single function may run to
+    three budgets before it is cut into line windows.
+  - Small neighbouring top-level items are merged. Files without a grammar,
+    and code between definitions, fall back to blank-line blocks.
+  - **Doc comments, attributes and decorators stay with their
+    definition.** Grammars make them siblings, so they used to land in a
+    gap block away from the code they describe. Walking back stops at a
+    blank line and skips comments that trail other code.
+  - Every chunk starts with `repo/path › symbol path` and the language.
+    Files over 500 KB, minified files and project exclude globs are
+    skipped (E14).
+- **Repo indexing (E16, E17, D45).**
+  - Each linked repo's main branch is indexed incrementally by blob SHA.
+    Only chunks whose text changed are embedded again.
+  - **Chunker version:** code sources store `<blob>:c<version>` as their
+    hash. Bumping `CHUNKER_VERSION` re-chunks existing indexes on the next
+    pass; chunks that come out the same keep their vectors.
+  - Code has its own embedder slot that falls back to the text embedder
+    (E8). Remote code embedders need the per-project "allow remote code
+    embedding" switch (E9, off by default).
+  - **Ticket overlay:** files changed on a ticket's branches are indexed in
+    a scope of their own and searched only for that ticket. They hide the
+    main version of the same file.
+  - FTS5 now uses the Porter stemmer (`assigned` → `assign`, `numbers` →
+    `number`). This was started for 3e and moved here because the demo
+    needed it.
+- **Code hits (E19, E21).**
+  - Search and Related return code locations (repo, path, line range,
+    symbol, excerpt), with an open-in-editor line in the UI.
+  - Ticket commits now store the line ranges they changed
+    (`ticket_code_links.hunks`). Related tickets show "fn update in
+    issue.rs", and code hits list the tickets whose commits touched those
+    lines.
+- **`search_knowledge` (E22, D43).**
+  - The model proxy serves a minimal MCP endpoint at `/mcp`. The run's
+    proxy token authenticates the call and scopes it to the run's project
+    and ticket overlay.
+  - It returns locations and capped excerpts. Each call is logged as a run
+    event with its result count and excerpt bytes.
+  - It is also a `kanbain-mcp` tool for local use.
+  - Agent definitions have a `search` capability. Claude Code gets an MCP
+    config whose URL and token expand from the sandbox env; OpenCode gets a
+    remote MCP entry. The default planner, coder and tester enable it, and
+    their prompts say to search before exploring.
+- **Settings:** per-project "allow remote code embedding" and exclude
+  globs; the `search` capability in the agent editor (all seven locales).
+
+### Demo (Linux dev container)
+
+`code-search.mjs`, one TEI CPU 1.7 container (`BAAI/bge-small-en-v1.5`)
+serving both slots, the scripted mock upstream and the sandbox:
+
+- This repo indexed into 6,475 code chunks in 28.5 minutes. After the
+  doc-comment change it re-chunked to 6,373 by itself on the next start,
+  and only changed chunks were embedded again.
+- `Issue::create_with_version` (where numbers are assigned; `create` is a
+  wrapper since 3a) is one whole-function chunk, doc comment included,
+  lines 363–435.
+- A one-function change re-embedded exactly 1 chunk.
+- Giving code its own embedder built a new code space while search kept
+  answering from the old one. The text space was untouched, and the old
+  code space was retired.
+- **Token benchmark (D46)**, three runs each, mock model (usage = request
+  bytes / 4), same ticket on a four-file copy of `crates/db/src/models`:
+
+  | | input tokens | cost | model calls |
+  |---|---|---|---|
+  | with `search_knowledge` | 76,339 | $0.236 | 4 |
+  | without | 110,961 | $0.342 | 5 |
+
+  That is **31% fewer input tokens**. Every search run got
+  `create_with_version` back and read the line with `issue_counter + 1`.
+  Claude Code listed `mcp__kanbain__search_knowledge`; plain runs had no
+  KanbAIn tool.
+- The ticket overlay: a file committed on the first run's ticket branch was
+  found for that ticket and not for another one.
+- `cargo test --workspace` (293 passed), `pnpm run check`, `pnpm run lint`
+  with clippy, `generate-types:check` and `prepare-db:check` pass.
+
+### Not verified here
+
+- **Windows:** the tree-sitter grammars (C code) in the Windows CI build.
+  That needs a pushed branch, which needs your OK.
+- **Real models:** the benchmark uses the scripted mock, so its numbers
+  show that the plumbing works and how big the excerpts are. They don't
+  show how a real agent behaves. A run with a real key is still owed.
+- OpenCode with `search` was only checked through its generated config,
+  not in a sandboxed run.
+
+### Known leftovers (for 3e)
+
+- **"where are ticket numbers assigned" over the whole repo** does not put
+  `create_with_version` in the top 10 yet.
+  - The plan documents quote that sentence word for word, so they win it.
+  - Hundreds of ticket UI chunks outrank the function on the word "ticket".
+  - On the four-file bench project the same query now ranks it first (it
+    was not in the top 8 before the doc-comment fix).
+  - The driver reports this rank and does not assert it. It is the first
+    query for the 3e evaluation set and the reranker.
+- Chunks are matched to their old vectors by ordinal. An inserted chunk
+  shifts every later chunk of the file, which then gets embedded again.
+- The first demo run timed out waiting for the second full pass. The
+  driver now waits up to an hour and has `PART=B` to rerun only the
+  sandbox half.

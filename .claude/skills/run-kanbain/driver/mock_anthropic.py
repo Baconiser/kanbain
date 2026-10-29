@@ -8,7 +8,14 @@ works the same way (for OpenCode's OpenAI-compatible provider).
 Usage: mock_anthropic.py PORT SCRIPT.json [LOG]
 SCRIPT.json: {"commands": ["...", ...], "output_tokens": 50000,
               "markers": ["text to look for in the system prompt", ...],
-              "text_replies": [{"when": "text in the request", "text": "answer"}, ...]}
+              "text_replies": [{"when": "text in the request", "text": "answer"}, ...],
+              "steps": [...], "steps_without_search": [...], "size_usage": true}
+`steps` replace `commands` when given: each is {"bash": cmd},
+{"tool": name, "input": {...}}, or {"bash_from_result": "sed -n '{start},{end}p' {path}"}
+(filled from the first `path:start-end` in the previous tool result). When the
+first step's tool isn't offered, `steps_without_search` is used instead.
+`size_usage` reports input tokens as request bytes / 4, so the token
+benchmark sees how much context each run sends.
 Text answers (no tool call left) use the first `text_replies` entry whose
 `when` appears in the request's messages; headless intake and history jobs
 get their JSON or Markdown answers this way.
@@ -67,8 +74,12 @@ class Handler(BaseHTTPRequestHandler):
             for c in m["content"]
             if c.get("type") == "tool_result"
         )
-        commands = SCRIPT["commands"]
-        if bash in tools and tool_results < len(commands):
+        commands = SCRIPT.get("commands", [])
+        step = next_step(body, tools, tool_results) if "steps" in SCRIPT else None
+        if step is not None:
+            block = dict(step, id="toolu_" + uuid.uuid4().hex[:20], type="tool_use")
+            stop = "tool_use"
+        elif "steps" not in SCRIPT and bash in tools and tool_results < len(commands):
             block = {"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:20], "name": bash,
                      "input": {"command": commands[tool_results], "description": "scripted step"}}
             stop = "tool_use"
@@ -76,7 +87,8 @@ class Handler(BaseHTTPRequestHandler):
             block = {"type": "text", "text": scripted_text(body)}
             stop = "end_turn"
         out_tokens = SCRIPT.get("output_tokens", 200) if bash in tools else 20
-        usage_start = {"input_tokens": 1500, "output_tokens": 1,
+        input_tokens = len(raw) // 4 if SCRIPT.get("size_usage") else 1500
+        usage_start = {"input_tokens": input_tokens, "output_tokens": 1,
                        "cache_creation_input_tokens": 0, "cache_read_input_tokens": 0}
 
         if not body.get("stream"):
@@ -175,6 +187,43 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("content-length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+
+def last_tool_result(body):
+    for m in reversed(body.get("messages", [])):
+        if m.get("role") != "user" or not isinstance(m.get("content"), list):
+            continue
+        for c in m["content"]:
+            if c.get("type") == "tool_result":
+                content = c.get("content")
+                if isinstance(content, list):
+                    return "\n".join(x.get("text", "") for x in content if isinstance(x, dict))
+                return str(content or "")
+    return ""
+
+
+def next_step(body, tools, done):
+    """The next scripted tool call, or None when the script is done."""
+    steps = SCRIPT["steps"]
+    first_tool = steps[0].get("tool") if steps else None
+    if first_tool and first_tool not in tools:
+        steps = SCRIPT.get("steps_without_search", [])
+    if not tools or done >= len(steps):
+        return None
+    step = steps[done]
+    bash = "Bash" if "Bash" in tools else "bash"
+    if "tool" in step:
+        return {"name": step["tool"], "input": step.get("input", {})}
+    command = step.get("bash")
+    if "bash_from_result" in step:
+        import re
+        found = re.search(r"([\w./-]+\.\w+):(\d+)-(\d+)", last_tool_result(body))
+        if not found:
+            command = "echo no location in the search result"
+        else:
+            path = found.group(1).split("/", 1)[1] if found.group(1).count("/") else found.group(1)
+            command = step["bash_from_result"].format(path=path, start=found.group(2), end=found.group(3))
+    return {"name": bash, "input": {"command": command, "description": "scripted step"}}
 
 
 def scripted_text(body):
