@@ -338,12 +338,7 @@ fn path_str(path: &Path) -> Result<&str> {
 /// Run git on the host and return trimmed stdout.
 async fn host_git(dir: &Path, args: &[&str]) -> Result<String> {
     let mut cmd = Command::new("git");
-    cmd.arg("-C").arg(dir).args(args);
-    #[cfg(windows)]
-    {
-        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-        cmd.creation_flags(CREATE_NO_WINDOW);
-    }
+    crate::hide_console(&mut cmd).arg("-C").arg(dir).args(args);
     let out = cmd.output().await?;
     if !out.status.success() {
         return Err(SandboxError::Other(format!(

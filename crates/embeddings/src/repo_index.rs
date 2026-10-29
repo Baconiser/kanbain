@@ -16,10 +16,24 @@ pub struct RepoFile {
     pub size: usize,
 }
 
+/// `git` in `repo`, without a console window. KanbAIn is a GUI app on
+/// Windows, where every console child pops up a terminal otherwise, and
+/// indexing runs git on every start and every ticket change.
+fn git_command(repo: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.current_dir(repo);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 fn git(repo: &Path, args: &[&str]) -> Result<String, String> {
-    let out = Command::new("git")
+    let out = git_command(repo)
         .args(args)
-        .current_dir(repo)
         .output()
         .map_err(|e| format!("git {}: {e}", args.join(" ")))?;
     if !out.status.success() {
@@ -79,9 +93,8 @@ pub fn read_blobs(repo: &Path, shas: &[String]) -> Result<HashMap<String, Vec<u8
     if shas.is_empty() {
         return Ok(HashMap::new());
     }
-    let mut child = Command::new("git")
+    let mut child = git_command(repo)
         .args(["cat-file", "--batch"])
-        .current_dir(repo)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

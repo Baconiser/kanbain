@@ -92,7 +92,7 @@ impl DockerSandbox {
         tty: bool,
     ) -> Command {
         let mut cmd = Command::new("docker");
-        cmd.arg("exec").arg("-i");
+        crate::hide_console(&mut cmd).arg("exec").arg("-i");
         if tty {
             cmd.arg("-t");
         }

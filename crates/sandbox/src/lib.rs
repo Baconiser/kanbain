@@ -13,6 +13,18 @@ pub mod transfer;
 
 use std::collections::HashMap;
 
+/// Keeps a child process from opening a console window. KanbAIn is a GUI
+/// app on Windows, where every `git` or `docker` child would otherwise pop
+/// up a terminal (the port forward starts one per connection).
+pub(crate) fn hide_console(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command {
+    #[cfg(windows)]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 use async_trait::async_trait;
 pub use docker::DockerSandbox;
 use futures::stream::BoxStream;

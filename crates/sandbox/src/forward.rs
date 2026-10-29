@@ -70,7 +70,7 @@ fn serve(listener: TcpListener, container: String, port: u16) -> JoinHandle<()> 
 }
 
 async fn tunnel(stream: TcpStream, container: &str, port: u16) -> std::io::Result<()> {
-    let mut child = Command::new("docker")
+    let mut child = crate::hide_console(&mut Command::new("docker"))
         .args(["exec", "-i", container, "socat", "-"])
         .arg(format!("TCP:127.0.0.1:{port}"))
         .stdin(Stdio::piped())
