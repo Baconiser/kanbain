@@ -204,6 +204,12 @@ check(results.filter((r) => r.agent === 'bench-plain').every((r) => r.searches =
 const mockLog = execSync('cat /tmp/mock.log', { encoding: 'utf8' });
 check(mockLog.includes('mcp__kanbain__search_knowledge'), 'Claude Code listed mcp__kanbain__search_knowledge (MCP config with env expansion works)');
 check(mockLog.includes('"impl Issue \\u203a fn create"') || mockLog.includes('impl Issue › fn create'), 'the search result reached the model');
+// Reaching the model isn't enough: the agent reads the first hit's lines, so
+// that hit has to be the numbering code (plain runs cat the whole file, so
+// only requests that offered the search tool count).
+const searchRequests = mockLog.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  .filter((r) => r.tools.includes('mcp__kanbain__search_knowledge'));
+check(searchRequests.some((r) => r.markers.includes('issue_counter + 1')), 'search runs read the line that assigns the number');
 
 // The ticket overlay: the run's new file is found for its ticket only.
 const first = results.find((r) => r.agent === 'bench-search');

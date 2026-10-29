@@ -885,3 +885,84 @@ serving both slots, the scripted mock upstream and the sandbox:
 - The first demo run timed out waiting for the second full pass. The
   driver now waits up to an hour and has `PART=B` to rerun only the
   sandbox half.
+
+## Phase 3e: Reranking and quality (2026-10-29)
+
+**Goal:** a reranker that measurably helps, defaults tuned on data, and
+search that keeps working when the reranker doesn't.
+
+### What changed
+
+- **Reranking (E10).**
+  - The top fused candidates go to the configured reranker (TEI or
+    Jina/Cohere-style), in batches of 32.
+  - Its order is **fused with the RRF order** (weighted RRF), not swapped
+    in for it. Common cross-encoders learned on web passages and score code
+    near zero; swapped in, they scrambled good code rankings.
+  - Fallback: on any error or timeout, search keeps the RRF order, logs a
+    warning and sets `reranked: false` in the response.
+  - The reranker gets **one attempt within one deadline** for all batches.
+    It used to retry timeouts three times per batch. A slow reranker then
+    cost 30+ s per search and kept working on abandoned requests, so the
+    next searches timed out too.
+- **Settings → Search → Retrieval:** candidates the reranker rescores,
+  characters per candidate and the reranker weight, in all seven locales.
+- **Evaluation (`eval.mjs`):** 41 query → expected-hit pairs (31 code, 9
+  tickets, 1 run summary) with recall@10 and MRR, with and without the
+  reranker, overall and per group.
+
+### Tuning (CPU TEI: `bge-small-en-v1.5`, `ms-marco-MiniLM-L-6-v2`)
+
+| Setting | Result | Default |
+|---|---|---|
+| RRF k (20/60/100), candidates (30/50/100) | no effect: hits that are found sit high in both lists | **60, 50** (unchanged) |
+| rerank 50 × 2,000 chars | never finished inside 10 s (about 0.4 s per long document on this CPU) | |
+| rerank 10 × 500 / 20 × 500 / 20 × 1,000 / 30 × 800 | recall 0.878 / **0.902** / 0.902 / 0.902; 20 × 500 is fastest of the 0.902s | **20 × 500** |
+| reranker order swapped in | MRR 0.778, below no reranker (0.784); code MRR fell | |
+| fused, weight 1.0 / 0.75 / 0.5 / 0.25 | MRR 0.808 / 0.821 / **0.821** / 0.809 | **0.5** |
+
+The tie between 0.5 and 0.75 was broken by the 3d benchmark query, which
+is not in the evaluation set. At 0.75 the reranker pushed
+`create_with_version` to third; at 0.5 it stays first.
+
+### Demo (Linux dev container)
+
+- `eval.mjs` with the defaults:
+
+  | | recall@10 | MRR | mean latency |
+  |---|---|---|---|
+  | RRF | 0.902 | 0.784 | 0.4 s |
+  | RRF + reranker (fused, 0.5) | 0.902 | **0.821** | 1.5 s |
+
+  Tickets were already at recall 1.0 / MRR 0.905 and didn't change. The
+  gain is in code.
+- **The reranker stopped mid-run** (`docker stop kb-rerank`): all 41
+  searches answered with `reranked 0/41`, no API errors, one warning each,
+  and the same recall and MRR as plain RRF.
+- **Token benchmark with the reranker on**: 76,339 vs 110,961 input tokens
+  (31% fewer), the same as without the reranker. Every search run read the
+  line that assigns the number (a new, stricter driver check).
+- `cargo test --workspace` (296 passed), `pnpm run check`, `pnpm run lint`
+  with clippy, `generate-types:check` and `prepare-db:check` pass.
+
+### Not verified here
+
+- Rerankers trained on code, or a GPU reranker. With those, more
+  candidates and a weight near 1 may pay off; the settings allow it.
+- **The chunk budget** was not tuned. Each value needs a full re-index
+  (about 30 minutes per pass on CPU), and the remaining misses are
+  vocabulary gaps, not chunk sizes.
+- Windows, as in 3d.
+
+### Known leftovers
+
+- Four queries miss with or without the reranker, because the target never
+  reaches the candidates. One example: "where are ticket numbers assigned"
+  over the whole repo, where the code says `issue_counter`. Query expansion
+  or a code-trained embedder is the next lever.
+- A search with the reranker takes about 1.5 s on this CPU, which is
+  noticeable in the UI. Agents don't mind.
+- **Lesson:** while splitting 3d from 3e I edited the comment of a migration
+  that had already run on the dev database. sqlx's checksum check failed,
+  and the index was dropped and rebuilt (as designed for an unreadable
+  index). Never edit a migration after it has run anywhere.

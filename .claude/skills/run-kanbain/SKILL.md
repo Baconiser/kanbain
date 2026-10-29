@@ -216,6 +216,29 @@ Every Part A run creates a new full-repo project. Delete old "KanbAIn
 code <n>" projects first, or each pass embeds every copy: the index once
 grew to 13k chunks this way.
 
+## 8c. Retrieval evaluation (Phase 3e)
+
+`eval.mjs` runs 41 query → expected-hit pairs (31 code, 9 tickets, 1 run)
+against the newest "KanbAIn code", "Search " and "Bench " projects. It
+reports recall@10 and MRR with and without the reranker, overall and per
+group. It needs the embedder and the reranker together:
+
+```bash
+docker run -d --name kb-rerank -p 8093:80 ghcr.io/huggingface/text-embeddings-inference:cpu-1.7 --model-id cross-encoder/ms-marco-MiniLM-L-6-v2
+# Settings → Search → Reranker: TEI, http://localhost:8093, timeout 10 s
+node $D/eval.mjs $BACKEND_PORT $KANBAIN_LAUNCH_TOKEN both 10
+```
+
+These are the only two TEI containers you may run together. Do not
+build, run Vite or Chromium meanwhile, and watch `free -m`. The
+cross-encoder needs about 0.4 s per 2,000-character document on this CPU,
+so keep `rerank_candidates` × `rerank_doc_chars` small (the default is
+20 × 500, about 1.5 s per search). The reranker's order is fused with the
+RRF order at `rerank_weight` 0.5, so a web-trained cross-encoder can't
+scramble code results. To check the fallback, `docker stop
+kb-rerank` mid-run: every search should still answer, with `reranked
+0/41`.
+
 ## 9. Stop
 
 ```bash
