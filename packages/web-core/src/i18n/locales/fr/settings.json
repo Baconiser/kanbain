@@ -775,7 +775,8 @@
         "edit": "Modifier des fichiers",
         "bash": "Toute commande shell",
         "test": "Commandes de test uniquement",
-        "web": "Accès web"
+        "web": "Accès web",
+        "search": "Rechercher dans le projet (KanbAIn)"
       },
       "styles": {
         "title": "Blocs de style",

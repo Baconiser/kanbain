@@ -775,7 +775,8 @@
         "edit": "Edit files",
         "bash": "Any shell command",
         "test": "Test commands only",
-        "web": "Web access"
+        "web": "Web access",
+        "search": "Search the project (KanbAIn)"
       },
       "styles": {
         "title": "Style blocks",

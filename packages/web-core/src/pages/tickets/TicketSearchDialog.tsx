@@ -12,6 +12,7 @@ import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { useProjects } from '@/shared/hooks/useTicketStreams';
 import { defineModal } from '@/shared/lib/modals';
 import { searchApi } from '@/shared/lib/ticketsApi';
+import { CodeResultLine } from './CodeResultLine';
 import { requestOpenTicket } from './openTicket';
 
 export interface TicketSearchDialogProps {
@@ -179,6 +180,16 @@ const TicketSearchDialogImpl = create<TicketSearchDialogProps>(({ query }) => {
               <p className="text-sm text-low">Nothing found.</p>
             )}
             {results?.hits.map((hit, i) => {
+              if (hit.kind === 'code') {
+                return (
+                  <CodeResultLine
+                    key={i}
+                    hit={hit}
+                    repoName={hit.repo_id ? results.repos[hit.repo_id] : null}
+                    onError={setError}
+                  />
+                );
+              }
               const ticket = hit.issue_id
                 ? results.tickets[hit.issue_id]
                 : undefined;

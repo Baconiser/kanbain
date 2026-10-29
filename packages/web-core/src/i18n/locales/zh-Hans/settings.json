@@ -775,7 +775,8 @@
         "edit": "编辑文件",
         "bash": "任意 shell 命令",
         "test": "仅测试命令",
-        "web": "网络访问"
+        "web": "网络访问",
+        "search": "搜索项目 (KanbAIn)"
       },
       "styles": {
         "title": "样式块",

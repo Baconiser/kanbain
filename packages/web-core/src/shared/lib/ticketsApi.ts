@@ -5,6 +5,7 @@ import type {
   ReindexRequest,
   ReindexResult,
   RelatedTicket,
+  RelatedView,
   SearchKeys,
   SearchRequest,
   SearchResults,
@@ -126,7 +127,7 @@ export const searchApi = {
   search: (data: SearchRequest) =>
     request<SearchResults>('/api/search', 'POST', data),
   related: (issueId: string) =>
-    request<RelatedTicket[]>(`/api/issues/${issueId}/related`),
+    request<RelatedView>(`/api/issues/${issueId}/related`),
   intakeDuplicates: (intakeId: string) =>
     request<RelatedTicket[]>(`/api/intakes/${intakeId}/duplicates`),
   status: () => request<EmbeddingStatus>('/api/embeddings/status'),

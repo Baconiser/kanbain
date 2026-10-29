@@ -291,6 +291,12 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [historyAlwaysAllow, setHistoryAlwaysAllow] = useState(
       project?.settings.history_always_allow ?? false
     );
+    const [remoteCode, setRemoteCode] = useState(
+      project?.settings.allow_remote_code_embedding ?? false
+    );
+    const [searchExcludes, setSearchExcludes] = useState(
+      project?.settings.search_exclude_globs.join('\n') ?? ''
+    );
     const [sandboxDomains, setSandboxDomains] = useState(
       project?.settings.sandbox_allowed_domains.join('\n') ?? ''
     );
@@ -357,6 +363,11 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
               external_id_pattern: externalPattern.trim() || null,
               settings: {
                 history_always_allow: historyAlwaysAllow,
+                allow_remote_code_embedding: remoteCode,
+                search_exclude_globs: searchExcludes
+                  .split('\n')
+                  .map((g) => g.trim())
+                  .filter(Boolean),
                 sandbox_allowed_domains: sandboxDomains
                   .split('\n')
                   .map((d) => d.trim())
@@ -458,6 +469,26 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   />
                   Always allow git-history analysis for this project’s tickets
                 </label>
+                <label className="col-span-2 flex items-center gap-base text-sm">
+                  <input
+                    type="checkbox"
+                    checked={remoteCode}
+                    onChange={(e) => setRemoteCode(e.target.checked)}
+                  />
+                  Allow sending this project’s code to a remote embedder
+                </label>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-search-excludes">
+                    Files the code index skips (globs, e.g. generated code)
+                  </Label>
+                  <textarea
+                    id="project-search-excludes"
+                    className="min-h-12 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder={'shared/types.ts\n**/*.generated.ts'}
+                    value={searchExcludes}
+                    onChange={(e) => setSearchExcludes(e.target.value)}
+                  />
+                </div>
                 <div className="col-span-2 flex flex-col gap-half">
                   <Label htmlFor="project-sandbox-domains">
                     Extra hosts the sandbox may reach

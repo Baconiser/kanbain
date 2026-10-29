@@ -775,7 +775,8 @@
         "edit": "編輯檔案",
         "bash": "任意 shell 指令",
         "test": "僅測試指令",
-        "web": "網路存取"
+        "web": "網路存取",
+        "search": "搜尋專案 (KanbAIn)"
       },
       "styles": {
         "title": "樣式區塊",
