@@ -686,6 +686,9 @@
         "title": "检索",
         "description": "每次搜索的默认值。",
         "candidates": "每次搜索的候选数",
+        "rerankCandidates": "重排序模型重新打分的候选数",
+        "rerankDocChars": "每个候选发送给重排序模型的字符数",
+        "rerankWeight": "重排序权重(0–2,1 = 与检索相同)",
         "rrfK": "RRF k",
         "limit": "结果数",
         "excerpt": "摘录长度(字符)"

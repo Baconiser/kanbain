@@ -686,6 +686,9 @@
         "title": "Recherche",
         "description": "Valeurs par défaut de chaque recherche.",
         "candidates": "Candidats par recherche",
+        "rerankCandidates": "Candidats réévalués par le reranker",
+        "rerankDocChars": "Caractères par candidat envoyés au reranker",
+        "rerankWeight": "Poids du reranker (0–2, 1 = autant que la recherche)",
         "rrfK": "k de RRF",
         "limit": "Résultats",
         "excerpt": "Longueur de l’extrait (caractères)"

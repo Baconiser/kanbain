@@ -686,6 +686,9 @@
         "title": "Recuperación",
         "description": "Valores por defecto de cada búsqueda.",
         "candidates": "Candidatos por búsqueda",
+        "rerankCandidates": "Candidatos que reordena el reranker",
+        "rerankDocChars": "Caracteres por candidato enviados al reranker",
+        "rerankWeight": "Peso del reranker (0–2, 1 = igual que la búsqueda)",
         "rrfK": "k de RRF",
         "limit": "Resultados",
         "excerpt": "Longitud del extracto (caracteres)"

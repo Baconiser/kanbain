@@ -686,6 +686,9 @@
         "title": "Retrieval",
         "description": "Defaults for every search.",
         "candidates": "Candidates per search",
+        "rerankCandidates": "Candidates the reranker rescores",
+        "rerankDocChars": "Characters per candidate sent to the reranker",
+        "rerankWeight": "Reranker weight (0–2, 1 = equal to search)",
         "rrfK": "RRF k",
         "limit": "Results",
         "excerpt": "Excerpt length (characters)"

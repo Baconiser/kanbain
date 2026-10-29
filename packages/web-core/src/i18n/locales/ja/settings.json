@@ -686,6 +686,9 @@
         "title": "検索の既定値",
         "description": "すべての検索の既定値です。",
         "candidates": "検索ごとの候補数",
+        "rerankCandidates": "リランカーが再スコアする候補数",
+        "rerankDocChars": "リランカーに送る候補ごとの文字数",
+        "rerankWeight": "リランカーの重み(0–2、1 = 検索と同等)",
         "rrfK": "RRF の k",
         "limit": "結果数",
         "excerpt": "抜粋の長さ(文字)"

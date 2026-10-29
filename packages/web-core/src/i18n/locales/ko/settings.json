@@ -686,6 +686,9 @@
         "title": "검색 기본값",
         "description": "모든 검색의 기본값입니다.",
         "candidates": "검색당 후보 수",
+        "rerankCandidates": "리랭커가 다시 점수화하는 후보 수",
+        "rerankDocChars": "리랭커에 보내는 후보당 문자 수",
+        "rerankWeight": "리랭커 가중치 (0–2, 1 = 검색과 동일)",
         "rrfK": "RRF k",
         "limit": "결과 수",
         "excerpt": "발췌 길이(문자)"

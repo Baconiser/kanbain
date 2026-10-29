@@ -85,6 +85,11 @@ function parseCount(value: string): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function parseWeight(value: string): number | null {
+  const n = Number.parseFloat(value);
+  return Number.isFinite(n) && n >= 0 && n <= 2 ? n : null;
+}
+
 function TestResult({ result }: { result: ConnectionTest | null }) {
   const { t } = useTranslation('settings');
   if (!result) return null;
@@ -627,6 +632,35 @@ export function SearchSettingsSection() {
               onChange={(v) => {
                 const n = parseCount(v);
                 if (n !== null) update({ candidates: n });
+              }}
+            />
+          </SettingsField>
+          <SettingsField
+            label={t('settings.search.retrieval.rerankCandidates')}
+          >
+            <SettingsInput
+              value={String(draft.rerank_candidates)}
+              onChange={(v) => {
+                const n = parseCount(v);
+                if (n !== null) update({ rerank_candidates: n });
+              }}
+            />
+          </SettingsField>
+          <SettingsField label={t('settings.search.retrieval.rerankDocChars')}>
+            <SettingsInput
+              value={String(draft.rerank_doc_chars)}
+              onChange={(v) => {
+                const n = parseCount(v);
+                if (n !== null) update({ rerank_doc_chars: n });
+              }}
+            />
+          </SettingsField>
+          <SettingsField label={t('settings.search.retrieval.rerankWeight')}>
+            <SettingsInput
+              value={String(draft.rerank_weight)}
+              onChange={(v) => {
+                const n = parseWeight(v);
+                if (n !== null) update({ rerank_weight: n });
               }}
             />
           </SettingsField>
