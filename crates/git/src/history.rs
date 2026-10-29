@@ -18,6 +18,8 @@ pub struct CommitFile {
     /// `None` for binary files.
     pub additions: Option<u32>,
     pub deletions: Option<u32>,
+    /// Changed line ranges in the new file (1-based, inclusive).
+    pub hunks: Vec<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -118,9 +120,59 @@ fn numstat(git: &GitCli, repo: &Path, sha: &str) -> Result<Vec<CommitFile>, GitC
                 path,
                 additions,
                 deletions,
+                hunks: vec![],
             })
         })
         .collect())
+}
+
+/// Changed line ranges per file of a commit, from a zero-context diff.
+fn hunks(
+    git: &GitCli,
+    repo: &Path,
+    sha: &str,
+) -> Result<BTreeMap<String, Vec<(u32, u32)>>, GitCliError> {
+    let out = git.git(
+        repo,
+        [
+            "show",
+            "-U0",
+            "--format=",
+            "--no-renames",
+            "--no-color",
+            sha,
+        ],
+    )?;
+    Ok(parse_hunks(&out))
+}
+
+pub fn parse_hunks(diff: &str) -> BTreeMap<String, Vec<(u32, u32)>> {
+    let mut map: BTreeMap<String, Vec<(u32, u32)>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for line in diff.lines() {
+        if let Some(path) = line.strip_prefix("+++ ") {
+            current = path.strip_prefix("b/").map(str::to_string);
+        } else if let (Some(path), Some(rest)) = (&current, line.strip_prefix("@@ ")) {
+            // @@ -a,b +c,d @@
+            let Some(new) = rest.split_whitespace().find(|p| p.starts_with('+')) else {
+                continue;
+            };
+            let mut parts = new[1..].splitn(2, ',');
+            let start: u32 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(0);
+            let count: u32 = parts.next().and_then(|n| n.parse().ok()).unwrap_or(1);
+            if count == 0 {
+                // A pure deletion: mark the line it happened after.
+                map.entry(path.clone())
+                    .or_default()
+                    .push((start.max(1), start.max(1)));
+            } else {
+                map.entry(path.clone())
+                    .or_default()
+                    .push((start, start + count - 1));
+            }
+        }
+    }
+    map
 }
 
 /// Commits in `repo` for ticket `id`: messages mentioning it on any ref,
@@ -215,6 +267,10 @@ pub fn find_ticket_commits(
     commits.truncate(limit);
     for commit in &mut commits {
         commit.files = numstat(&git, repo, &commit.sha)?;
+        let mut ranges = hunks(&git, repo, &commit.sha)?;
+        for file in &mut commit.files {
+            file.hunks = ranges.remove(&file.path).unwrap_or_default();
+        }
     }
     Ok(commits)
 }
@@ -278,6 +334,12 @@ mod tests {
     }
 
     #[test]
+    fn hunk_ranges() {
+        let diff = "diff --git a/x.rs b/x.rs\n--- a/x.rs\n+++ b/x.rs\n@@ -3,0 +4,2 @@\n+a\n+b\n@@ -10 +12 @@\n-c\n+d\n@@ -20,2 +21,0 @@\n-e\n-f\n";
+        assert_eq!(parse_hunks(diff)["x.rs"], vec![(4, 5), (12, 12), (21, 21)]);
+    }
+
+    #[test]
     fn id_matching() {
         assert!(mentions_id("Fix [PROJ-12] login", "PROJ-12"));
         assert!(mentions_id("proj-12: fix", "PROJ-12"));
@@ -329,6 +391,7 @@ mod tests {
                 path: "reset.rs".into(),
                 additions: Some(2),
                 deletions: Some(0),
+                hunks: vec![(1, 2)],
             }]
         );
         let follow = commits

@@ -86,6 +86,9 @@ pub enum Capability {
     Test,
     /// Fetch web pages and search the web (through the egress allowlist).
     Web,
+    /// KanbAIn's `search_knowledge` tool over the project's tickets, runs
+    /// and code (E22).
+    Search,
 }
 
 impl AgentRole {

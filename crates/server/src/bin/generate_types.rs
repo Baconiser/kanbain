@@ -70,6 +70,8 @@ fn generate_types_content() -> String {
         server::routes::search::TicketRef::decl(),
         server::routes::search::SearchResults::decl(),
         server::routes::search::RelatedTicket::decl(),
+        server::routes::search::RelatedCode::decl(),
+        server::routes::search::RelatedView::decl(),
         server::routes::search::ReindexResult::decl(),
         server::routes::search::SearchKeySlot::decl(),
         server::routes::search::TestEmbedderRequest::decl(),

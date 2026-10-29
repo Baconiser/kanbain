@@ -678,23 +678,37 @@ impl Store {
         &self,
         space: &Space,
         limit: i64,
+        exclude_projects: &[String],
     ) -> Result<Vec<PendingChunk>, sqlx::Error> {
-        let kind_clause = if space.purpose == "code" {
-            "s.kind = 'code'"
-        } else {
-            "s.kind != 'code'"
-        };
-        sqlx::query_as(&format!(
+        let kind_clause = Self::purpose_clause(space, exclude_projects);
+        let sql = format!(
             "SELECT c.id AS chunk_id, c.text, c.text_hash, s.project_id, s.kind, s.scope \
              FROM chunks c JOIN sources s ON s.id = c.source_id \
              LEFT JOIN chunk_embeddings e ON e.chunk_id = c.id AND e.space_id = ? \
              WHERE e.chunk_id IS NULL AND {kind_clause} \
              ORDER BY s.updated_at DESC, c.id LIMIT ?"
-        ))
-        .bind(space.id)
-        .bind(limit)
-        .fetch_all(&self.pool)
-        .await
+        );
+        let mut query = sqlx::query_as(&sql).bind(space.id);
+        for project in exclude_projects {
+            query = query.bind(project);
+        }
+        query.bind(limit).fetch_all(&self.pool).await
+    }
+
+    /// Chunks of a space's purpose, minus excluded projects (`?` binds).
+    fn purpose_clause(space: &Space, exclude_projects: &[String]) -> String {
+        let mut clause = if space.purpose == "code" {
+            "s.kind = 'code'".to_string()
+        } else {
+            "s.kind != 'code'".to_string()
+        };
+        if !exclude_projects.is_empty() {
+            clause.push_str(&format!(
+                " AND s.project_id NOT IN ({})",
+                Self::in_list(exclude_projects.len())
+            ));
+        }
+        clause
     }
 
     /// Stores vectors for chunks whose text is still what was embedded.
@@ -743,24 +757,97 @@ impl Store {
         Ok(stored)
     }
 
-    /// Chunks of a purpose, and how many have a vector in `space`.
-    pub async fn coverage(&self, space: &Space) -> Result<(i64, i64), sqlx::Error> {
-        let kind_clause = if space.purpose == "code" {
-            "s.kind = 'code'"
-        } else {
-            "s.kind != 'code'"
-        };
-        let total: i64 = sqlx::query_scalar(&format!(
-            "SELECT COUNT(*) FROM chunks c JOIN sources s ON s.id = c.source_id WHERE {kind_clause}"
-        ))
-        .fetch_one(&self.pool)
-        .await?;
+    /// Chunks of a purpose (minus excluded projects), and how many have a
+    /// vector in `space`.
+    pub async fn coverage(
+        &self,
+        space: &Space,
+        exclude_projects: &[String],
+    ) -> Result<(i64, i64), sqlx::Error> {
+        let clause = Self::purpose_clause(space, exclude_projects);
+        let sql = format!(
+            "SELECT COUNT(*) FROM chunks c JOIN sources s ON s.id = c.source_id WHERE {clause}"
+        );
+        let mut total = sqlx::query_scalar(&sql);
+        for project in exclude_projects {
+            total = total.bind(project);
+        }
+        let total: i64 = total.fetch_one(&self.pool).await?;
         let embedded: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM chunk_embeddings WHERE space_id = ?")
                 .bind(space.id)
                 .fetch_one(&self.pool)
                 .await?;
-        Ok((total, embedded))
+        Ok((total, embedded.min(total)))
+    }
+
+    /// Code sources of a repo in one scope, as (path, content hash); see
+    /// [`crate::chunk::code::content_hash`].
+    pub async fn code_sources(
+        &self,
+        scope: &str,
+        project_id: &str,
+        repo_id: &str,
+    ) -> Result<Vec<(String, String)>, sqlx::Error> {
+        sqlx::query_as(
+            "SELECT path, content_hash FROM sources \
+             WHERE kind = 'code' AND scope = ? AND ref_id = ? AND repo_id = ?",
+        )
+        .bind(scope)
+        .bind(project_id)
+        .bind(repo_id)
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// (repo id, path) of a ticket's overlay files (D45).
+    pub async fn overlay_paths(
+        &self,
+        issue_id: &str,
+    ) -> Result<Vec<(String, String)>, sqlx::Error> {
+        sqlx::query_as("SELECT repo_id, path FROM sources WHERE kind = 'code' AND scope = ?")
+            .bind(issue_id)
+            .fetch_all(&self.pool)
+            .await
+    }
+
+    /// Every overlay scope with code sources.
+    pub async fn overlay_scopes(&self) -> Result<Vec<String>, sqlx::Error> {
+        sqlx::query_scalar(
+            "SELECT DISTINCT scope FROM sources WHERE kind = 'code' AND scope != 'main'",
+        )
+        .fetch_all(&self.pool)
+        .await
+    }
+
+    /// Symbols of the main-branch code chunks that overlap `ranges` of a
+    /// file (E19).
+    pub async fn symbols_at(
+        &self,
+        repo_id: &str,
+        path: &str,
+        ranges: &[(i64, i64)],
+    ) -> Result<Vec<String>, sqlx::Error> {
+        let rows: Vec<(Option<String>, Option<i64>, Option<i64>)> = sqlx::query_as(
+            "SELECT c.symbol, c.start_line, c.end_line FROM chunks c \
+             JOIN sources s ON s.id = c.source_id \
+             WHERE s.kind = 'code' AND s.scope = 'main' AND s.repo_id = ? AND s.path = ? \
+             ORDER BY c.start_line",
+        )
+        .bind(repo_id)
+        .bind(path)
+        .fetch_all(&self.pool)
+        .await?;
+        let mut symbols = Vec::new();
+        for (symbol, start, end) in rows {
+            let (Some(symbol), Some(start), Some(end)) = (symbol, start, end) else {
+                continue;
+            };
+            if ranges.iter().any(|(a, b)| *a <= end && *b >= start) && !symbols.contains(&symbol) {
+                symbols.push(symbol);
+            }
+        }
+        Ok(symbols)
     }
 
     pub async fn chunk_count(&self) -> Result<(i64, i64), sqlx::Error> {
@@ -1086,7 +1173,7 @@ mod tests {
             all.push((chunk_id, project, kind, v));
         }
         assert_eq!(store.store_vectors(&space, &pending).await.unwrap(), 1000);
-        assert_eq!(store.coverage(&space).await.unwrap(), (1000, 1000));
+        assert_eq!(store.coverage(&space, &[]).await.unwrap(), (1000, 1000));
 
         let query: Vec<f32> = (0..8).map(|_| rng.random_range(-1.0..1.0)).collect();
         let filter = Filter {
@@ -1154,14 +1241,20 @@ mod tests {
         let v1 = chunk_text("KAN-1", &format!("## A\n\n{one}\n\n## B\n\n{first}"), 40, 0);
         let put = store.put_source(&key, &meta, "h1", &v1).await.unwrap();
         assert_eq!((put.changed_chunks, put.removed_chunks), (2, 0));
-        let pending = store.pending_chunks(&space, 10).await.unwrap();
+        let pending = store.pending_chunks(&space, 10, &[]).await.unwrap();
         assert_eq!(pending.len(), 2);
         let vectors: Vec<_> = pending
             .into_iter()
             .map(|c| (c, vec![1.0, 0.0, 0.0, 0.0]))
             .collect();
         store.store_vectors(&space, &vectors).await.unwrap();
-        assert!(store.pending_chunks(&space, 10).await.unwrap().is_empty());
+        assert!(
+            store
+                .pending_chunks(&space, 10, &[])
+                .await
+                .unwrap()
+                .is_empty()
+        );
 
         // The same content changes nothing.
         assert!(
@@ -1181,10 +1274,19 @@ mod tests {
         );
         let put = store.put_source(&key, &meta, "h2", &v2).await.unwrap();
         assert_eq!(put.changed_chunks, 1);
-        let pending = store.pending_chunks(&space, 10).await.unwrap();
+        let pending = store.pending_chunks(&space, 10, &[]).await.unwrap();
         assert_eq!(pending.len(), 1);
         assert!(pending[0].text.contains("second"));
 
+        // Keywords are stemmed: "seconds" finds "second".
+        assert_eq!(
+            store
+                .keyword("seconds", Purpose::Text, &Filter::default(), 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
         // Keywords find the new text, not the old.
         let filter = Filter {
             project_id: Some("p".into()),

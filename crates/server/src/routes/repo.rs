@@ -23,6 +23,9 @@ use crate::{DeploymentImpl, error::ApiError};
 pub struct OpenEditorRequest {
     pub editor_type: Option<String>,
     pub git_repo_path: Option<PathBuf>,
+    /// A file inside the repo to open instead of the repo folder.
+    #[serde(default)]
+    pub file_path: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize, ts_rs::TS)]
@@ -164,7 +167,13 @@ pub async fn open_repo_in_editor(
         config.editor.with_override(editor_type_str)
     };
 
-    match editor_config.open_file(&repo.path).await {
+    // A search hit opens its file; paths may not leave the repo.
+    let target = match payload.as_ref().and_then(|req| req.file_path.as_deref()) {
+        Some(file) if !file.split(['/', '\\']).any(|part| part == "..") => repo.path.join(file),
+        Some(_) => return Err(ApiError::BadRequest("Invalid file path".to_string())),
+        None => repo.path.clone(),
+    };
+    match editor_config.open_file(&target).await {
         Ok(url) => {
             tracing::info!(
                 "Opened editor for repo {} at path: {}{}",

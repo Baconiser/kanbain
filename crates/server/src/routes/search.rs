@@ -21,8 +21,8 @@ use embeddings::{
     client::{ConnectionTest, test_embedder, test_reranker},
     config::{EmbedderConfig, RerankerConfig},
     service::{
-        CODE_KEY_SLOT, EmbeddingStatus, RERANKER_KEY_SLOT, ReindexRequest, RelatedIssue, SearchHit,
-        SearchRequest, TEXT_KEY_SLOT,
+        CODE_KEY_SLOT, CodeLocation, EmbeddingStatus, RERANKER_KEY_SLOT, ReindexRequest,
+        RelatedIssue, SearchHit, SearchRequest, TEXT_KEY_SLOT,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -91,11 +91,29 @@ async fn ticket_refs(
     Ok(refs)
 }
 
+async fn repo_names(
+    deployment: &DeploymentImpl,
+    hits: &[SearchHit],
+) -> Result<HashMap<Uuid, String>, ApiError> {
+    let mut names = HashMap::new();
+    for repo_id in hits.iter().filter_map(|h| h.repo_id) {
+        if let std::collections::hash_map::Entry::Vacant(entry) = names.entry(repo_id)
+            && let Some(repo) =
+                db::models::repo::Repo::find_by_id(&deployment.db().pool, repo_id).await?
+        {
+            entry.insert(repo.name);
+        }
+    }
+    Ok(names)
+}
+
 #[derive(Debug, Serialize, TS)]
 pub struct SearchResults {
     pub hits: Vec<SearchHit>,
     /// The tickets the hits belong to, by id.
     pub tickets: HashMap<Uuid, TicketRef>,
+    /// Names of the repos of code hits, by id.
+    pub repos: HashMap<Uuid, String>,
     pub semantic: bool,
     pub notice: Option<String>,
     #[ts(type = "number")]
@@ -112,9 +130,11 @@ async fn search(
     let response = search_service(&deployment)?.search(&request).await?;
     let ids: Vec<Uuid> = response.hits.iter().filter_map(|h| h.issue_id).collect();
     let tickets = ticket_refs(&deployment, ids).await?;
+    let repos = repo_names(&deployment, &response.hits).await?;
     Ok(ResponseJson(ApiResponse::success(SearchResults {
         hits: response.hits,
         tickets,
+        repos,
         semantic: response.semantic,
         notice: response.notice,
         took_ms: response.took_ms,
@@ -128,6 +148,45 @@ pub struct RelatedTicket {
     pub score: f64,
     pub kinds: Vec<String>,
     pub excerpt: String,
+    /// What its commits changed, e.g. `fn update in issue.rs` (E19).
+    pub changed: Vec<String>,
+}
+
+/// A related code location, with the tickets whose commits changed it.
+#[derive(Debug, Serialize, TS)]
+pub struct RelatedCode {
+    pub hit: SearchHit,
+    pub repo_name: Option<String>,
+    pub changed_by: Vec<TicketRef>,
+}
+
+/// Tickets and code related to a ticket (E21, E23).
+#[derive(Debug, Serialize, TS)]
+pub struct RelatedView {
+    pub tickets: Vec<RelatedTicket>,
+    pub code: Vec<RelatedCode>,
+}
+
+async fn with_code(
+    deployment: &DeploymentImpl,
+    code: Vec<CodeLocation>,
+) -> Result<Vec<RelatedCode>, ApiError> {
+    let ids: Vec<Uuid> = code.iter().flat_map(|c| c.changed_by.clone()).collect();
+    let refs = ticket_refs(deployment, ids).await?;
+    let hits: Vec<SearchHit> = code.iter().map(|c| c.hit.clone()).collect();
+    let repos = repo_names(deployment, &hits).await?;
+    Ok(code
+        .into_iter()
+        .map(|c| RelatedCode {
+            repo_name: c.hit.repo_id.and_then(|r| repos.get(&r).cloned()),
+            changed_by: c
+                .changed_by
+                .iter()
+                .filter_map(|id| refs.get(id).cloned())
+                .collect(),
+            hit: c.hit,
+        })
+        .collect())
 }
 
 async fn with_tickets(
@@ -144,6 +203,7 @@ async fn with_tickets(
                 score: r.score,
                 kinds: r.kinds,
                 excerpt: r.excerpt,
+                changed: r.changed,
             })
         })
         .collect())
@@ -152,16 +212,17 @@ async fn with_tickets(
 async fn related(
     Path(issue_id): Path<Uuid>,
     State(deployment): State<DeploymentImpl>,
-) -> Result<ResponseJson<ApiResponse<Vec<RelatedTicket>>>, ApiError> {
+) -> Result<ResponseJson<ApiResponse<RelatedView>>, ApiError> {
     let issue = Issue::find_by_id(&deployment.db().pool, issue_id)
         .await?
         .ok_or(ApiError::Database(sqlx::Error::RowNotFound))?;
     let related = search_service(&deployment)?
         .related(&issue, RELATED_LIMIT)
         .await?;
-    Ok(ResponseJson(ApiResponse::success(
-        with_tickets(&deployment, related).await?,
-    )))
+    Ok(ResponseJson(ApiResponse::success(RelatedView {
+        tickets: with_tickets(&deployment, related.tickets).await?,
+        code: with_code(&deployment, related.code).await?,
+    })))
 }
 
 /// Tickets that may describe the same thing as a dropped one (E23).

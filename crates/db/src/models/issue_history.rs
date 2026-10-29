@@ -101,8 +101,28 @@ pub struct NewTicketCommit {
     pub subject: String,
     pub branches: Vec<String>,
     pub message_match: bool,
-    /// (path, additions, deletions); counts are `None` for binary files.
-    pub files: Vec<(String, Option<i64>, Option<i64>)>,
+    pub files: Vec<NewCommitFile>,
+}
+
+/// A file a commit changed. Counts are `None` for binary files.
+#[derive(Debug, Clone)]
+pub struct NewCommitFile {
+    pub path: String,
+    pub additions: Option<i64>,
+    pub deletions: Option<i64>,
+    /// Changed line ranges in the new file.
+    pub hunks: Vec<(i64, i64)>,
+}
+
+/// A ticket commit's change to one file, for resolving symbols (E19).
+#[derive(Debug, Clone, FromRow)]
+pub struct TicketFileChange {
+    pub issue_id: Uuid,
+    pub repo_id: Uuid,
+    pub path: String,
+    pub commit_sha: String,
+    pub committed_at: DateTime<Utc>,
+    pub hunks: sqlx::types::Json<Vec<(i64, i64)>>,
 }
 
 impl IssueHistory {
@@ -280,17 +300,19 @@ impl TicketCommit {
             )
             .execute(&mut *tx)
             .await?;
-            for (path, additions, deletions) in &commit.files {
+            for file in &commit.files {
+                let hunks = sqlx::types::Json(&file.hunks);
                 sqlx::query!(
                     r#"INSERT OR IGNORE INTO ticket_code_links
-                           (issue_id, repo_id, path, commit_sha, additions, deletions)
-                       VALUES ($1, $2, $3, $4, $5, $6)"#,
+                           (issue_id, repo_id, path, commit_sha, additions, deletions, hunks)
+                       VALUES ($1, $2, $3, $4, $5, $6, $7)"#,
                     issue_id,
                     repo_id,
-                    path,
+                    file.path,
                     commit.sha,
-                    additions,
-                    deletions
+                    file.additions,
+                    file.deletions,
+                    hunks
                 )
                 .execute(&mut *tx)
                 .await?;
@@ -320,6 +342,58 @@ impl TicketCommit {
                WHERE c.issue_id = $1
                ORDER BY julianday(c.committed_at) DESC"#,
             issue_id
+        )
+        .fetch_all(pool)
+        .await
+    }
+}
+
+impl TicketFileChange {
+    /// Every file change of the given tickets' commits, newest first.
+    pub async fn find_by_issue(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            TicketFileChange,
+            r#"SELECT l.issue_id as "issue_id!: Uuid",
+                      l.repo_id as "repo_id!: Uuid",
+                      l.path,
+                      l.commit_sha,
+                      c.committed_at as "committed_at!: DateTime<Utc>",
+                      l.hunks as "hunks!: sqlx::types::Json<Vec<(i64, i64)>>"
+               FROM ticket_code_links l
+               JOIN ticket_commits c ON c.issue_id = l.issue_id AND c.repo_id = l.repo_id
+                    AND c.sha = l.commit_sha
+               WHERE l.issue_id = $1 AND l.symbol = ''
+               ORDER BY julianday(c.committed_at) DESC"#,
+            issue_id
+        )
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Tickets whose commits changed `path` in `repo_id`.
+    pub async fn issues_for_path(
+        pool: &SqlitePool,
+        repo_id: Uuid,
+        path: &str,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            TicketFileChange,
+            r#"SELECT l.issue_id as "issue_id!: Uuid",
+                      l.repo_id as "repo_id!: Uuid",
+                      l.path,
+                      l.commit_sha,
+                      c.committed_at as "committed_at!: DateTime<Utc>",
+                      l.hunks as "hunks!: sqlx::types::Json<Vec<(i64, i64)>>"
+               FROM ticket_code_links l
+               JOIN ticket_commits c ON c.issue_id = l.issue_id AND c.repo_id = l.repo_id
+                    AND c.sha = l.commit_sha
+               WHERE l.repo_id = $1 AND l.path = $2 AND l.symbol = ''
+               ORDER BY julianday(c.committed_at) DESC"#,
+            repo_id,
+            path
         )
         .fetch_all(pool)
         .await

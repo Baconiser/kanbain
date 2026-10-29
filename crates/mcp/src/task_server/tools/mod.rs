@@ -36,6 +36,7 @@ impl ToolError {
 
 mod context;
 mod repos;
+mod search;
 mod sessions;
 mod task_attempts;
 mod workspaces;
@@ -45,6 +46,7 @@ impl McpServer {
         Self::context_tools_router()
             + Self::workspaces_tools_router()
             + Self::repos_tools_router()
+            + Self::search_tools_router()
             + Self::task_attempts_tools_router()
             + Self::session_tools_router()
     }

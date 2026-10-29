@@ -19,7 +19,9 @@ use db::{
         agent_job::JOB_KIND_HISTORY,
         issue::Issue,
         issue_event::{IssueEvent, IssueEventType},
-        issue_history::{HistoryPermission, IssueHistory, NewTicketCommit, TicketCommit},
+        issue_history::{
+            HistoryPermission, IssueHistory, NewCommitFile, NewTicketCommit, TicketCommit,
+        },
         project::{Project, ProjectRepo},
         repo::Repo,
     },
@@ -182,12 +184,15 @@ impl HistoryService {
                     files: c
                         .files
                         .iter()
-                        .map(|f| {
-                            (
-                                f.path.clone(),
-                                f.additions.map(i64::from),
-                                f.deletions.map(i64::from),
-                            )
+                        .map(|f| NewCommitFile {
+                            path: f.path.clone(),
+                            additions: f.additions.map(i64::from),
+                            deletions: f.deletions.map(i64::from),
+                            hunks: f
+                                .hunks
+                                .iter()
+                                .map(|(a, b)| (i64::from(*a), i64::from(*b)))
+                                .collect(),
                         })
                         .collect(),
                 })

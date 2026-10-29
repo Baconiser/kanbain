@@ -10,7 +10,13 @@ use std::{
 };
 
 use async_trait::async_trait;
-use db::models::{issue::Issue, project::Project};
+use db::models::{
+    issue::Issue,
+    issue_history::TicketFileChange,
+    project::{Project, ProjectRepo},
+    project_status::{ProjectStatus, ProjectStatusKind},
+    repo::Repo,
+};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tokio::sync::{Mutex, Notify, RwLock};
@@ -18,10 +24,12 @@ use ts_rs::TS;
 use uuid::Uuid;
 
 use crate::{
+    chunk,
     client::{ClientError, Embedder, HttpEmbedder, InputKind},
     config::{EmbedderConfig, EmbedderProvider, SearchConfig, is_remote_url},
+    repo_index,
     sources::{self, KIND_COMMENT, TEXT_KINDS},
-    store::{ChunkRow, Filter, JobCounts, Purpose, SourceKey, SourceMeta, Space, Store},
+    store::{ChunkRow, Filter, JobCounts, KIND_CODE, Purpose, SourceKey, SourceMeta, Space, Store},
 };
 
 /// Secret slots for embedder and reranker API keys.
@@ -37,6 +45,7 @@ pub trait ApiKeys: Send + Sync {
 
 const JOB_ISSUE: &str = "issue";
 const JOB_COMMENT_REMOVED: &str = "comment_removed";
+const JOB_REPO: &str = "repo";
 /// Debounce for ticket edits (E18).
 const DEBOUNCE_MS: i64 = 1500;
 /// How often an unreachable embedder is probed again.
@@ -116,6 +125,8 @@ pub struct RelatedIssue {
     /// Kinds of the hits, e.g. `ticket`, `run`.
     pub kinds: Vec<String>,
     pub excerpt: String,
+    /// What the ticket's commits changed, e.g. `fn update in issue.rs`.
+    pub changed: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, TS)]
@@ -140,6 +151,8 @@ pub struct EmbeddingStatus {
     /// The configured text embedder could not be probed.
     pub embedder_error: Option<String>,
     pub text_remote: bool,
+    /// Code would go to a remote embedder (E9).
+    pub code_remote: bool,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, TS)]
@@ -194,18 +207,43 @@ pub fn excerpt(text: &str, max: usize) -> String {
         Some(rest) => rest.split_once('\n').map(|(_, r)| r.trim()).unwrap_or(rest),
         None => body,
     };
+    let lines: Vec<&str> = body.lines().collect();
+    let body = if lines.len() > EXCERPT_LINES {
+        format!("{}\n…", lines[..EXCERPT_LINES].join("\n"))
+    } else {
+        body.to_string()
+    };
     if body.chars().count() <= max {
-        return body.to_string();
+        return body;
     }
     let cut: String = body.chars().take(max).collect();
     format!("{}…", cut.trim_end())
 }
 
+#[derive(Default)]
 struct Probe {
     hash: Option<String>,
     error: Option<String>,
     at: Option<Instant>,
 }
+
+/// A code location related to a ticket, with the tickets whose commits
+/// changed it (E19).
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct CodeLocation {
+    pub hit: SearchHit,
+    pub changed_by: Vec<Uuid>,
+}
+
+/// Similar tickets and code for one ticket (E21, E23).
+#[derive(Debug, Clone, Serialize, TS)]
+pub struct Related {
+    pub tickets: Vec<RelatedIssue>,
+    pub code: Vec<CodeLocation>,
+}
+
+/// Lines per code excerpt (§5).
+const EXCERPT_LINES: usize = 20;
 
 #[derive(Clone)]
 pub struct SearchService {
@@ -214,7 +252,7 @@ pub struct SearchService {
     config: Arc<RwLock<SearchConfig>>,
     keys: Arc<dyn ApiKeys>,
     wake: Arc<Notify>,
-    probe: Arc<Mutex<Probe>>,
+    probes: Arc<Mutex<HashMap<&'static str, Probe>>>,
 }
 
 impl SearchService {
@@ -232,11 +270,7 @@ impl SearchService {
             config,
             keys,
             wake: Arc::default(),
-            probe: Arc::new(Mutex::new(Probe {
-                hash: None,
-                error: None,
-                at: None,
-            })),
+            probes: Arc::default(),
         })
     }
 
@@ -244,8 +278,9 @@ impl SearchService {
         &self.store
     }
 
-    /// Starts the index worker and queues every ticket once, so the index
-    /// catches up with changes made while the app was closed.
+    /// Starts the index worker and queues every ticket and project repo
+    /// once, so the index catches up with changes made while the app was
+    /// closed (cheap: unchanged content and blobs are skipped).
     pub fn start(&self) {
         let service = self.clone();
         tokio::spawn(async move {
@@ -265,12 +300,9 @@ impl SearchService {
         }
     }
 
-    /// The search settings changed.
+    /// The search settings or keys changed.
     pub async fn config_changed(&self) {
-        let mut probe = self.probe.lock().await;
-        probe.at = None;
-        probe.hash = None;
-        drop(probe);
+        self.probes.lock().await.clear();
         self.wake.notify_one();
     }
 
@@ -296,38 +328,99 @@ impl SearchService {
         self.wake.notify_one();
     }
 
+    /// Queues a repo of a project for the code index (linked, merged into,
+    /// or Reindex).
+    pub async fn enqueue_repo(&self, project_id: Uuid, repo_id: Uuid) {
+        if let Err(e) = self
+            .store
+            .enqueue(JOB_REPO, &format!("{project_id}:{repo_id}"), 0)
+            .await
+        {
+            tracing::warn!("Queueing a repo for search failed: {e}");
+        }
+        self.wake.notify_one();
+    }
+
     async fn enqueue_all(&self, project_id: Option<Uuid>) -> Result<usize, sqlx::Error> {
-        let ids: Vec<Uuid> = match project_id {
-            Some(project) => {
+        let (issues, repos): (Vec<Uuid>, Vec<(Uuid, Uuid)>) = match project_id {
+            Some(project) => (
                 sqlx::query_scalar("SELECT id FROM issues WHERE project_id = ?")
                     .bind(project)
                     .fetch_all(&self.main)
-                    .await?
-            }
-            None => {
+                    .await?,
+                sqlx::query_as(
+                    "SELECT project_id, repo_id FROM project_repos WHERE project_id = ?",
+                )
+                .bind(project)
+                .fetch_all(&self.main)
+                .await?,
+            ),
+            None => (
                 sqlx::query_scalar("SELECT id FROM issues")
                     .fetch_all(&self.main)
-                    .await?
-            }
+                    .await?,
+                sqlx::query_as("SELECT project_id, repo_id FROM project_repos")
+                    .fetch_all(&self.main)
+                    .await?,
+            ),
         };
-        for id in &ids {
+        for (project, repo) in &repos {
+            self.store
+                .enqueue(JOB_REPO, &format!("{project}:{repo}"), 0)
+                .await?;
+        }
+        for id in &issues {
             self.store.enqueue(JOB_ISSUE, &id.to_string(), 0).await?;
         }
         self.wake.notify_one();
-        Ok(ids.len())
+        Ok(issues.len() + repos.len())
     }
 
     pub async fn reindex(&self, request: &ReindexRequest) -> Result<usize, sqlx::Error> {
-        if request.rebuild_vectors.unwrap_or(false)
-            && let Some(space) = self.store.active_space(Purpose::Text).await?
-        {
-            self.store.clear_space(&space).await?;
+        if request.rebuild_vectors.unwrap_or(false) {
+            for purpose in [Purpose::Text, Purpose::Code] {
+                if let Some(space) = self.store.active_space(purpose).await? {
+                    self.store.clear_space(&space).await?;
+                }
+            }
         }
         self.enqueue_all(request.project_id).await
     }
 
-    async fn embedder_for(&self, config: &EmbedderConfig) -> HttpEmbedder {
-        HttpEmbedder::new(config.clone(), self.keys.key(TEXT_KEY_SLOT).await)
+    /// The embedder configured for a purpose: code falls back to the text
+    /// embedder (E8).
+    async fn configured(&self, purpose: Purpose) -> Option<EmbedderConfig> {
+        let config = self.config.read().await;
+        match purpose {
+            Purpose::Text => config.text.clone(),
+            Purpose::Code => config.code.clone().or_else(|| config.text.clone()),
+        }
+        .filter(|c| !c.base_url.trim().is_empty())
+    }
+
+    async fn key_for(&self, purpose: Purpose) -> Option<String> {
+        let own_code = self.config.read().await.code.is_some();
+        match purpose {
+            Purpose::Code if own_code => self.keys.key(CODE_KEY_SLOT).await,
+            _ => self.keys.key(TEXT_KEY_SLOT).await,
+        }
+    }
+
+    async fn embedder_for(&self, purpose: Purpose, config: &EmbedderConfig) -> HttpEmbedder {
+        HttpEmbedder::new(config.clone(), self.key_for(purpose).await)
+    }
+
+    /// Projects whose code may not go to this space's embedder (E9).
+    async fn excluded_projects(&self, space: &Space) -> Result<Vec<String>, sqlx::Error> {
+        if space.purpose != "code" || !is_remote_url(&space.base_url) {
+            return Ok(vec![]);
+        }
+        Ok(Project::find_all(&self.main)
+            .await?
+            .into_iter()
+            .filter(|p| !p.settings.allow_remote_code_embedding)
+            .map(|p| p.id.to_string())
+            .collect())
     }
 
     // ---- worker ----
@@ -355,7 +448,7 @@ impl SearchService {
         }
     }
 
-    /// Re-chunks the queued tickets.
+    /// Re-chunks the queued tickets and repos.
     async fn run_jobs(&self) -> Result<usize, sqlx::Error> {
         let jobs = self.store.take_due(20).await?;
         for job in &jobs {
@@ -369,6 +462,15 @@ impl SearchService {
                     .delete_source(&SourceKey::text(KIND_COMMENT, &job.source_ref))
                     .await
                     .map(|_| ()),
+                JOB_REPO => {
+                    let ids = job.source_ref.split_once(':').and_then(|(p, r)| {
+                        Some((Uuid::parse_str(p).ok()?, Uuid::parse_str(r).ok()?))
+                    });
+                    match ids {
+                        Some((project, repo)) => self.index_repo(project, repo).await,
+                        None => Ok(()),
+                    }
+                }
                 _ => Ok(()),
             };
             match result {
@@ -380,7 +482,8 @@ impl SearchService {
     }
 
     /// Stores every text source of a ticket and removes those it no longer
-    /// has. A deleted ticket loses everything.
+    /// has, then refreshes its code overlay. A deleted ticket loses
+    /// everything.
     pub async fn index_issue(&self, issue_id: Uuid) -> Result<(), sqlx::Error> {
         let issue_ref = issue_id.to_string();
         let Some(issue) = Issue::find_by_id(&self.main, issue_id).await? else {
@@ -415,54 +518,283 @@ impl SearchService {
                 }
             }
         }
+        self.index_overlay(&issue, &project).await
+    }
+
+    async fn project_repos(&self, project_id: Uuid) -> Result<Vec<Repo>, sqlx::Error> {
+        ProjectRepo::find_repos_for_project(&self.main, project_id).await
+    }
+
+    /// Code at a repo's main branch (E17), incremental by blob SHA (E16).
+    pub async fn index_repo(&self, project_id: Uuid, repo_id: Uuid) -> Result<(), sqlx::Error> {
+        let project_ref = project_id.to_string();
+        let repo_ref = repo_id.to_string();
+        let linked = self
+            .project_repos(project_id)
+            .await?
+            .into_iter()
+            .find(|r| r.id == repo_id);
+        let (Some(project), Some(repo)) =
+            (Project::find_by_id(&self.main, project_id).await?, linked)
+        else {
+            // Unlinked or deleted: drop its code.
+            for (path, _) in self
+                .store
+                .code_sources("main", &project_ref, &repo_ref)
+                .await?
+            {
+                self.store
+                    .delete_source(&code_key("main", &project_ref, &repo_ref, &path))
+                    .await?;
+            }
+            return Ok(());
+        };
+        let excludes = project.settings.search_exclude_globs.clone();
+        let path = repo.path.clone();
+        let default_branch = repo.default_target_branch.clone();
+        let listed = tokio::task::spawn_blocking(move || {
+            let rev = repo_index::main_revision(&path, default_branch.as_deref())?;
+            repo_index::list_files(&path, &rev)
+        })
+        .await
+        .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+        let files = match listed {
+            Ok(files) => files,
+            Err(e) => {
+                tracing::warn!("Indexing {} failed: {e}", repo.name);
+                return Ok(());
+            }
+        };
+        let files: Vec<_> = files
+            .into_iter()
+            .filter(|f| chunk::code::indexable(&f.path, f.size, &excludes))
+            .collect();
+        let existing: HashMap<String, String> = self
+            .store
+            .code_sources("main", &project_ref, &repo_ref)
+            .await?
+            .into_iter()
+            .collect();
+        let changed: Vec<_> = files
+            .iter()
+            .filter(|f| {
+                existing
+                    .get(&f.path)
+                    .is_none_or(|hash| *hash != chunk::code::content_hash(&f.blob_sha))
+            })
+            .cloned()
+            .collect();
+        self.store_files(&project, &repo, "main", "", &changed)
+            .await?;
+        let present: std::collections::HashSet<&str> =
+            files.iter().map(|f| f.path.as_str()).collect();
+        for path in existing.keys().filter(|p| !present.contains(p.as_str())) {
+            self.store
+                .delete_source(&code_key("main", &project_ref, &repo_ref, path))
+                .await?;
+        }
+        if !changed.is_empty() {
+            tracing::info!(
+                "Indexed {} changed files of {} ({} files)",
+                changed.len(),
+                repo.name,
+                files.len()
+            );
+        }
         Ok(())
     }
 
-    /// Creates the building space for the configured text embedder, and
-    /// activates building spaces that are complete.
-    async fn sync_spaces(&self) -> Result<(), sqlx::Error> {
-        let config = self.config.read().await.text.clone();
-        if let Some(config) = config.filter(|c| !c.base_url.trim().is_empty()) {
-            let mut probe = self.probe.lock().await;
-            let due = probe.hash.is_none() && probe.at.is_none_or(|t| t.elapsed() > PROBE_RETRY);
-            if due {
-                probe.at = Some(Instant::now());
-                let embedder = self.embedder_for(&config).await;
-                match embedder.probe().await {
-                    Ok(dimension) => {
-                        probe.error = None;
-                        let hash = crate::store::config_hash(Purpose::Text, &config, dimension);
-                        if self
-                            .store
-                            .space_by_hash(&hash)
-                            .await?
-                            .is_none_or(|s| s.state == "retired")
+    /// Reads, chunks and stores files of a repo in a scope.
+    async fn store_files(
+        &self,
+        project: &Project,
+        repo: &Repo,
+        scope: &str,
+        issue_ref: &str,
+        files: &[repo_index::RepoFile],
+    ) -> Result<(), sqlx::Error> {
+        let project_ref = project.id.to_string();
+        let repo_ref = repo.id.to_string();
+        for batch in files.chunks(200) {
+            let path = repo.path.clone();
+            let shas: Vec<String> = batch.iter().map(|f| f.blob_sha.clone()).collect();
+            let blobs = tokio::task::spawn_blocking(move || repo_index::read_blobs(&path, &shas))
+                .await
+                .map_err(|e| sqlx::Error::Protocol(e.to_string()))?
+                .map_err(sqlx::Error::Protocol)?;
+            for file in batch {
+                let Some(text) = blobs
+                    .get(&file.blob_sha)
+                    .cloned()
+                    .and_then(repo_index::as_text)
+                else {
+                    continue;
+                };
+                let chunks = chunk::code::chunk_code(
+                    &format!("{}/{}", repo.name, file.path),
+                    &file.path,
+                    &text,
+                    chunk::code::CODE_BUDGET,
+                );
+                self.store
+                    .put_source(
+                        &code_key(scope, &project_ref, &repo_ref, &file.path),
+                        &SourceMeta {
+                            project_id: project_ref.clone(),
+                            issue_id: issue_ref.to_string(),
+                            blob_sha: Some(file.blob_sha.clone()),
+                        },
+                        &chunk::code::content_hash(&file.blob_sha),
+                        &chunks,
+                    )
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The ticket overlay (D45): files the ticket's branches changed, at the
+    /// branch, searched only for that ticket. Dropped once the ticket is
+    /// done (its work is on main then).
+    async fn index_overlay(&self, issue: &Issue, project: &Project) -> Result<(), sqlx::Error> {
+        let scope = issue.id.to_string();
+        let project_ref = project.id.to_string();
+        let done = ProjectStatus::find_by_id(&self.main, issue.status_id)
+            .await?
+            .is_some_and(|s| s.kind == ProjectStatusKind::Done);
+        let branches: Vec<String> = if done {
+            vec![]
+        } else {
+            sqlx::query_scalar("SELECT branch FROM workspaces WHERE issue_id = ?")
+                .bind(issue.id)
+                .fetch_all(&self.main)
+                .await?
+        };
+        let mut kept: Vec<(String, String)> = Vec::new();
+        for repo in self.project_repos(project.id).await? {
+            let repo_ref = repo.id.to_string();
+            let path = repo.path.clone();
+            let default_branch = repo.default_target_branch.clone();
+            let branches = branches.clone();
+            let changed = tokio::task::spawn_blocking(move || {
+                let base = repo_index::main_revision(&path, default_branch.as_deref())?;
+                let mut all = Vec::new();
+                for branch in branches.iter().filter(|b| repo_index::has_branch(&path, b)) {
+                    all.extend(repo_index::changed_files(&path, &base, branch)?);
+                }
+                Ok::<_, String>(all)
+            })
+            .await
+            .map_err(|e| sqlx::Error::Protocol(e.to_string()))?;
+            let changed = match changed {
+                Ok(changed) => changed,
+                Err(e) => {
+                    tracing::warn!("Ticket overlay for {} failed: {e}", repo.name);
+                    continue;
+                }
+            };
+            let existing: HashMap<String, String> = self
+                .store
+                .code_sources(&scope, &project_ref, &repo_ref)
+                .await?
+                .into_iter()
+                .collect();
+            let mut to_store = Vec::new();
+            for (path, file) in changed {
+                kept.push((repo_ref.clone(), path.clone()));
+                match file {
+                    Some(f)
+                        if chunk::code::indexable(
+                            &f.path,
+                            f.size,
+                            &project.settings.search_exclude_globs,
+                        ) =>
+                    {
+                        if existing
+                            .get(&path)
+                            .is_none_or(|hash| *hash != chunk::code::content_hash(&f.blob_sha))
                         {
-                            let space = self
-                                .store
-                                .create_space(Purpose::Text, &config, dimension)
-                                .await?;
-                            tracing::info!(
-                                "Building embedding space {} for {} ({dimension} dimensions)",
-                                space.id,
-                                config.model
-                            );
+                            to_store.push(f);
                         }
-                        // Building spaces of earlier settings are superseded.
-                        for space in self.store.live_spaces().await? {
-                            if space.purpose == "text"
-                                && space.state == "building"
-                                && space.config_hash != hash
-                            {
-                                self.store.retire(space.id).await?;
-                            }
+                    }
+                    // Deleted (or not indexable) on the branch: an empty
+                    // source hides the main version for this ticket.
+                    _ => {
+                        self.store
+                            .put_source(
+                                &code_key(&scope, &project_ref, &repo_ref, &path),
+                                &SourceMeta {
+                                    project_id: project_ref.clone(),
+                                    issue_id: scope.clone(),
+                                    blob_sha: None,
+                                },
+                                "deleted",
+                                &[],
+                            )
+                            .await?;
+                    }
+                }
+            }
+            self.store_files(project, &repo, &scope, &scope, &to_store)
+                .await?;
+        }
+        for (repo_ref, path) in self.store.overlay_paths(&scope).await? {
+            if !kept.iter().any(|(r, p)| *r == repo_ref && *p == path) {
+                self.store
+                    .delete_source(&code_key(&scope, &project_ref, &repo_ref, &path))
+                    .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Creates building spaces for the configured embedders (text, and code
+    /// with its own or the text embedder), and activates complete ones.
+    async fn sync_spaces(&self) -> Result<(), sqlx::Error> {
+        for purpose in [Purpose::Text, Purpose::Code] {
+            let Some(config) = self.configured(purpose).await else {
+                continue;
+            };
+            let mut probes = self.probes.lock().await;
+            let probe = probes.entry(purpose.as_str()).or_default();
+            let due = probe.hash.is_none() && probe.at.is_none_or(|t| t.elapsed() > PROBE_RETRY);
+            if !due {
+                continue;
+            }
+            probe.at = Some(Instant::now());
+            let embedder = self.embedder_for(purpose, &config).await;
+            match embedder.probe().await {
+                Ok(dimension) => {
+                    probe.error = None;
+                    let hash = crate::store::config_hash(purpose, &config, dimension);
+                    if self
+                        .store
+                        .space_by_hash(&hash)
+                        .await?
+                        .is_none_or(|s| s.state == "retired")
+                    {
+                        let space = self.store.create_space(purpose, &config, dimension).await?;
+                        tracing::info!(
+                            "Building {} embedding space {} for {} ({dimension} dimensions)",
+                            purpose.as_str(),
+                            space.id,
+                            config.model
+                        );
+                    }
+                    // Building spaces of earlier settings are superseded.
+                    for space in self.store.live_spaces().await? {
+                        if space.purpose == purpose.as_str()
+                            && space.state == "building"
+                            && space.config_hash != hash
+                        {
+                            self.store.retire(space.id).await?;
                         }
-                        probe.hash = Some(hash);
                     }
-                    Err(e) => {
-                        tracing::warn!("Probing the text embedder failed: {e}");
-                        probe.error = Some(e.to_string());
-                    }
+                    probe.hash = Some(hash);
+                }
+                Err(e) => {
+                    tracing::warn!("Probing the {} embedder failed: {e}", purpose.as_str());
+                    probe.error = Some(e.to_string());
                 }
             }
         }
@@ -471,7 +803,8 @@ impl SearchService {
             if space.state != "building" {
                 continue;
             }
-            let (total, embedded) = self.store.coverage(&space).await?;
+            let exclude = self.excluded_projects(&space).await?;
+            let (total, embedded) = self.store.coverage(&space, &exclude).await?;
             if embedded >= total && self.store.job_counts().await?.queued == 0 {
                 self.store.activate(space.id).await?;
                 tracing::info!("Embedding space {} is active ({total} chunks)", space.id);
@@ -482,24 +815,27 @@ impl SearchService {
 
     /// Embeds chunks without vectors, in every live space.
     async fn embed_pending(&self) -> Result<usize, sqlx::Error> {
-        let batch = self
-            .config
-            .read()
-            .await
-            .text
-            .as_ref()
-            .map(|c| c.batch_size.max(1))
-            .unwrap_or(32) as i64;
         let mut done = 0;
         for space in self.store.live_spaces().await? {
             if space.stale {
                 continue;
             }
-            let pending = self.store.pending_chunks(&space, batch).await?;
+            let purpose = Purpose::of_kind(if space.purpose == "code" {
+                KIND_CODE
+            } else {
+                ""
+            });
+            let batch = self
+                .configured(purpose)
+                .await
+                .map(|c| c.batch_size.max(1))
+                .unwrap_or(32) as i64;
+            let exclude = self.excluded_projects(&space).await?;
+            let pending = self.store.pending_chunks(&space, batch, &exclude).await?;
             if pending.is_empty() {
                 continue;
             }
-            let embedder = self.embedder_for(&space_config(&space)).await;
+            let embedder = self.embedder_for(purpose, &space_config(&space)).await;
             let texts: Vec<String> = pending.iter().map(|c| c.text.clone()).collect();
             let started = Instant::now();
             let result = embedder.embed(&texts, InputKind::Document).await;
@@ -510,7 +846,7 @@ impl SearchService {
                         .store
                         .record_call(
                             Some(space.id),
-                            Purpose::Text,
+                            purpose,
                             "document",
                             texts.len(),
                             out.tokens,
@@ -545,7 +881,7 @@ impl SearchService {
                         .store
                         .record_call(
                             Some(space.id),
-                            Purpose::Text,
+                            purpose,
                             "document",
                             texts.len(),
                             None,
@@ -566,12 +902,62 @@ impl SearchService {
 
     // ---- search ----
 
-    /// The active text space and an embedder for it, when vectors can be
-    /// used.
-    async fn query_space(&self) -> Option<Space> {
-        self.config.read().await.text.as_ref()?;
-        let space = self.store.active_space(Purpose::Text).await.ok()??;
+    /// The active space of a purpose, when vectors can be used for it.
+    async fn query_space(&self, purpose: Purpose) -> Option<Space> {
+        self.configured(purpose).await?;
+        let space = self.store.active_space(purpose).await.ok()??;
         (!space.stale).then_some(space)
+    }
+
+    /// Vector candidates of one purpose; `Err` says why there are none.
+    async fn vector_candidates(
+        &self,
+        purpose: Purpose,
+        query: &str,
+        filter: &Filter,
+        k: usize,
+    ) -> Result<Result<Vec<i64>, String>, sqlx::Error> {
+        let Some(space) = self.query_space(purpose).await else {
+            return Ok(Err(if self.configured(purpose).await.is_some() {
+                "Keyword search only until the index is built".to_string()
+            } else {
+                "Keyword search only: no embedder is configured".to_string()
+            }));
+        };
+        let embedder = self.embedder_for(purpose, &space_config(&space)).await;
+        let started = Instant::now();
+        match embedder.embed(&[query.to_string()], InputKind::Query).await {
+            Ok(out) => {
+                let _ = self
+                    .store
+                    .record_call(
+                        Some(space.id),
+                        purpose,
+                        "query",
+                        1,
+                        out.tokens,
+                        started.elapsed().as_millis() as u64,
+                        None,
+                    )
+                    .await;
+                match out.vectors.first() {
+                    Some(v) if v.len() as i64 == space.dimension => Ok(Ok(self
+                        .store
+                        .knn(&space, v, filter, k)
+                        .await?
+                        .into_iter()
+                        .map(|(id, _)| id)
+                        .collect())),
+                    _ => Ok(Err(
+                        "The embedder's answer did not fit the index".to_string()
+                    )),
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Embedding a search query failed: {e}");
+                Ok(Err(format!("Keyword search only: {e}")))
+            }
+        }
     }
 
     pub async fn search(&self, request: &SearchRequest) -> Result<SearchResponse, sqlx::Error> {
@@ -583,21 +969,21 @@ impl SearchService {
         if let Some(issue) = request.issue_id {
             scopes.push(issue.to_string());
         }
-        let kinds = request.kinds.as_ref().map(|kinds| {
-            kinds
-                .iter()
-                .filter(|k| TEXT_KINDS.contains(&k.as_str()))
-                .cloned()
-                .collect::<Vec<_>>()
-        });
-        let filter = Filter {
-            project_id: if request.all_projects.unwrap_or(false) {
-                None
-            } else {
-                request.project_id.map(|p| p.to_string())
-            },
-            kinds,
-            scopes,
+        let wanted = |kind: &str| {
+            request
+                .kinds
+                .as_ref()
+                .is_none_or(|kinds| kinds.iter().any(|k| k == kind))
+        };
+        let text_kinds: Vec<String> = TEXT_KINDS
+            .iter()
+            .filter(|k| wanted(k))
+            .map(|k| k.to_string())
+            .collect();
+        let project_id = if request.all_projects.unwrap_or(false) {
+            None
+        } else {
+            request.project_id.map(|p| p.to_string())
         };
         // Leave room for the excluded ticket's own chunks.
         let fetch = candidates
@@ -607,69 +993,58 @@ impl SearchService {
                 0
             };
 
-        let keyword: Vec<i64> = self
-            .store
-            .keyword(&request.query, Purpose::Text, &filter, fetch)
-            .await?
-            .into_iter()
-            .map(|(id, _)| id)
-            .collect();
-
+        let mut lists: Vec<Vec<i64>> = Vec::new();
+        let mut vector_ids: Vec<i64> = Vec::new();
+        let mut keyword_ids: Vec<i64> = Vec::new();
         let mut notice = None;
-        let mut vector: Vec<i64> = Vec::new();
-        match self.query_space().await {
-            Some(space) => {
-                let embedder = self.embedder_for(&space_config(&space)).await;
-                let t = Instant::now();
-                match embedder
-                    .embed(std::slice::from_ref(&request.query), InputKind::Query)
-                    .await
-                {
-                    Ok(out) => {
-                        let _ = self
-                            .store
-                            .record_call(
-                                Some(space.id),
-                                Purpose::Text,
-                                "query",
-                                1,
-                                out.tokens,
-                                t.elapsed().as_millis() as u64,
-                                None,
-                            )
-                            .await;
-                        match out.vectors.first() {
-                            Some(v) if v.len() as i64 == space.dimension => {
-                                vector = self
-                                    .store
-                                    .knn(&space, v, &filter, fetch)
-                                    .await?
-                                    .into_iter()
-                                    .map(|(id, _)| id)
-                                    .collect();
-                            }
-                            _ => {
-                                notice = Some("The embedder's answer did not fit the index".into())
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!("Embedding a search query failed: {e}");
-                        notice = Some(format!("Keyword search only: {e}"));
-                    }
+        let mut purposes = Vec::new();
+        if !text_kinds.is_empty() {
+            purposes.push((
+                Purpose::Text,
+                Filter {
+                    project_id: project_id.clone(),
+                    kinds: request.kinds.as_ref().map(|_| text_kinds.clone()),
+                    scopes: vec!["main".to_string()],
+                },
+            ));
+        }
+        if wanted(KIND_CODE) {
+            purposes.push((
+                Purpose::Code,
+                Filter {
+                    project_id: project_id.clone(),
+                    kinds: None,
+                    scopes: scopes.clone(),
+                },
+            ));
+        }
+        for (purpose, filter) in &purposes {
+            let keyword: Vec<i64> = self
+                .store
+                .keyword(&request.query, *purpose, filter, fetch)
+                .await?
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect();
+            match self
+                .vector_candidates(*purpose, &request.query, filter, fetch)
+                .await?
+            {
+                Ok(vector) => {
+                    vector_ids.extend(&vector);
+                    lists.push(vector);
+                }
+                Err(why) => {
+                    notice.get_or_insert(why);
                 }
             }
-            None => {
-                notice = Some(if config.text.is_some() {
-                    "Keyword search only until the index is built".to_string()
-                } else {
-                    "Keyword search only: no embedder is configured".to_string()
-                });
-            }
+            keyword_ids.extend(&keyword);
+            lists.push(keyword);
         }
         let semantic = notice.is_none();
 
-        let fused = rrf(&[&vector, &keyword], config.rrf_k as f64);
+        let refs: Vec<&[i64]> = lists.iter().map(Vec::as_slice).collect();
+        let fused = rrf(&refs, config.rrf_k as f64);
         let ids: Vec<i64> = fused.iter().map(|(id, _)| *id).collect();
         let rows: HashMap<i64, ChunkRow> = self
             .store
@@ -678,20 +1053,39 @@ impl SearchService {
             .into_iter()
             .map(|r| (r.chunk_id, r))
             .collect();
+        // The ticket's overlay replaces the main version of its files.
+        let overlay: Vec<(String, String)> = match request.issue_id {
+            Some(issue) => self.store.overlay_paths(&issue.to_string()).await?,
+            None => vec![],
+        };
         let exclude = request.exclude_issue_id.map(|i| i.to_string());
         let rank = |list: &[i64], id: i64| list.iter().position(|x| *x == id).map(|p| p as u32 + 1);
-        let hits: Vec<SearchHit> = fused
+        let ordered: Vec<(i64, f64)> = fused
+            .into_iter()
+            .filter(|(id, _)| {
+                let Some(row) = rows.get(id) else {
+                    return false;
+                };
+                if row.kind != KIND_CODE && exclude.as_deref() == Some(row.issue_id.as_str()) {
+                    return false;
+                }
+                !(row.kind == KIND_CODE
+                    && row.scope == "main"
+                    && overlay
+                        .iter()
+                        .any(|(r, p)| *r == row.repo_id && *p == row.path))
+            })
+            .collect();
+
+        let hits: Vec<SearchHit> = ordered
             .into_iter()
             .filter_map(|(id, score)| {
                 let row = rows.get(&id)?;
-                if exclude.as_deref() == Some(row.issue_id.as_str()) {
-                    return None;
-                }
                 Some(hit_from_row(
                     row,
                     score,
-                    rank(&vector, id),
-                    rank(&keyword, id),
+                    rank(&vector_ids, id),
+                    rank(&keyword_ids, id),
                     config.excerpt_chars as usize,
                 ))
             })
@@ -716,6 +1110,8 @@ impl SearchService {
         limit: usize,
     ) -> Result<(Vec<RelatedIssue>, SearchResponse), sqlx::Error> {
         let candidates = self.config.read().await.candidates;
+        let kinds =
+            Some(kinds.unwrap_or_else(|| TEXT_KINDS.iter().map(|k| k.to_string()).collect()));
         let response = self
             .search(&SearchRequest {
                 query: query.to_string(),
@@ -744,6 +1140,7 @@ impl SearchService {
                     score: hit.score,
                     kinds: vec![hit.kind.clone()],
                     excerpt: hit.excerpt.clone(),
+                    changed: vec![],
                 }),
             }
         }
@@ -752,21 +1149,95 @@ impl SearchService {
         Ok((by_issue, response))
     }
 
-    /// Tickets related to a ticket, from its title and description (E21).
-    pub async fn related(
+    /// Symbols a ticket's commits changed, as `path › symbol` (E19).
+    pub async fn changed_symbols(
         &self,
-        issue: &Issue,
+        issue_id: Uuid,
         limit: usize,
-    ) -> Result<Vec<RelatedIssue>, sqlx::Error> {
+    ) -> Result<Vec<String>, sqlx::Error> {
+        let mut out: Vec<String> = Vec::new();
+        for change in TicketFileChange::find_by_issue(&self.main, issue_id).await? {
+            let symbols = self
+                .store
+                .symbols_at(&change.repo_id.to_string(), &change.path, &change.hunks.0)
+                .await?;
+            let file = change
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&change.path)
+                .to_string();
+            let entries: Vec<String> = if symbols.is_empty() {
+                vec![file]
+            } else {
+                symbols
+                    .into_iter()
+                    .map(|s| format!("{} in {file}", s.rsplit(" › ").next().unwrap_or(&s)))
+                    .collect()
+            };
+            for entry in entries {
+                if !out.contains(&entry) {
+                    out.push(entry);
+                }
+            }
+            if out.len() >= limit {
+                break;
+            }
+        }
+        out.truncate(limit);
+        Ok(out)
+    }
+
+    /// Tickets and code related to a ticket, from its title and
+    /// description (E21, E23).
+    pub async fn related(&self, issue: &Issue, limit: usize) -> Result<Related, sqlx::Error> {
         let mut query = issue.title.clone();
         if let Some(description) = &issue.description {
             query.push('\n');
             query.extend(description.chars().take(2000));
         }
-        Ok(self
+        let (mut tickets, _) = self
             .similar_issues(&query, issue.project_id, Some(issue.id), None, limit)
+            .await?;
+        for ticket in &mut tickets {
+            ticket.changed = self.changed_symbols(ticket.issue_id, 3).await?;
+        }
+        let code_hits = self
+            .search(&SearchRequest {
+                query,
+                project_id: Some(issue.project_id),
+                issue_id: Some(issue.id),
+                kinds: Some(vec![KIND_CODE.to_string()]),
+                limit: Some(limit as u32 * 2),
+                ..Default::default()
+            })
             .await?
-            .0)
+            .hits;
+        let mut code = Vec::new();
+        for hit in code_hits {
+            code.push(self.code_location(hit).await?);
+        }
+        Ok(Related { tickets, code })
+    }
+
+    /// A code hit with the tickets whose commits touched its lines.
+    pub async fn code_location(&self, hit: SearchHit) -> Result<CodeLocation, sqlx::Error> {
+        let mut changed_by = Vec::new();
+        if let (Some(repo), Some(path), Some(start), Some(end)) = (
+            hit.repo_id,
+            hit.path.as_deref(),
+            hit.start_line,
+            hit.end_line,
+        ) {
+            for change in TicketFileChange::issues_for_path(&self.main, repo, path).await? {
+                let touches = change.hunks.0.is_empty()
+                    || change.hunks.0.iter().any(|(a, b)| *a <= end && *b >= start);
+                if touches && !changed_by.contains(&change.issue_id) {
+                    changed_by.push(change.issue_id);
+                }
+            }
+        }
+        Ok(CodeLocation { hit, changed_by })
     }
 
     pub async fn status(&self) -> Result<EmbeddingStatus, sqlx::Error> {
@@ -776,7 +1247,8 @@ impl SearchService {
             let (chunks, embedded) = if space.state == "retired" {
                 (0, 0)
             } else {
-                self.store.coverage(&space).await?
+                let exclude = self.excluded_projects(&space).await?;
+                self.store.coverage(&space, &exclude).await?
             };
             spaces.push(SpaceStatus {
                 space,
@@ -785,18 +1257,37 @@ impl SearchService {
             });
         }
         let (chunks, sources) = self.store.chunk_count().await?;
+        let probes = self.probes.lock().await;
+        let embedder_error = ["text", "code"]
+            .iter()
+            .find_map(|p| probes.get(p).and_then(|probe| probe.error.clone()));
         Ok(EmbeddingStatus {
             enabled: config.text.is_some(),
             spaces,
             jobs: self.store.job_counts().await?,
             chunks,
             sources,
-            embedder_error: self.probe.lock().await.error.clone(),
+            embedder_error,
             text_remote: config
                 .text
                 .as_ref()
                 .is_some_and(|t| is_remote_url(&t.base_url)),
+            code_remote: config
+                .code
+                .as_ref()
+                .or(config.text.as_ref())
+                .is_some_and(|t| is_remote_url(&t.base_url)),
         })
+    }
+}
+
+fn code_key(scope: &str, project_ref: &str, repo_ref: &str, path: &str) -> SourceKey {
+    SourceKey {
+        kind: KIND_CODE.to_string(),
+        scope: scope.to_string(),
+        ref_id: project_ref.to_string(),
+        repo_id: repo_ref.to_string(),
+        path: path.to_string(),
     }
 }
 
@@ -863,7 +1354,9 @@ mod service_tests {
     use db::models::{
         issue::{CreateIssue, UpdateIssue},
         issue_comment::{CreateIssueComment, IssueComment},
+        issue_history::{NewCommitFile, NewTicketCommit, TicketCommit},
         project::CreateProject,
+        repo::Repo,
     };
     use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 
@@ -1022,9 +1515,16 @@ mod service_tests {
         let active: Vec<_> = status
             .spaces
             .iter()
-            .filter(|s| s.space.state == "active")
+            .filter(|s| s.space.state == "active" && s.space.purpose == "text")
             .collect();
         assert_eq!(active.len(), 1);
+        // The code slot falls back to the text embedder in its own space.
+        assert!(
+            status
+                .spaces
+                .iter()
+                .any(|s| s.space.purpose == "code" && s.space.state == "active")
+        );
         assert_eq!(active[0].chunks, active[0].embedded);
         assert_eq!(active[0].chunks, 4, "three tickets and a comment");
 
@@ -1050,7 +1550,7 @@ mod service_tests {
         assert_eq!(response.hits[0].issue_id, Some(other.id));
 
         // Related tickets leave out the ticket itself.
-        let related = service.related(&reset, 5).await.unwrap();
+        let related = service.related(&reset, 5).await.unwrap().tickets;
         assert!(related.iter().all(|r| r.issue_id != reset.id));
 
         // Editing one ticket re-embeds only its changed chunk.
@@ -1090,6 +1590,7 @@ mod service_tests {
         assert_eq!(
             spaces
                 .iter()
+                .filter(|s| s.purpose == "text")
                 .map(|s| (s.model.as_str(), s.state.as_str()))
                 .collect::<Vec<_>>(),
             vec![("model-a", "active"), ("model-b", "building")]
@@ -1105,6 +1606,7 @@ mod service_tests {
         assert_eq!(
             spaces
                 .iter()
+                .filter(|s| s.purpose == "text")
                 .map(|s| (s.model.as_str(), s.state.as_str()))
                 .collect::<Vec<_>>(),
             vec![("model-a", "retired"), ("model-b", "active")]
@@ -1125,5 +1627,243 @@ mod service_tests {
         let response = service.search(&search("discounts")).await.unwrap();
         assert!(!response.semantic);
         assert_eq!(response.hits[0].issue_id, Some(ext.id));
+    }
+
+    fn git(repo: &std::path::Path, args: &[&str]) {
+        let out = std::process::Command::new("git")
+            .args(args)
+            .current_dir(repo)
+            .env("GIT_AUTHOR_NAME", "Dev")
+            .env("GIT_AUTHOR_EMAIL", "d@e.x")
+            .env("GIT_COMMITTER_NAME", "Dev")
+            .env("GIT_COMMITTER_EMAIL", "d@e.x")
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{args:?}");
+    }
+
+    #[tokio::test]
+    async fn indexes_code_incrementally_with_ticket_overlays() {
+        let state = MockState {
+            dim: 64,
+            ..Default::default()
+        };
+        let base = mock_server(state.clone()).await;
+        let main = main_db().await;
+        let dir = tempfile::tempdir().unwrap();
+        let repo_dir = dir.path().join("shop");
+        std::fs::create_dir_all(repo_dir.join("src")).unwrap();
+        let module = |extra: &str| {
+            let mut s = String::new();
+            for name in ["alpha", "beta", "gamma"] {
+                s.push_str(&format!(
+                    "pub fn {name}() -> u32 {{\n{}    0\n}}\n\n",
+                    format!("    let {name}_value = 1;\n").repeat(60)
+                ));
+            }
+            format!(
+                "{s}pub fn assign_ticket_number(counter: u32) -> u32 {{\n    counter + 1{extra}\n}}\n"
+            )
+        };
+        std::fs::write(repo_dir.join("src/issue.rs"), module("")).unwrap();
+        std::fs::write(repo_dir.join("README.md"), "# Shop\n").unwrap();
+        git(&repo_dir, &["init", "-q", "-b", "main"]);
+        git(&repo_dir, &["add", "."]);
+        git(&repo_dir, &["commit", "-qm", "init"]);
+
+        let repo = Repo::find_or_create(&main, &repo_dir, "shop")
+            .await
+            .unwrap();
+        let project = Project::create(
+            &main,
+            &CreateProject {
+                name: "Shop".into(),
+                id_prefix: Some("KAN".into()),
+                repo_ids: vec![repo.id],
+            },
+        )
+        .await
+        .unwrap();
+        let ticket = issue(
+            &main,
+            project.id,
+            "Renumber tickets",
+            "Numbers start at 100.",
+        )
+        .await;
+        let other = issue(&main, project.id, "Unrelated", "Nothing.").await;
+
+        let config = Arc::new(RwLock::new(SearchConfig {
+            text: Some(embedder(&base, "model-a")),
+            ..Default::default()
+        }));
+        let service = SearchService::open(
+            &dir.path().join("embeddings.sqlite"),
+            main.clone(),
+            config,
+            Arc::new(NoKeys),
+        )
+        .await
+        .unwrap();
+        service.enqueue_all(None).await.unwrap();
+        settle(&service).await;
+
+        let search = |issue_id: Option<Uuid>| SearchRequest {
+            query: "assign ticket number counter".into(),
+            project_id: Some(project.id),
+            issue_id,
+            kinds: Some(vec!["code".into()]),
+            ..Default::default()
+        };
+        let hits = service.search(&search(None)).await.unwrap().hits;
+        let hit = &hits[0];
+        assert_eq!(hit.path.as_deref(), Some("src/issue.rs"));
+        assert_eq!(hit.symbol.as_deref(), Some("fn assign_ticket_number"));
+        assert_eq!(hit.repo_id, Some(repo.id));
+        assert!(hit.vector_rank.is_some());
+
+        // Changing one function re-embeds only that function.
+        let before = state
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>();
+        std::fs::write(repo_dir.join("src/issue.rs"), module(" + 100")).unwrap();
+        git(&repo_dir, &["commit", "-qam", "start at 100"]);
+        service.enqueue_repo(project.id, repo.id).await;
+        settle(&service).await;
+        let after = state
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>();
+        assert_eq!(after - before, 1, "only the changed function");
+
+        // An index from an older chunker (raw blob SHA as its hash) is
+        // chunked again, though the blobs didn't change; chunks whose text
+        // came out the same keep their vectors.
+        sqlx::query("UPDATE sources SET content_hash = blob_sha WHERE kind = 'code'")
+            .execute(service.store.pool())
+            .await
+            .unwrap();
+        service.enqueue_repo(project.id, repo.id).await;
+        settle(&service).await;
+        let stale: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM sources WHERE kind = 'code' AND content_hash NOT LIKE '%:c%'",
+        )
+        .fetch_one(service.store.pool())
+        .await
+        .unwrap();
+        assert_eq!(stale, 0, "every file chunked by this version");
+        let rechunked = state
+            .inputs
+            .lock()
+            .unwrap()
+            .iter()
+            .map(Vec::len)
+            .sum::<usize>();
+        assert_eq!(rechunked, after, "same chunks, no new embeddings");
+
+        // E19: a ticket commit that touched assign_ticket_number names it,
+        // and the code hit names the ticket; untouched functions don't.
+        TicketCommit::replace_for_repo(
+            &main,
+            other.id,
+            repo.id,
+            &[NewTicketCommit {
+                sha: "c0ffee".into(),
+                author: "Dev".into(),
+                committed_at: chrono::Utc::now(),
+                subject: "KAN-2: start at 100".into(),
+                branches: vec![],
+                message_match: true,
+                files: vec![NewCommitFile {
+                    path: "src/issue.rs".into(),
+                    additions: Some(1),
+                    deletions: Some(1),
+                    hunks: vec![(194, 194)],
+                }],
+            }],
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            service.changed_symbols(other.id, 3).await.unwrap(),
+            vec!["fn assign_ticket_number in issue.rs".to_string()]
+        );
+        let hits = service.search(&search(None)).await.unwrap().hits;
+        let numbering = hits
+            .iter()
+            .find(|h| h.symbol.as_deref() == Some("fn assign_ticket_number"))
+            .cloned()
+            .unwrap();
+        let alpha = hits
+            .iter()
+            .find(|h| h.symbol.as_deref() == Some("fn alpha"))
+            .cloned()
+            .unwrap_or_else(|| panic!("{hits:#?}"));
+        assert_eq!(
+            service.code_location(numbering).await.unwrap().changed_by,
+            vec![other.id]
+        );
+        assert!(
+            service
+                .code_location(alpha)
+                .await
+                .unwrap()
+                .changed_by
+                .is_empty()
+        );
+
+        // A change on the ticket's branch is found by that ticket only.
+        git(&repo_dir, &["checkout", "-qb", "kanbain/KAN-1-renumber"]);
+        std::fs::write(
+            repo_dir.join("src/numbering.rs"),
+            "pub fn renumber_tickets_from_hundred() {}\n",
+        )
+        .unwrap();
+        git(&repo_dir, &["add", "."]);
+        git(&repo_dir, &["commit", "-qm", "KAN-1: renumber"]);
+        git(&repo_dir, &["checkout", "-q", "main"]);
+        sqlx::query(
+            "INSERT INTO workspaces (id, branch, issue_id) VALUES (?, 'kanbain/KAN-1-renumber', ?)",
+        )
+        .bind(Uuid::new_v4())
+        .bind(ticket.id)
+        .execute(&main)
+        .await
+        .unwrap();
+        service.enqueue_issue(ticket.id).await;
+        settle(&service).await;
+        let overlay_query = |issue_id: Option<Uuid>| SearchRequest {
+            query: "renumber_tickets_from_hundred".into(),
+            ..search(issue_id)
+        };
+        let mine = service
+            .search(&overlay_query(Some(ticket.id)))
+            .await
+            .unwrap()
+            .hits;
+        assert_eq!(mine[0].path.as_deref(), Some("src/numbering.rs"));
+        let theirs = service
+            .search(&overlay_query(Some(other.id)))
+            .await
+            .unwrap()
+            .hits;
+        assert!(
+            theirs
+                .iter()
+                .all(|h| h.path.as_deref() != Some("src/numbering.rs"))
+        );
+        let unscoped = service.search(&overlay_query(None)).await.unwrap().hits;
+        assert!(
+            unscoped
+                .iter()
+                .all(|h| h.path.as_deref() != Some("src/numbering.rs"))
+        );
     }
 }

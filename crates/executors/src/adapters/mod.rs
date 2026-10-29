@@ -32,6 +32,18 @@ pub const AGENT_DIR: &str = "agent";
 /// agent; `~/.claude/skills` points here, which both runtimes scan.
 pub const SKILLS_DIR: &str = "skills";
 
+/// Name of KanbAIn's MCP server in agent runs (the `search` capability).
+pub const KANBAIN_MCP: &str = "kanbain";
+
+/// The `search_knowledge` tool's name as Claude Code exposes it.
+pub const SEARCH_TOOL_CLAUDE: &str = "mcp__kanbain__search_knowledge";
+
+/// What role prompts of agents with the `search` capability add.
+pub const SEARCH_GUIDANCE: &str = "Before exploring the code with Grep, Glob or Read, call \
+    search_knowledge with what you are looking for. It returns locations (path, line range, \
+    symbol) and short excerpts from this project's code, tickets and earlier runs. Read only \
+    the line ranges you need.";
+
 /// An agent definition with its style blocks and skills loaded.
 #[derive(Debug, Clone)]
 pub struct ResolvedAgent {
@@ -41,12 +53,16 @@ pub struct ResolvedAgent {
 }
 
 impl ResolvedAgent {
-    /// Role prompt followed by the style blocks.
+    /// Role prompt followed by the style blocks. Agents with the `search`
+    /// capability are told how to use it.
     pub fn system_prompt(&self) -> String {
         let mut parts = Vec::new();
         let role = self.definition.role_prompt.trim();
         if !role.is_empty() {
             parts.push(role.to_string());
+        }
+        if self.definition.has(Capability::Search) && !role.contains("search_knowledge") {
+            parts.push(SEARCH_GUIDANCE.to_string());
         }
         for style in &self.styles {
             let body = style.body.trim();
@@ -161,7 +177,7 @@ pub fn default_agents() -> Vec<AgentDefinition> {
             "You are the planner. Read the ticket in /kanbain/context and the code, then \
              write a structured plan: subtasks with the files they likely touch, acceptance \
              criteria, assumptions, a test strategy and checkpoints. Do not change code.",
-            vec![Read, Web],
+            vec![Read, Web, Search],
         ),
         agent(
             "coder",
@@ -171,7 +187,7 @@ pub fn default_agents() -> Vec<AgentDefinition> {
             "You are a software engineer. Implement the task you are given in the repository, \
              following the project's existing conventions, and commit your work with clear \
              messages.",
-            vec![Read, Edit, Bash],
+            vec![Read, Edit, Bash, Search],
         ),
         agent(
             "tester",
@@ -181,7 +197,7 @@ pub fn default_agents() -> Vec<AgentDefinition> {
             "You are the tester. Write tests from the ticket's requirements and acceptance \
              criteria, not from the implementation. Only add or change test files. Report \
              problems you find as structured issues.",
-            vec![Read, Edit, Test],
+            vec![Read, Edit, Test, Search],
         ),
         agent(
             "scribe",
@@ -261,6 +277,49 @@ mod tests {
         let prompt = agent.system_prompt();
         assert!(prompt.starts_with("You are a software engineer."));
         assert!(prompt.ends_with("\n\nStyle A"));
+    }
+
+    #[test]
+    fn search_capability_adds_the_kanbain_mcp_server() {
+        let mut definition = default_agents().remove(1);
+        assert!(definition.has(Capability::Search));
+        definition.mcp_servers = None;
+        let agent = ResolvedAgent {
+            definition,
+            styles: vec![],
+            skills: vec![],
+        };
+        assert!(agent.system_prompt().contains("call search_knowledge"));
+
+        let claude = claude::ClaudeCodeAdapter.launch(&agent, &RunSettings::default());
+        let config = claude
+            .args
+            .iter()
+            .find_map(|a| a.strip_prefix("--mcp-config="))
+            .expect("an MCP config");
+        let config: serde_json::Value = serde_json::from_str(config).unwrap();
+        assert_eq!(
+            config["mcpServers"][KANBAIN_MCP]["url"],
+            "${ANTHROPIC_BASE_URL}/mcp"
+        );
+
+        let opencode = opencode::OpencodeAdapter.launch(&agent, &RunSettings::default());
+        let config: serde_json::Value =
+            serde_json::from_str(&opencode.env["OPENCODE_CONFIG_CONTENT"]).unwrap();
+        assert_eq!(config["mcp"][KANBAIN_MCP]["type"], "remote");
+        assert_eq!(
+            config["mcp"][KANBAIN_MCP]["headers"]["Authorization"],
+            "Bearer {env:ANTHROPIC_AUTH_TOKEN}"
+        );
+
+        // Without the capability there is no KanbAIn server.
+        let mut plain = agent.clone();
+        plain
+            .definition
+            .capabilities
+            .retain(|c| *c != Capability::Search);
+        let claude = claude::ClaudeCodeAdapter.launch(&plain, &RunSettings::default());
+        assert!(!claude.args.iter().any(|a| a.contains(KANBAIN_MCP)));
     }
 
     #[test]

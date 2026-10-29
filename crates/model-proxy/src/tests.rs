@@ -323,3 +323,97 @@ async fn oauth_credential_merges_beta_flags() {
         "fine-grained-tool-streaming-2025-05-14,oauth-2025-04-20"
     );
 }
+
+struct EchoTools;
+
+#[async_trait]
+impl mcp::RunTools for EchoTools {
+    fn definitions(&self) -> Vec<Value> {
+        vec![
+            json!({"name": "search_knowledge", "description": "d", "inputSchema": {"type": "object"}}),
+        ]
+    }
+
+    async fn call(&self, run_id: Uuid, name: &str, arguments: Value) -> Result<String, String> {
+        if name != "search_knowledge" {
+            return Err(format!("unknown tool {name}"));
+        }
+        Ok(format!(
+            "{run_id} {}",
+            arguments["query"].as_str().unwrap_or("")
+        ))
+    }
+}
+
+#[tokio::test]
+async fn mcp_tools_are_scoped_to_the_run_token() {
+    let (proxy, _events, base) = start_proxy("http://127.0.0.1:9").await;
+    proxy.set_tools(Arc::new(EchoTools));
+    let run = Uuid::new_v4();
+    let token = proxy.issue_token(run, None, 0.0);
+    let client = reqwest::Client::new();
+    let rpc = |body: Value, token: &str| {
+        client
+            .post(format!("{base}/mcp"))
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+    };
+
+    let init = rpc(
+        json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                          "params": {"protocolVersion": "2025-06-18"}}),
+        &token,
+    )
+    .await
+    .unwrap()
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
+    let note = rpc(
+        json!({"jsonrpc": "2.0", "method": "notifications/initialized"}),
+        &token,
+    )
+    .await
+    .unwrap();
+    assert_eq!(note.status(), 202);
+    let list = rpc(
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}),
+        &token,
+    )
+    .await
+    .unwrap()
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(list["result"]["tools"][0]["name"], "search_knowledge");
+    let call = rpc(
+        json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
+               "params": {"name": "search_knowledge", "arguments": {"query": "reset"}}}),
+        &token,
+    )
+    .await
+    .unwrap()
+    .json::<Value>()
+    .await
+    .unwrap();
+    assert_eq!(call["result"]["content"][0]["text"], format!("{run} reset"));
+    assert_eq!(call["result"]["isError"], false);
+
+    let bad = rpc(
+        json!({"jsonrpc": "2.0", "id": 4, "method": "tools/list"}),
+        "kbr-nope",
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad.status(), 401);
+    proxy.revoke_run(run);
+    let revoked = rpc(
+        json!({"jsonrpc": "2.0", "id": 5, "method": "tools/list"}),
+        &token,
+    )
+    .await
+    .unwrap();
+    assert_eq!(revoked.status(), 401);
+}

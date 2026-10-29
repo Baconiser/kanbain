@@ -11,7 +11,8 @@ use std::collections::HashMap;
 use serde_json::json;
 
 use super::{
-    AGENT_DIR, AgentLaunch, Capability, LaunchFile, ResolvedAgent, RunSettings, RuntimeAdapter,
+    AGENT_DIR, AgentLaunch, Capability, KANBAIN_MCP, LaunchFile, ResolvedAgent, RunSettings,
+    RuntimeAdapter,
 };
 use crate::executors::BaseCodingAgent;
 
@@ -22,6 +23,8 @@ pub struct ClaudeCodeAdapter;
 /// Claude Code built-in tools for each capability.
 pub fn tools_for(capability: Capability) -> &'static [&'static str] {
     match capability {
+        // An MCP tool, not a built-in one: see the MCP config below.
+        Capability::Search => &[],
         Capability::Read => &["Read", "Glob", "Grep", "Agent"],
         Capability::Edit => &["Edit", "Write", "NotebookEdit"],
         Capability::Bash | Capability::Test => &["Bash"],
@@ -94,7 +97,19 @@ impl RuntimeAdapter for ClaudeCodeAdapter {
         }
 
         args.push("--strict-mcp-config".to_string());
-        if let Some(servers) = def.mcp_servers.as_ref().filter(|s| !s.is_empty()) {
+        let mut servers = def.mcp_servers.clone().unwrap_or_default();
+        if def.has(Capability::Search) {
+            // The run's proxy URL and token come from the container's env.
+            servers.insert(
+                KANBAIN_MCP.to_string(),
+                json!({
+                    "type": "http",
+                    "url": "${ANTHROPIC_BASE_URL}/mcp",
+                    "headers": {"Authorization": "Bearer ${ANTHROPIC_AUTH_TOKEN}"}
+                }),
+            );
+        }
+        if !servers.is_empty() {
             args.push(format!("--mcp-config={}", json!({ "mcpServers": servers })));
         }
 

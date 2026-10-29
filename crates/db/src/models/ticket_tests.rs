@@ -471,7 +471,8 @@ async fn description_versions_and_timeline() {
 async fn history_commits_and_file_links() {
     use super::{
         issue_history::{
-            HistoryPermission, IssueHistory, NewTicketCommit, TicketCommit, TicketFileLink,
+            HistoryPermission, IssueHistory, NewCommitFile, NewTicketCommit, TicketCommit,
+            TicketFileChange, TicketFileLink,
         },
         repo::Repo,
     };
@@ -493,7 +494,12 @@ async fn history_commits_and_file_links() {
         message_match: true,
         files: files
             .into_iter()
-            .map(|(p, n)| (p.to_string(), Some(n), Some(1)))
+            .map(|(p, n)| NewCommitFile {
+                path: p.to_string(),
+                additions: Some(n),
+                deletions: Some(1),
+                hunks: vec![(1, n)],
+            })
             .collect(),
     };
     TicketCommit::replace_for_repo(
@@ -524,6 +530,19 @@ async fn history_commits_and_file_links() {
     );
     assert_eq!(files[0].last_commit_sha, "bbb");
     assert_eq!(files[1].path, "README.md");
+    let changes = TicketFileChange::find_by_issue(&pool, issue.id)
+        .await
+        .unwrap();
+    assert_eq!(changes.len(), 3);
+    assert_eq!(changes[0].commit_sha, "bbb");
+    assert_eq!(changes[0].hunks.0, vec![(1, 2)]);
+    assert_eq!(
+        TicketFileChange::issues_for_path(&pool, repo.id, "mailer.rs")
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
 
     // A re-scan replaces the repo's rows.
     TicketCommit::replace_for_repo(&pool, issue.id, repo.id, &[commit("ccc", 0, vec![])])

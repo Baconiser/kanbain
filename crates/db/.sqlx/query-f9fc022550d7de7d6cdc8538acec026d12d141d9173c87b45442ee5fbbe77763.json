@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT l.issue_id as \"issue_id!: Uuid\",\n                      l.repo_id as \"repo_id!: Uuid\",\n                      l.path,\n                      l.commit_sha,\n                      c.committed_at as \"committed_at!: DateTime<Utc>\",\n                      l.hunks as \"hunks!: sqlx::types::Json<Vec<(i64, i64)>>\"\n               FROM ticket_code_links l\n               JOIN ticket_commits c ON c.issue_id = l.issue_id AND c.repo_id = l.repo_id\n                    AND c.sha = l.commit_sha\n               WHERE l.issue_id = $1 AND l.symbol = ''\n               ORDER BY julianday(c.committed_at) DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "repo_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "path",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "commit_sha",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "committed_at!: DateTime<Utc>",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "hunks!: sqlx::types::Json<Vec<(i64, i64)>>",
+        "ordinal": 5,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "f9fc022550d7de7d6cdc8538acec026d12d141d9173c87b45442ee5fbbe77763"
+}

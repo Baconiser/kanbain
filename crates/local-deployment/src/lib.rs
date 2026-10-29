@@ -33,6 +33,7 @@ mod copy;
 pub mod history;
 pub mod intake;
 pub mod jobs;
+pub mod knowledge;
 pub mod pty;
 pub mod sandbox;
 pub mod search;
@@ -221,6 +222,14 @@ impl Deployment for LocalDeployment {
             events_msg_store.clone(),
         )
         .await;
+        if let Some(search) = &search {
+            container
+                .sandbox()
+                .set_tools(std::sync::Arc::new(knowledge::KnowledgeTools::new(
+                    db.clone(),
+                    search.clone(),
+                )));
+        }
 
         let events = EventService::new(db.clone(), events_msg_store, events_entry_count);
 

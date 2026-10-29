@@ -80,6 +80,11 @@ async fn create_project(
 ) -> Result<ResponseJson<ApiResponse<Project>>, ApiError> {
     require_name(&payload.name, "Project")?;
     let project = Project::create(&deployment.db().pool, &payload).await?;
+    if let Some(search) = deployment.search() {
+        for repo_id in &payload.repo_ids {
+            search.enqueue_repo(project.id, *repo_id).await;
+        }
+    }
     Ok(ResponseJson(ApiResponse::success(project)))
 }
 
@@ -172,6 +177,10 @@ async fn link_project_repo(
         return Err(ApiError::BadRequest("Repository not found".to_string()));
     }
     ProjectRepo::link(pool, project_id, payload.repo_id).await?;
+    // Index the repo's code (E18).
+    if let Some(search) = deployment.search() {
+        search.enqueue_repo(project_id, payload.repo_id).await;
+    }
     let repos = ProjectRepo::find_repos_for_project(pool, project_id).await?;
     Ok(ResponseJson(ApiResponse::success(repos)))
 }
@@ -182,6 +191,10 @@ async fn unlink_project_repo(
 ) -> Result<ResponseJson<ApiResponse<Vec<Repo>>>, ApiError> {
     let pool = &deployment.db().pool;
     ProjectRepo::unlink(pool, project_id, repo_id).await?;
+    // Drops the repo's code from the project's index.
+    if let Some(search) = deployment.search() {
+        search.enqueue_repo(project_id, repo_id).await;
+    }
     let repos = ProjectRepo::find_repos_for_project(pool, project_id).await?;
     Ok(ResponseJson(ApiResponse::success(repos)))
 }

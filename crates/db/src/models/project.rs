@@ -24,6 +24,13 @@ pub struct ProjectSettings {
     /// the base image for this project's runs.
     #[serde(default)]
     pub sandbox_dockerfile: Option<String>,
+    /// Let code go to a code embedder that is not on this machine or its
+    /// private network (E9). Off by default.
+    #[serde(default)]
+    pub allow_remote_code_embedding: bool,
+    /// Globs of files the code index skips, e.g. generated code (E14).
+    #[serde(default)]
+    pub search_exclude_globs: Vec<String>,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]

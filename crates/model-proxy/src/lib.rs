@@ -10,6 +10,7 @@
 //! - `/v1/*`: Anthropic API (Claude Code with `ANTHROPIC_BASE_URL` = proxy root).
 //! - `/openai/v1/*`: an OpenAI-compatible API (`/chat/completions`, `/responses`).
 
+pub mod mcp;
 pub mod prices;
 pub mod usage;
 
@@ -115,6 +116,7 @@ impl Grant {
 
 struct Inner {
     grants: RwLock<HashMap<String, Arc<Grant>>>,
+    tools: RwLock<Option<Arc<dyn mcp::RunTools>>>,
     prices: RwLock<PriceTable>,
     credentials: Arc<dyn Credentials>,
     events: Arc<dyn ProxyEvents>,
@@ -135,6 +137,7 @@ impl ModelProxy {
         Self {
             inner: Arc::new(Inner {
                 grants: RwLock::new(HashMap::new()),
+                tools: RwLock::new(None),
                 prices: RwLock::new(prices),
                 credentials,
                 events,
@@ -195,8 +198,17 @@ impl ModelProxy {
         *self.inner.prices.write().unwrap() = prices;
     }
 
+    /// Tools runs reach at `/mcp` (E22).
+    pub fn set_tools(&self, tools: Arc<dyn mcp::RunTools>) {
+        *self.inner.tools.write().unwrap() = Some(tools);
+    }
+
     pub fn router(&self) -> Router {
         Router::new()
+            .route(
+                "/mcp",
+                axum::routing::post(mcp::mcp_handler).get(mcp::mcp_get),
+            )
             .fallback(proxy_handler)
             .layer(DefaultBodyLimit::max(MAX_REQUEST_BYTES))
             .with_state(self.inner.clone())

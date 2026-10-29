@@ -22,7 +22,16 @@ sandbox_allowed_domains: Array<string>,
  * Path to a Dockerfile (starting `FROM kanbain-agent`) used instead of
  * the base image for this project's runs.
  */
-sandbox_dockerfile: string | null, };
+sandbox_dockerfile: string | null, 
+/**
+ * Let code go to a code embedder that is not on this machine or its
+ * private network (E9). Off by default.
+ */
+allow_remote_code_embedding: boolean, 
+/**
+ * Globs of files the code index skips, e.g. generated code (E14).
+ */
+search_exclude_globs: Array<string>, };
 
 export type CreateProject = { name: string, id_prefix: string | null, repo_ids: Array<string>, };
 
@@ -250,7 +259,11 @@ enabled: boolean, spaces: Array<SpaceStatus>, jobs: JobCounts, chunks: number, s
 /**
  * The configured text embedder could not be probed.
  */
-embedder_error: string | null, text_remote: boolean, };
+embedder_error: string | null, text_remote: boolean, 
+/**
+ * Code would go to a remote embedder (E9).
+ */
+code_remote: boolean, };
 
 export type SpaceStatus = { space: Space, chunks: number, embedded: number, };
 
@@ -282,9 +295,21 @@ export type SearchResults = { hits: Array<SearchHit>,
 /**
  * The tickets the hits belong to, by id.
  */
-tickets: { [key in string]?: TicketRef }, semantic: boolean, notice: string | null, took_ms: number, };
+tickets: { [key in string]?: TicketRef }, 
+/**
+ * Names of the repos of code hits, by id.
+ */
+repos: { [key in string]?: string }, semantic: boolean, notice: string | null, took_ms: number, };
 
-export type RelatedTicket = { ticket: TicketRef, score: number, kinds: Array<string>, excerpt: string, };
+export type RelatedTicket = { ticket: TicketRef, score: number, kinds: Array<string>, excerpt: string, 
+/**
+ * What its commits changed, e.g. `fn update in issue.rs` (E19).
+ */
+changed: Array<string>, };
+
+export type RelatedCode = { hit: SearchHit, repo_name: string | null, changed_by: Array<TicketRef>, };
+
+export type RelatedView = { tickets: Array<RelatedTicket>, code: Array<RelatedCode>, };
 
 export type ReindexResult = { 
 /**
@@ -832,7 +857,7 @@ export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "
 
 export type AgentRuntime = "claude-code" | "opencode";
 
-export type Capability = "read" | "edit" | "bash" | "test" | "web";
+export type Capability = "read" | "edit" | "bash" | "test" | "web" | "search";
 
 export type AgentLimits = { 
 /**

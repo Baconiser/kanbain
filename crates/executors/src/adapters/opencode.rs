@@ -15,8 +15,8 @@ use std::collections::HashMap;
 use serde_json::{Map, Value, json};
 
 use super::{
-    AGENT_DIR, AgentLaunch, Capability, LaunchFile, ResolvedAgent, RunSettings, RuntimeAdapter,
-    resolve_alias,
+    AGENT_DIR, AgentLaunch, Capability, KANBAIN_MCP, LaunchFile, ResolvedAgent, RunSettings,
+    RuntimeAdapter, resolve_alias,
 };
 use crate::executors::BaseCodingAgent;
 
@@ -137,6 +137,17 @@ impl RuntimeAdapter for OpencodeAdapter {
             for (name, server) in servers {
                 mcp.insert(name.clone(), mcp_server(server));
             }
+        }
+        if def.has(Capability::Search) {
+            mcp.insert(
+                KANBAIN_MCP.into(),
+                json!({
+                    "type": "remote",
+                    "url": "{env:ANTHROPIC_BASE_URL}/mcp",
+                    "headers": {"Authorization": "Bearer {env:ANTHROPIC_AUTH_TOKEN}"},
+                    "enabled": true
+                }),
+            );
         }
         config.insert("mcp".into(), Value::Object(mcp));
 

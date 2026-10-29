@@ -5,6 +5,7 @@
 pub mod chunk;
 pub mod client;
 pub mod config;
+pub mod repo_index;
 pub mod service;
 pub mod sources;
 pub mod store;

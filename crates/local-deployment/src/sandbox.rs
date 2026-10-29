@@ -1290,6 +1290,11 @@ impl SandboxRuntime {
         }
     }
 
+    /// Tools sandboxed runs reach through the model proxy (E22).
+    pub fn set_tools(&self, tools: Arc<dyn model_proxy::mcp::RunTools>) {
+        self.inner.proxy.set_tools(tools);
+    }
+
     pub fn reload_prices(&self, prices: PriceTable) {
         self.inner.proxy.set_prices(prices);
     }
