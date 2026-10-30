@@ -59,15 +59,17 @@ pub struct ClaudeLogin {
     next_id: Arc<Mutex<u64>>,
 }
 
-/// The sign-in URL in `setup-token`'s output, once complete.
+/// The sign-in URL in `setup-token`'s output, once complete. A narrow
+/// terminal wraps it over several lines (and the terminal UI may draw the
+/// breaks as cursor movements), so read it with whitespace removed, up to
+/// the paste prompt that follows it.
 fn find_url(output: &str) -> Option<String> {
-    output
-        .split(|c: char| c.is_whitespace())
-        .find(|word| word.starts_with("https://") && word.contains("/oauth/authorize?"))
-        .map(|url| url.trim_end_matches(['.', ',', ')']).to_string())
-        // The URL ends with a `state` parameter; until it arrives the line
-        // may still be streaming.
-        .filter(|url| url.contains("state="))
+    let compact: String = output.chars().filter(|c| !c.is_whitespace()).collect();
+    let start = compact.rfind("https://")?;
+    let rest = &compact[start..];
+    let url = &rest[..rest.find("Pastecodehere")?];
+    let url = url.trim_end_matches(['.', ',', ')']);
+    (url.contains("/oauth/authorize?") && url.contains("state=")).then(|| url.to_string())
 }
 
 /// Whether `setup-token` shows its "Paste code here if prompted >" input.
@@ -250,7 +252,11 @@ impl ClaudeLogin {
                 Ok(None) => break,
                 Err(_) if tokio::time::Instant::now() >= deadline => {
                     let _ = child.kill();
-                    return Err("The login timed out.".into());
+                    let text = strip_ansi_escapes::strip_str(String::from_utf8_lossy(&raw));
+                    return Err(format!(
+                        "The login timed out. Last output:\n{}",
+                        tail(&text)
+                    ));
                 }
                 Err(_) => {
                     let text = strip_ansi_escapes::strip_str(String::from_utf8_lossy(&raw));
@@ -387,6 +393,23 @@ mod tests {
         );
         assert_eq!(
             find_url("https://claude.com/cai/oauth/authorize?code=true&client"),
+            None
+        );
+        // Wrapped at 80 columns, as a terminal whose size didn't reach the
+        // container shows it.
+        let wrapped = "Browser didn't open? Use the url below to sign in (c to copy)\r\n\r\n\
+                       https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c\r\n\
+                       &redirect_uri=x&state=hXKL8B\r\n\
+                       _QJr7\r\n\r\n\r\nPaste code here if prompted >";
+        assert_eq!(
+            find_url(wrapped).as_deref(),
+            Some(
+                "https://claude.com/cai/oauth/authorize?code=true&client_id=9d1c\
+                 &redirect_uri=x&state=hXKL8B_QJr7"
+            )
+        );
+        assert_eq!(
+            find_url("https://claude.com/cai/oauth/authorize?code=true&state=ab"),
             None
         );
         let token = format!("sk-ant-oat01-{}", "a".repeat(80));

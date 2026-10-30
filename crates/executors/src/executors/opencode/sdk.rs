@@ -567,10 +567,12 @@ pub(super) async fn create_session(
         .await
         .map_err(|err| ExecutorError::Io(io::Error::other(err)))?;
 
-    if !resp.status().is_success() {
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
         return Err(ExecutorError::Io(io::Error::other(format!(
-            "OpenCode session.create failed: HTTP {}",
-            resp.status()
+            "OpenCode session.create failed: HTTP {status} {}",
+            body.trim()
         ))));
     }
 
@@ -595,10 +597,12 @@ pub(super) async fn fork_session(
         .await
         .map_err(|err| ExecutorError::Io(io::Error::other(err)))?;
 
-    if !resp.status().is_success() {
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
         return Err(ExecutorError::Io(io::Error::other(format!(
-            "OpenCode session.fork failed: HTTP {}",
-            resp.status()
+            "OpenCode session.fork failed: HTTP {status} {}",
+            body.trim()
         ))));
     }
 
