@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT issue_id as \"issue_id!: Uuid\",\n                      workspace_id as \"workspace_id: Uuid\",\n                      session_id as \"session_id: Uuid\",\n                      execution_process_id as \"execution_process_id: Uuid\",\n                      status as \"status!: PlanningStatus\",\n                      repair_attempts,\n                      error,\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM issue_planning\n               WHERE issue_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "session_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "execution_process_id: Uuid",
+        "ordinal": 3,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status!: PlanningStatus",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "repair_attempts",
+        "ordinal": 5,
+        "type_info": "Integer"
+      },
+      {
+        "name": "error",
+        "ordinal": 6,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 7,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "b04d1b00a5630de23a8fe5e8cc87b8c7c649e08772c72a2011a3c083d2b0f59f"
+}

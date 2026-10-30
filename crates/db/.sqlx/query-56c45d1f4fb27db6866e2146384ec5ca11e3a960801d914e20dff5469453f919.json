@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO plans (id, issue_id, version, plan, source, execution_process_id)\n               VALUES ($1, $2,\n                       (SELECT COALESCE(MAX(version), 0) + 1 FROM plans WHERE issue_id = $2),\n                       $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "56c45d1f4fb27db6866e2146384ec5ca11e3a960801d914e20dff5469453f919"
+}

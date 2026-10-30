@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_planning SET workspace_id = $2, session_id = $3,\n                   execution_process_id = $4, updated_at = datetime('now', 'subsec')\n               WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "6727bfec84ad091e308a971dc920d33a5e649aae08c9e91f7516351521512cff"
+}

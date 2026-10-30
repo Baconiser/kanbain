@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO issue_planning (issue_id, status) VALUES ($1, 'planning')\n               ON CONFLICT (issue_id) DO UPDATE\n                   SET status = 'planning', error = NULL, execution_process_id = NULL,\n                       updated_at = datetime('now', 'subsec')\n                   WHERE issue_planning.status != 'planning'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "a5b7f08ea70641a5af5d2862d46e7be1475d92f705593314151bb70a9794ab4c"
+}

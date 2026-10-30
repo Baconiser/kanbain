@@ -587,3 +587,54 @@ async fn history_commits_and_file_links() {
         .unwrap();
     assert!(h.needs_analysis());
 }
+
+#[tokio::test]
+async fn plans_get_versions_and_planning_is_claimed_once() {
+    use super::plan::{IssuePlanning, Plan, PlanDocument, PlanSource, PlanStatus, PlanningStatus};
+
+    let pool = pool().await;
+    let project = project(&pool, None).await;
+    let issue = Issue::create(&pool, project.id, &new_issue("Plan me"))
+        .await
+        .unwrap();
+    let doc = PlanDocument::from_value(serde_json::json!({
+        "subtasks": [{"id": "1", "title": "Do it"}]
+    }))
+    .unwrap();
+
+    let v1 = Plan::create(&pool, issue.id, &doc, PlanSource::Planner, None)
+        .await
+        .unwrap();
+    let v2 = Plan::create(&pool, issue.id, &doc, PlanSource::Edited, None)
+        .await
+        .unwrap();
+    assert_eq!((v1.version, v2.version), (1, 2));
+    assert_eq!(v1.status, PlanStatus::Draft);
+    Plan::decide(&pool, v2.id, PlanStatus::Rejected, Some("Too big"))
+        .await
+        .unwrap();
+    let latest = Plan::latest(&pool, issue.id).await.unwrap().unwrap();
+    assert_eq!(latest.status, PlanStatus::Rejected);
+    assert_eq!(latest.feedback.as_deref(), Some("Too big"));
+    assert!(latest.decided_at.is_some());
+
+    // One planner run at a time per ticket.
+    assert!(IssuePlanning::begin(&pool, issue.id).await.unwrap());
+    assert!(!IssuePlanning::begin(&pool, issue.id).await.unwrap());
+    IssuePlanning::set_status(&pool, issue.id, PlanningStatus::WaitingForAnswer, None)
+        .await
+        .unwrap();
+    assert!(IssuePlanning::begin(&pool, issue.id).await.unwrap());
+    assert_eq!(IssuePlanning::fail_interrupted(&pool).await.unwrap(), 1);
+    let planning = IssuePlanning::find(&pool, issue.id).await.unwrap().unwrap();
+    assert_eq!(planning.status, PlanningStatus::Failed);
+
+    // Plans go with their ticket.
+    Issue::delete(&pool, issue.id).await.unwrap();
+    assert!(
+        Plan::find_by_issue(&pool, issue.id)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+}

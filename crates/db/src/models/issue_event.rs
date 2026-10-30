@@ -35,6 +35,17 @@ pub enum IssueEventType {
     HistoryAnalysis,
     /// A commit for the ticket's id, at its commit time (Phase 3b).
     PriorCommit,
+    /// A planner run started (`reason`: assigned, answer, feedback, repair).
+    PlanningStarted,
+    /// The planner asked questions in the thread (Phase 4).
+    PlanQuestions,
+    /// A new plan version (`version`, `source`).
+    PlanVersion,
+    PlanApproved,
+    /// The user sent a plan back with feedback.
+    PlanRejected,
+    /// A planner run ended without a usable plan or questions.
+    PlanningFailed,
     RunStarted,
     RunFinished,
 }

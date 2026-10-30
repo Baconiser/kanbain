@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_planning SET status = 'failed',\n                   error = 'Interrupted by an app restart'\n               WHERE status = 'planning'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "eec5e4ba62b5618565782b26e9d31544c0d39bfd123c8f70b7fc320fe9b45db4"
+}

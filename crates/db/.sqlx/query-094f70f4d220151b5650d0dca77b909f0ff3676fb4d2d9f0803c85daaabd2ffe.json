@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE plans SET status = $2, feedback = COALESCE($3, feedback),\n                   decided_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "094f70f4d220151b5650d0dca77b909f0ff3676fb4d2d9f0803c85daaabd2ffe"
+}

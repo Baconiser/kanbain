@@ -1,0 +1,32 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.issue_id as \"issue_id!: Uuid\",\n                      i.project_id as \"project_id!: Uuid\",\n                      p.status as \"status!: PlanningStatus\"\n               FROM issue_planning p JOIN issues i ON i.id = p.issue_id\n               WHERE i.project_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "project_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status!: PlanningStatus",
+        "ordinal": 2,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "fbf5496199c33ae9d75ab59a2457165f7516b4a677a5515029f734355f7a1e8a"
+}

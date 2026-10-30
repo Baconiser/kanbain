@@ -11,6 +11,7 @@ use db::models::{
     issue_comment::IssueComment,
     issue_event::IssueEvent,
     issue_relationship::IssueRelationship,
+    plan::BoardPlanning,
     project::Project,
     project_status::ProjectStatus,
     project_tag::{IssueTag, ProjectTag},
@@ -37,6 +38,7 @@ pub enum TicketTable {
     IssueRelationships,
     IssueComments,
     IssueEvents,
+    IssuePlanning,
 }
 
 impl TicketTable {
@@ -50,6 +52,7 @@ impl TicketTable {
             "issue_relationships" => Self::IssueRelationships,
             "issue_comments" => Self::IssueComments,
             "issue_events" => Self::IssueEvents,
+            "issue_planning" => Self::IssuePlanning,
             _ => return None,
         })
     }
@@ -65,6 +68,7 @@ impl TicketTable {
             Self::IssueRelationships => "relationships",
             Self::IssueComments => "comments",
             Self::IssueEvents => "events",
+            Self::IssuePlanning => "planning",
         }
     }
 }
@@ -76,6 +80,7 @@ const BOARD_TABLES: &[TicketTable] = &[
     TicketTable::ProjectTags,
     TicketTable::IssueTags,
     TicketTable::IssueRelationships,
+    TicketTable::IssuePlanning,
 ];
 
 fn path(table: TicketTable, id: Uuid) -> String {
@@ -191,6 +196,9 @@ async fn push_row_change(
         TicketTable::IssueEvents => IssueEvent::find_by_rowid(pool, rowid)
             .await?
             .map(|r| upsert_patch(table, r.id, &r, insert)),
+        TicketTable::IssuePlanning => BoardPlanning::find_by_rowid(pool, rowid)
+            .await?
+            .map(|r| upsert_patch(table, r.issue_id, &r, insert)),
     };
     if let Some(patch) = patch {
         msg_store.push_patch(patch);
@@ -284,8 +292,9 @@ impl EventService {
         Ok(self.filtered_ticket_stream(initial, &[TicketTable::Projects], None))
     }
 
-    /// One project's board: statuses, issues, tags, issue tags and
-    /// relationships, each keyed by id.
+    /// One project's board: statuses, issues, tags, issue tags,
+    /// relationships and planning states, each keyed by id (planning by
+    /// ticket id).
     pub async fn stream_project_board_raw(
         &self,
         project_id: Uuid,
@@ -300,6 +309,10 @@ impl EventService {
             "relationships": to_map(
                 IssueRelationship::find_by_project(pool, project_id).await?,
                 |r| r.id
+            ),
+            "planning": to_map(
+                BoardPlanning::find_by_project(pool, project_id).await?,
+                |r| r.issue_id
             ),
         });
         Ok(self.filtered_ticket_stream(initial, BOARD_TABLES, Some(("project_id", project_id))))

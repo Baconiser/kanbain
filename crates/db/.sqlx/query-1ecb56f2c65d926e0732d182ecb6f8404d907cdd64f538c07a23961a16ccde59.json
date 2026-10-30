@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issue_planning SET repair_attempts = $2 WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "1ecb56f2c65d926e0732d182ecb6f8404d907cdd64f538c07a23961a16ccde59"
+}
