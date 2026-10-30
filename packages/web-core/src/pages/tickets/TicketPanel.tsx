@@ -34,6 +34,7 @@ import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketComments } from './TicketComments';
 import { TicketHistory } from './TicketHistory';
+import { TicketPlan } from './TicketPlan';
 import { TicketRelated } from './TicketRelated';
 import { TicketTimeline } from './TicketTimeline';
 import { internalTicketId, ticketDisplayId } from './ticketIds';
@@ -157,6 +158,16 @@ export function TicketPanel({
       e.event_type === 'history_check' ||
       e.event_type === 'history_analysis' ||
       e.event_type === 'prior_commit'
+  ).length;
+
+  const planningEvents = timeline.events.filter(
+    (e) =>
+      e.event_type === 'planning_started' ||
+      e.event_type === 'plan_questions' ||
+      e.event_type === 'plan_version' ||
+      e.event_type === 'plan_approved' ||
+      e.event_type === 'plan_rejected' ||
+      e.event_type === 'planning_failed'
   ).length;
 
   const update = useCallback(
@@ -714,6 +725,13 @@ export function TicketPanel({
             </button>
           ))}
         </Section>
+
+        <TicketPlan
+          issueId={issue.id}
+          refreshKey={planningEvents}
+          onOpenWorkspace={(id) => appNavigation.goToWorkspace(id)}
+          onError={onError}
+        />
 
         <TicketRelated
           issueId={issue.id}

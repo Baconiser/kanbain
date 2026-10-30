@@ -77,6 +77,25 @@ export function describeEvent(event: IssueEvent): string {
         : `Prior work summarized by ${str(p.agent)} (${num(p.commit_count)} commits, ${usd(p.cost_usd)})`;
     case 'prior_commit':
       return `Commit ${str(p.short_sha)} in ${str(p.repo)}: ${str(p.subject)}${p.author ? ` (${str(p.author)})` : ''}`;
+    case 'planning_started': {
+      const why: Record<string, string> = {
+        assigned: 'Assigned to the planner',
+        answer: 'Planner resumed with your answers',
+        feedback: 'Planner revising the plan with your feedback',
+        repair: 'Planner asked to fix an invalid plan',
+      };
+      return why[str(p.reason)] ?? 'Planner started';
+    }
+    case 'plan_questions':
+      return `The planner asked ${num(p.count) || 'some'} question${num(p.count) === 1 ? '' : 's'}`;
+    case 'plan_version':
+      return `Plan version ${num(p.version)} (${p.source === 'edited' ? 'edited by you' : 'by the planner'}, ${num(p.subtasks)} subtask${num(p.subtasks) === 1 ? '' : 's'})`;
+    case 'plan_approved':
+      return `Plan version ${num(p.version)} approved`;
+    case 'plan_rejected':
+      return `Plan version ${num(p.version)} sent back: ${str(p.feedback)}`;
+    case 'planning_failed':
+      return `Planning failed: ${str(p.error)}`;
     case 'run_started':
       return `Run started${p.agent ? ` (${str(p.agent)})` : ''}`;
     case 'run_finished':

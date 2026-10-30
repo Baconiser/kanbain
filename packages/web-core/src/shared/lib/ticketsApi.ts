@@ -28,6 +28,10 @@ import type {
   IssueRelationship,
   IntakeView,
   IssueHistoryView,
+  IssuePlanning,
+  Plan,
+  PlanDocument,
+  PlanningView,
   IssueTag,
   Project,
   ProjectStatus,
@@ -121,6 +125,19 @@ export const historyApi = {
     request<IssueHistoryView>(`/api/issues/${issueId}/history/allow`, 'POST'),
   deny: (issueId: string) =>
     request<IssueHistoryView>(`/api/issues/${issueId}/history/deny`, 'POST'),
+};
+
+export const planningApi = {
+  get: (issueId: string) =>
+    request<PlanningView>(`/api/issues/${issueId}/planning`),
+  start: (issueId: string) =>
+    request<IssuePlanning>(`/api/issues/${issueId}/planning/start`, 'POST'),
+  edit: (planId: string, plan: PlanDocument) =>
+    request<Plan>(`/api/plans/${planId}`, 'PUT', plan),
+  approve: (planId: string) =>
+    request<Plan>(`/api/plans/${planId}/approve`, 'POST'),
+  sendBack: (planId: string, feedback: string) =>
+    request<Plan>(`/api/plans/${planId}/send-back`, 'POST', { feedback }),
 };
 
 export const searchApi = {

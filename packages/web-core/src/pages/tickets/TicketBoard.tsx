@@ -9,7 +9,12 @@ import {
   type DropResult,
 } from '@kanbain/ui/components/KanbanBoard';
 import { KanbanCardContent } from '@kanbain/ui/components/KanbanCardContent';
-import type { BulkUpdateIssueItem, Issue, Project } from 'shared/types';
+import type {
+  BulkUpdateIssueItem,
+  Issue,
+  PlanningStatus,
+  Project,
+} from 'shared/types';
 import type { ProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { projectsApi } from '@/shared/lib/ticketsApi';
 import { ticketDisplayId } from './ticketIds';
@@ -29,6 +34,32 @@ type Placement = { status_id: string; sort_order: number };
 
 /** Moves `id` from its column into `toStatus` at `toIndex`; returns the new
  * placements of every ticket whose status or position changed. */
+const PLANNING_MARKERS: Partial<
+  Record<PlanningStatus, { label: string; className: string }>
+> = {
+  planning: { label: 'Planner working…', className: 'text-low' },
+  waiting_for_answer: {
+    label: 'Waiting for your answer',
+    className: 'border-brand/40 bg-brand/10 text-normal',
+  },
+  awaiting_approval: { label: 'Plan to approve', className: 'text-normal' },
+  failed: { label: 'Planning failed', className: 'text-error' },
+};
+
+/** What the planner needs from you, on the card (D20). */
+function PlanningMarker({ status }: { status?: PlanningStatus }) {
+  const marker = status ? PLANNING_MARKERS[status] : undefined;
+  if (!marker) return null;
+  return (
+    <span
+      className={`mt-half inline-block rounded-sm border px-half text-xs ${marker.className}`}
+      data-testid={`planning-marker-${status}`}
+    >
+      {marker.label}
+    </span>
+  );
+}
+
 export function computeMove(
   columns: Record<string, string[]>,
   id: string,
@@ -193,6 +224,9 @@ export function TicketBoard({
                         tags={tags}
                         assignees={[]}
                         isSubIssue={!!issue.parent_issue_id}
+                      />
+                      <PlanningMarker
+                        status={board.planningByIssue[issue.id]?.status}
                       />
                     </KanbanCard>
                   );

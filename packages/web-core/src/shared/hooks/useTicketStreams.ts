@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import type {
+  BoardPlanning,
   Issue,
   IssueComment,
   IssueEvent,
@@ -42,6 +43,8 @@ type BoardState = {
   tags: Record<string, ProjectTag>;
   issue_tags: Record<string, IssueTag>;
   relationships: Record<string, IssueRelationship>;
+  /** Planning states by issue id. */
+  planning: Record<string, BoardPlanning>;
 };
 
 const initialBoard = (): BoardState => ({
@@ -50,6 +53,7 @@ const initialBoard = (): BoardState => ({
   tags: {},
   issue_tags: {},
   relationships: {},
+  planning: {},
 });
 
 export interface ProjectBoard {
@@ -61,6 +65,8 @@ export interface ProjectBoard {
   /** Tag ids per issue id. */
   tagIdsByIssue: Record<string, string[]>;
   relationships: IssueRelationship[];
+  /** Planning states by issue id (tickets that were planned). */
+  planningByIssue: Record<string, BoardPlanning>;
   isLoading: boolean;
   error: string | null;
 }
@@ -97,6 +103,7 @@ export function useProjectBoard(projectId: string | undefined): ProjectBoard {
       tagsById: state.tags,
       tagIdsByIssue,
       relationships: Object.values(state.relationships),
+      planningByIssue: state.planning ?? {},
       isLoading: !!projectId && !isInitialized,
       error,
     };
