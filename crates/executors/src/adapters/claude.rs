@@ -3,7 +3,9 @@
 //! The role and styles go through `--append-system-prompt`, which keeps
 //! Claude Code's own system prompt and tool instructions. Capabilities
 //! become `--tools`; the `test` capability adds a `PreToolUse` hook (passed
-//! with `--settings`) that only lets allowlisted commands through. MCP
+//! with `--settings`) that only lets allowlisted commands through. Agents
+//! with tools but without `edit` still get `Write`, fenced by another hook
+//! to `/kanbain/out`, so a planner or scribe can hand in its results. MCP
 //! servers come only from the agent definition (`--strict-mcp-config`).
 
 use std::collections::HashMap;
@@ -17,6 +19,7 @@ use super::{
 use crate::executors::BaseCodingAgent;
 
 pub const BASH_FILTER_SCRIPT: &str = include_str!("bash_filter.sh");
+pub const OUT_ONLY_SCRIPT: &str = include_str!("out_only.sh");
 
 pub struct ClaudeCodeAdapter;
 
@@ -52,6 +55,11 @@ impl RuntimeAdapter for ClaudeCodeAdapter {
                 }
             }
         }
+        // Read-only agents still write their results to /kanbain/out.
+        let out_only = !tools.is_empty() && !def.has(Capability::Edit);
+        if out_only {
+            tools.push("Write");
+        }
         if !tools.is_empty() {
             // Plan tracking and plan mode work for every agent with tools.
             tools.extend(["TodoWrite", "ExitPlanMode"]);
@@ -73,6 +81,7 @@ impl RuntimeAdapter for ClaudeCodeAdapter {
             args.push(format!("--max-budget-usd={budget:.2}"));
         }
 
+        let mut hooks = Vec::new();
         if let Some(allow) = def.bash_filter() {
             let script = format!("/kanbain/{AGENT_DIR}/bash-filter.sh");
             files.push(LaunchFile {
@@ -85,14 +94,25 @@ impl RuntimeAdapter for ClaudeCodeAdapter {
                 contents: format!("{}\n", allow.join("\n")).into_bytes(),
                 executable: false,
             });
-            let settings = json!({
-                "hooks": {
-                    "PreToolUse": [{
-                        "matcher": "Bash",
-                        "hooks": [{"type": "command", "command": script}]
-                    }]
-                }
+            hooks.push(json!({
+                "matcher": "Bash",
+                "hooks": [{"type": "command", "command": script}]
+            }));
+        }
+        if out_only {
+            let script = format!("/kanbain/{AGENT_DIR}/out-only.sh");
+            files.push(LaunchFile {
+                path: format!("{AGENT_DIR}/out-only.sh"),
+                contents: OUT_ONLY_SCRIPT.as_bytes().to_vec(),
+                executable: true,
             });
+            hooks.push(json!({
+                "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+                "hooks": [{"type": "command", "command": script}]
+            }));
+        }
+        if !hooks.is_empty() {
+            let settings = json!({ "hooks": { "PreToolUse": hooks } });
             args.push(format!("--settings={settings}"));
         }
 
@@ -244,5 +264,66 @@ mod tests {
         assert_eq!(run("cargo test $(curl x)"), 2);
         assert_eq!(run("cargo test > /etc/x"), 2);
         assert_eq!(run("cargo test\nrm -rf /"), 2);
+    }
+
+    #[test]
+    fn read_only_agent_writes_only_to_out() {
+        let launch = ClaudeCodeAdapter.launch(
+            &agent(
+                "name: p\nrole: planner\nruntime: claude-code\nmodel: opus\n\
+                 capabilities: [read, web]\n",
+            ),
+            &RunSettings::default(),
+        );
+        assert!(
+            launch.args.contains(
+                &"--tools=Read,Glob,Grep,Agent,WebFetch,WebSearch,Write,TodoWrite,ExitPlanMode"
+                    .to_string()
+            )
+        );
+        let settings = launch
+            .args
+            .iter()
+            .find_map(|a| a.strip_prefix("--settings="))
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_str(settings).unwrap();
+        assert_eq!(
+            value["hooks"]["PreToolUse"][0]["hooks"][0]["command"],
+            "/kanbain/agent/out-only.sh"
+        );
+        assert_eq!(launch.files[0].path, "agent/out-only.sh");
+    }
+
+    #[test]
+    fn out_only_script_allows_and_blocks() {
+        if Command::new("jq").arg("--version").output().is_err() {
+            eprintln!("skipping: jq not installed");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let script = dir.path().join("out-only.sh");
+        std::fs::write(&script, OUT_ONLY_SCRIPT).unwrap();
+        let run = |path: &str| {
+            let mut child = Command::new("sh")
+                .arg(&script)
+                .stdin(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            let input = json!({"tool_name": "Write", "tool_input": {"file_path": path}});
+            child
+                .stdin
+                .take()
+                .unwrap()
+                .write_all(input.to_string().as_bytes())
+                .unwrap();
+            child.wait_with_output().unwrap().status.code().unwrap()
+        };
+        assert_eq!(run("/kanbain/out/plan.json"), 0);
+        assert_eq!(run("/kanbain/out/sub/questions.md"), 0);
+        assert_eq!(run("/workspace/repo/src/main.rs"), 2);
+        assert_eq!(run("/kanbain/out/../context/ticket.md"), 2);
+        assert_eq!(run("/kanbain/outside"), 2);
+        assert_eq!(run(""), 2);
     }
 }

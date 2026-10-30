@@ -36,6 +36,10 @@ pub fn opencode_model(model: &str) -> String {
     }
 }
 
+/// Where agents hand in their results (`sandbox::OUT_DIR`; executors
+/// doesn't depend on the sandbox crate).
+const OUT_DIR: &str = "/kanbain/out";
+
 fn permissions(agent: &ResolvedAgent) -> Map<String, Value> {
     let def = &agent.definition;
     let deny = || Value::String("deny".into());
@@ -46,7 +50,21 @@ fn permissions(agent: &ResolvedAgent) -> Map<String, Value> {
         }
     }
     if !def.has(Capability::Edit) {
-        permission.insert("edit".into(), deny());
+        if def.has(Capability::Read) {
+            // Read-only agents still hand in results under /kanbain/out.
+            // OpenCode matches edits by path relative to the worktree
+            // (`../../kanbain/out/plan.json`), so the pattern is depth-free;
+            // the later rule wins.
+            let mut patterns = Map::new();
+            patterns.insert("*".into(), deny());
+            patterns.insert("*kanbain/out/*".into(), Value::String("allow".into()));
+            permission.insert("edit".into(), Value::Object(patterns));
+            let mut dirs = Map::new();
+            dirs.insert(format!("{OUT_DIR}/*"), Value::String("allow".into()));
+            permission.insert("external_directory".into(), Value::Object(dirs));
+        } else {
+            permission.insert("edit".into(), deny());
+        }
     }
     if let Some(allow) = def.bash_filter() {
         let mut patterns = Map::new();
@@ -262,6 +280,26 @@ mod tests {
         assert_eq!(provider["npm"], "@ai-sdk/openai-compatible");
         assert_eq!(provider["options"]["baseURL"], "{env:OPENAI_BASE_URL}");
         assert!(provider["models"]["gpt-4.1-mini"].is_object());
+    }
+
+    #[test]
+    fn read_only_agent_edits_only_out() {
+        let (_, config) = launch(
+            "name: p\nrole: planner\nruntime: opencode\nmodel: opus\ncapabilities: [read]\n",
+        );
+        let permission = &config["agent"]["kanbain-p"]["permission"];
+        assert_eq!(
+            permission["edit"],
+            json!({"*": "deny", "*kanbain/out/*": "allow"})
+        );
+        assert_eq!(
+            permission["external_directory"],
+            json!({"/kanbain/out/*": "allow"})
+        );
+        // Agents without any tools stay without them.
+        let (_, config) =
+            launch("name: i\nrole: intake\nruntime: opencode\nmodel: haiku\ncapabilities: []\n");
+        assert_eq!(config["agent"]["kanbain-i"]["permission"]["edit"], "deny");
     }
 
     #[test]
