@@ -11,6 +11,7 @@ pub mod file_search;
 pub mod filesystem;
 pub mod filesystem_watcher;
 pub mod notification;
+pub mod orchestrator;
 pub mod pr_monitor;
 
 #[cfg(feature = "qa-mode")]
