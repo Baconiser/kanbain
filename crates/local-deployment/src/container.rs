@@ -100,6 +100,9 @@ pub struct LocalContainerService {
     /// Set once the deployment is built; the planning service starts runs
     /// through this service.
     planning: Arc<std::sync::OnceLock<crate::planning::PlanningService>>,
+    /// Set once the deployment is built; finished coder runs move the
+    /// orchestrator on (Phase 5).
+    orchestrator: Arc<std::sync::OnceLock<crate::orchestrator::OrchestratorService>>,
 }
 
 impl LocalContainerService {
@@ -143,6 +146,7 @@ impl LocalContainerService {
             agent_library,
             history: Arc::default(),
             planning: Arc::default(),
+            orchestrator: Arc::default(),
         };
 
         container.spawn_workspace_cleanup();
@@ -299,6 +303,10 @@ impl LocalContainerService {
 
     pub fn set_planning(&self, planning: crate::planning::PlanningService) {
         let _ = self.planning.set(planning);
+    }
+
+    pub fn set_orchestrator(&self, orchestrator: crate::orchestrator::OrchestratorService) {
+        let _ = self.orchestrator.set(orchestrator);
     }
 
     /// Re-check a ticket's git history in the background (D18): at run
@@ -471,11 +479,18 @@ impl LocalContainerService {
                 .and_then(|h| h.prior_work),
             None => None,
         };
-        // Planner runs get `related.md` and the current plan (Phase 4).
-        let extra_context = match (&issue, agent_role, self.planning.get()) {
-            (Some(issue), Some(AgentRole::Planner), Some(planning)) if agent_run => {
-                planning.context_files(issue).await
-            }
+        // Planner runs get `related.md` and the current plan (Phase 4);
+        // a subtask's coder gets its subtask, the plan and its code hits
+        // (Phase 5).
+        let extra_context = match (&issue, agent_role) {
+            (Some(issue), Some(AgentRole::Planner)) if agent_run => match self.planning.get() {
+                Some(planning) => planning.context_files(issue).await,
+                None => Vec::new(),
+            },
+            (Some(_), Some(AgentRole::Coder)) if agent_run => match self.orchestrator.get() {
+                Some(orchestrator) => orchestrator.context_files(workspace.id).await,
+                None => Vec::new(),
+            },
             _ => Vec::new(),
         };
         let target = self
@@ -1062,10 +1077,13 @@ impl LocalContainerService {
             }
             child_store.write().await.remove(&exec_id);
 
-            // Last, so a run the planner starts next (a repair) finds this
-            // one fully finished.
+            // Last, so a run the planner or the orchestrator starts next (a
+            // repair, the next subtask) finds this one fully finished.
             if let Some(planning) = container.planning.get() {
                 planning.on_run_finished(exec_id).await;
+            }
+            if let Some(orchestrator) = container.orchestrator.get() {
+                orchestrator.on_run_finished(exec_id).await;
             }
         })
     }

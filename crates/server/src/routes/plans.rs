@@ -7,6 +7,7 @@ use axum::{
     routing::{get, post, put},
 };
 use db::models::plan::{IssuePlanning, Plan, PlanDocument};
+use deployment::Deployment;
 use local_deployment::planning::{PlanTrigger, PlanningError, PlanningView};
 use serde::Deserialize;
 use ts_rs::TS;
@@ -66,6 +67,24 @@ async fn approve_plan(
     State(deployment): State<DeploymentImpl>,
 ) -> Result<ResponseJson<ApiResponse<Plan>>, ApiError> {
     let plan = deployment.planning().approve(plan_id).await?;
+    // No coding before approval, and coding right after it (D21, D22). A
+    // failure to start shows on the timeline; the plan stays approved and
+    // the ticket panel offers "Start coding".
+    if let Err(e) = deployment.orchestrator().start(plan.issue_id).await {
+        tracing::warn!(
+            "Starting the coders for ticket {} failed: {e}",
+            plan.issue_id
+        );
+        let _ = db::models::issue_event::IssueEvent::create(
+            &deployment.db().pool,
+            plan.issue_id,
+            db::models::issue_event::IssueEventType::CodingFinished,
+            "system",
+            &serde_json::json!({"status": "not_started", "error": e.to_string()}),
+            None,
+        )
+        .await;
+    }
     Ok(ResponseJson(ApiResponse::success(plan)))
 }
 

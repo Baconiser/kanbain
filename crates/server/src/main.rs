@@ -188,6 +188,9 @@ pub async fn shutdown_signal() {
 }
 
 pub async fn perform_cleanup_actions(deployment: &DeploymentImpl) {
+    // Coder runs killed by the shutdown are interrupted, not failed: they
+    // start again on the next launch.
+    deployment.orchestrator().begin_shutdown();
     deployment
         .container()
         .kill_all_running_processes()

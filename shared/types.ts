@@ -101,7 +101,7 @@ actor: string, payload: Record<string, unknown>,
  */
 occurred_at: string, created_at: string, };
 
-export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", run_started = "run_started", run_finished = "run_finished" }
+export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", coding_started = "coding_started", subtask_started = "subtask_started", subtask_merged = "subtask_merged", merge_conflict = "merge_conflict", subtask_failed = "subtask_failed", subtask_stopped = "subtask_stopped", coding_finished = "coding_finished", run_started = "run_started", run_finished = "run_finished" }
 
 export type AgentJob = { id: string, project_id: string | null, issue_id: string | null, kind: string, agent_def_id: string | null, model: string | null, status: AgentJobStatus, container_id: string | null, output: string | null, error: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, cost_usd: number, model_calls: number, budget_usd: number | null, started_at: string | null, completed_at: string | null, created_at: string, };
 
@@ -191,6 +191,57 @@ export type BoardPlanning = { issue_id: string, project_id: string, status: Plan
 export type PlanningView = { planning: IssuePlanning | null, plans: Array<Plan>, };
 
 export type SendBackPlanRequest = { feedback: string, };
+
+export type OrchestrationStatus = "running" | "stopped" | "blocked" | "done";
+
+export type SubtaskStatus = "pending" | "running" | "merged" | "failed" | "stopped";
+
+export type SubtaskConflict = { 
+/**
+ * `repo/path` of every conflicted file.
+ */
+files: Array<string>, 
+/**
+ * The earlier attempt's changes (capped), to re-apply on the new base.
+ */
+previous_diff: string, };
+
+export type TicketOrchestration = { issue_id: string, plan_id: string, 
+/**
+ * The workspace holding the ticket branch.
+ */
+workspace_id: string | null, status: OrchestrationStatus, error: string | null, created_at: string, updated_at: string, };
+
+export type OrchestrationSubtask = { id: string, issue_id: string, plan_subtask_id: string, position: number, sub_issue_id: string | null, workspace_id: string | null, execution_process_id: string | null, status: SubtaskStatus, fix_round: number, conflict: SubtaskConflict | null, 
+/**
+ * Merge commit per repo name.
+ */
+merge_commits: Record<string, string> | null, error: string | null, started_at: string | null, finished_at: string | null, updated_at: string, };
+
+export type SubtaskView = { title: string, files: Array<string>, 
+/**
+ * Plan ids this subtask waits for: its dependencies plus earlier
+ * subtasks with overlapping files.
+ */
+waits_for: Array<string>, branch: string | null, 
+/**
+ * The sub-ticket's display id, e.g. `KAN-43`.
+ */
+sub_issue: string | null, 
+/**
+ * Model cost of every run in the subtask's workspace.
+ */
+cost_usd: number, id: string, issue_id: string, plan_subtask_id: string, position: number, sub_issue_id: string | null, workspace_id: string | null, execution_process_id: string | null, status: SubtaskStatus, fix_round: number, conflict: SubtaskConflict | null, 
+/**
+ * Merge commit per repo name.
+ */
+merge_commits: Record<string, string> | null, error: string | null, started_at: string | null, finished_at: string | null, updated_at: string, };
+
+export type OrchestrationView = { orchestration: TicketOrchestration | null, 
+/**
+ * The ticket branch subtasks merge into.
+ */
+ticket_branch: string | null, subtasks: Array<SubtaskView>, };
 
 export type SearchConfig = { 
 /**

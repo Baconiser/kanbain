@@ -388,25 +388,8 @@ impl PlanningService {
         }
     }
 
-    /// Moves the ticket to its project's first status of `kind`, if it has
-    /// one and isn't there yet.
     async fn move_to(&self, issue: &Issue, kind: ProjectStatusKind) {
-        let pool = &self.db.pool;
-        let Ok(Some(status)) =
-            ProjectStatus::find_first_of_kind(pool, issue.project_id, kind).await
-        else {
-            return;
-        };
-        if status.id == issue.status_id {
-            return;
-        }
-        let update = UpdateIssue {
-            status_id: Some(status.id),
-            ..Default::default()
-        };
-        if let Err(e) = Issue::update(pool, issue.id, &update).await {
-            tracing::warn!("Moving ticket {} to {kind:?} failed: {e}", issue.id);
-        }
+        move_to_kind(&self.db.pool, issue, kind).await;
     }
 
     async fn fail(&self, issue_id: Uuid, error: &str) {
@@ -486,16 +469,30 @@ impl PlanningService {
             .ok_or(PlanningError::NotFound)
     }
 
+    /// The ticket's workspace on its branch: the planner's, or for a ticket
+    /// that was never planned here, a new one. The orchestrator merges
+    /// subtasks into this workspace's branch (Phase 5).
+    pub async fn ticket_workspace(&self, issue: &Issue) -> Result<Workspace, PlanningError> {
+        let pool = &self.db.pool;
+        let project = Project::find_by_id(pool, issue.project_id)
+            .await?
+            .ok_or(PlanningError::NotFound)?;
+        let existing = IssuePlanning::find(pool, issue.id)
+            .await?
+            .and_then(|p| p.workspace_id);
+        self.workspace_for(issue, &project, existing).await
+    }
+
     /// The planner's workspace: the ticket's earlier one, or a new one on
     /// the ticket branch with every repo of the project.
     async fn workspace_for(
         &self,
         issue: &Issue,
         project: &Project,
-        planning: &IssuePlanning,
+        existing: Option<Uuid>,
     ) -> Result<Workspace, PlanningError> {
         let pool = &self.db.pool;
-        if let Some(id) = planning.workspace_id
+        if let Some(id) = existing
             && let Some(workspace) = Workspace::find_by_id(pool, id).await?
         {
             self.container
@@ -611,7 +608,9 @@ impl PlanningService {
             .map_err(|e| PlanningError::Invalid(format!("Agent `{agent_name}`: {e}")))?;
         self.wait_for_history(issue_id).await;
 
-        let workspace = self.workspace_for(&issue, &project, &planning).await?;
+        let workspace = self
+            .workspace_for(&issue, &project, planning.workspace_id)
+            .await?;
         let mut executor_config = ExecutorConfig::new(executor_for(agent.runtime));
         executor_config.agent_definition = Some(agent.name.clone());
         executor_config.permission_policy = Some(PermissionPolicy::Auto);
@@ -1043,6 +1042,25 @@ impl PlanningService {
         Plan::find_by_id(pool, plan.id)
             .await?
             .ok_or(PlanningError::NotFound)
+    }
+}
+
+/// Moves a ticket to its project's first status of `kind`, if it has one
+/// and isn't there yet.
+pub(crate) async fn move_to_kind(pool: &sqlx::SqlitePool, issue: &Issue, kind: ProjectStatusKind) {
+    let Ok(Some(status)) = ProjectStatus::find_first_of_kind(pool, issue.project_id, kind).await
+    else {
+        return;
+    };
+    if status.id == issue.status_id {
+        return;
+    }
+    let update = UpdateIssue {
+        status_id: Some(status.id),
+        ..Default::default()
+    };
+    if let Err(e) = Issue::update(pool, issue.id, &update).await {
+        tracing::warn!("Moving ticket {} to {kind:?} failed: {e}", issue.id);
     }
 }
 

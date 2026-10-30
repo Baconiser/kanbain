@@ -158,6 +158,11 @@ pub async fn initialize_deployment(
         .cleanup_orphan_executions()
         .await
         .map_err(DeploymentError::from)?;
+    // After the orphan cleanup: coders of running tickets start again.
+    {
+        let orchestrator = deployment.orchestrator().clone();
+        tokio::spawn(async move { orchestrator.resume().await });
+    }
     deployment
         .container()
         .backfill_before_head_commits()
@@ -179,6 +184,9 @@ pub async fn initialize_deployment(
 
 /// Gracefully shut down running execution processes.
 pub async fn perform_cleanup_actions(deployment: &DeploymentImpl) {
+    // Coder runs killed by the shutdown are interrupted, not failed: they
+    // start again on the next launch.
+    deployment.orchestrator().begin_shutdown();
     deployment
         .container()
         .kill_all_running_processes()
