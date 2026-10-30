@@ -198,7 +198,7 @@ impl ClaudeLogin {
                 pixel_height: 0,
             })
             .map_err(|e| e.to_string())?;
-        let mut cmd = CommandBuilder::new("docker");
+        let mut cmd = CommandBuilder::new(sandbox::DOCKER_CLI);
         cmd.args(["exec", "-it", "-u", AGENT_USER]);
         for (key, value) in &container.env {
             cmd.args(["-e", &format!("{key}={value}")]);
@@ -213,7 +213,10 @@ impl ClaudeLogin {
             &format!("{CLAUDE_CODE_PACKAGE}@{CLAUDE_CODE_VERSION}"),
             "setup-token",
         ]);
-        let mut child = pty.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
+        let mut child = pty
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| spawn_error(&e.to_string()))?;
         drop(pty.slave);
         let writer = pty.master.take_writer().map_err(|e| e.to_string())?;
         let mut reader = pty.master.try_clone_reader().map_err(|e| e.to_string())?;
@@ -348,9 +351,30 @@ impl ClaudeLogin {
     }
 }
 
+/// A PTY spawn error without the command line: `portable_pty` quotes the
+/// whole `docker exec`, including the login's proxy credential.
+fn spawn_error(error: &str) -> String {
+    let reason = error.rsplit_once(" failed: ").map_or(error, |(_, r)| r);
+    format!("Starting the Docker CLI failed: {reason}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn spawn_error_hides_the_command_line() {
+        let raw = "CreateProcessW `\"docker\" exec -e HTTPS_PROXY=http://login:kbl-secret@gw:4001 \
+                   x npx setup-token` in cwd `C:\\Users` failed: %1 ist keine zulässige \
+                   Win32-Anwendung. (os error 193)";
+        let shown = spawn_error(raw);
+        assert!(!shown.contains("kbl-secret"), "{shown}");
+        assert!(
+            shown.ends_with("Win32-Anwendung. (os error 193)"),
+            "{shown}"
+        );
+        assert_eq!(spawn_error("boom"), "Starting the Docker CLI failed: boom");
+    }
 
     #[test]
     fn finds_url_and_token() {

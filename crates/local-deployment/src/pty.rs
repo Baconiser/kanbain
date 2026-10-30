@@ -83,7 +83,7 @@ impl PtyService {
             let mut shell_name = shell.file_name().and_then(|n| n.to_str()).unwrap_or("");
 
             if let Some(target) = &container {
-                cmd = CommandBuilder::new("docker");
+                cmd = CommandBuilder::new(sandbox::DOCKER_CLI);
                 cmd.cwd(&working_dir);
                 cmd.args([
                     "exec",

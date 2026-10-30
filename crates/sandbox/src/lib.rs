@@ -49,6 +49,17 @@ pub const OUT_DIR: &str = "/kanbain/out";
 /// Where repositories are cloned inside the container.
 pub const WORKSPACE_DIR: &str = "/workspace";
 /// Unprivileged user agents run as (the `node` user of the base image).
+/// The Docker CLI for PTY spawns. `portable_pty` searches PATH itself and
+/// takes the first match without PATHEXT, and Docker Desktop ships an
+/// extensionless `docker` shell script next to `docker.exe`: spawning
+/// "docker" there fails with "not a valid Win32 application" (os error 193).
+/// `std::process::Command` appends `.exe` on its own and doesn't need this.
+pub const DOCKER_CLI: &str = if cfg!(windows) {
+    "docker.exe"
+} else {
+    "docker"
+};
+
 pub const AGENT_USER: &str = "node";
 pub const AGENT_UID: u64 = 1000;
 /// Git author name of agent commits (set in the base image). The history
