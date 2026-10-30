@@ -1,0 +1,89 @@
+{
+ "output_tokens": 300,
+ "markers": [
+  "Mode: ask",
+  "Mode: yolo",
+  "Related work for",
+  "Changed:",
+  "may only write files under /kanbain/out"
+ ],
+ "phases": [
+  {
+   "when": "Mode: ask",
+   "steps": [
+    {
+     "tool": "Read",
+     "input": {
+      "file_path": "/kanbain/context/related.md"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/workspace/plan-notes.md",
+      "content": "notes"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/questions.md",
+      "content": "1. Should reset links expire after 30 or 60 minutes?\n2. Should sending a new link revoke the older ones?\n"
+     }
+    }
+   ],
+   "text": "I need answers first; my questions are in questions.md."
+  },
+  {
+   "when": "Mode: yolo",
+   "steps": [
+    {
+     "tool": "Read",
+     "input": {
+      "file_path": "/kanbain/context/related.md"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Make the reset-token lifetime configurable\",\n      \"description\": \"Read the lifetime from settings instead of the hard-coded 5 minutes.\",\n      \"files\": [\n        \"{related_file}\",\n        \"src/config.rs\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"2\",\n      \"title\": \"Expire reset links after the configured lifetime\",\n      \"description\": \"Check the token age when the link is opened.\",\n      \"files\": [\n        \"src/token.rs\"\n      ],\n      \"depends_on\": [\n        \"1\"\n      ]\n    },\n    {\n      \"id\": \"3\",\n      \"title\": \"Show a clear message for expired links\",\n      \"description\": \"Render an 'expired, request a new link' page.\",\n      \"files\": [\n        \"templates/expired.html\"\n      ],\n      \"depends_on\": []\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"A reset link works for 30 minutes after it was sent.\",\n    \"An expired link shows a page that offers a new link.\"\n  ],\n  \"assumptions\": [\n    \"Builds on {related_ticket}, which changed {related_changed}.\",\n    \"Decided without asking: links expire after 30 minutes.\",\n    \"Decided without asking: older links stay valid until they expire.\"\n  ],\n  \"test_strategy\": \"Black-box HTTP tests against the reset endpoints with a fake clock.\",\n  \"checkpoints\": [\n    {\n      \"after_subtasks\": [\n        \"2\"\n      ],\n      \"what\": \"Links expire on time\"\n    },\n    {\n      \"after_subtasks\": [\n        \"3\"\n      ],\n      \"what\": \"Expired page is shown\"\n    }\n  ]\n}"
+     }
+    }
+   ],
+   "text": "Plan written to /kanbain/out/plan.json."
+  },
+  {
+   "when": "The user answered your questions",
+   "steps": [
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Make the reset-token lifetime configurable\",\n      \"description\": \"Read the lifetime from settings instead of the hard-coded 5 minutes.\",\n      \"files\": [\n        \"{related_file}\",\n        \"src/config.rs\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"2\",\n      \"title\": \"Expire reset links after the configured lifetime\",\n      \"description\": \"Check the token age when the link is opened.\",\n      \"files\": [\n        \"src/token.rs\"\n      ],\n      \"depends_on\": [\n        \"1\"\n      ]\n    },\n    {\n      \"id\": \"3\",\n      \"title\": \"Show a clear message for expired links\",\n      \"description\": \"Render an 'expired, request a new link' page.\",\n      \"files\": [\n        \"templates/expired.html\"\n      ],\n      \"depends_on\": []\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"A reset link works for 30 minutes after it was sent.\",\n    \"An expired link shows a page that offers a new link.\"\n  ],\n  \"assumptions\": [\n    \"Builds on {related_ticket}, which changed {related_changed}.\",\n    \"Reset links expire after 30 minutes (answered by the user).\"\n  ],\n  \"test_strategy\": \"Black-box HTTP tests against the reset endpoints with a fake clock.\",\n  \"checkpoints\": [\n    {\n      \"after_subtasks\": [\n        \"2\"\n      ],\n      \"what\": \"Links expire on time\"\n    },\n    {\n      \"after_subtasks\": [\n        \"3\"\n      ],\n      \"what\": \"Expired page is shown\"\n    }\n  ]\n}"
+     }
+    }
+   ],
+   "text": "Plan written to /kanbain/out/plan.json."
+  },
+  {
+   "when": "back with this feedback",
+   "steps": [
+    {
+     "tool": "Read",
+     "input": {
+      "file_path": "/kanbain/context/current_plan.json"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Make the reset-token lifetime configurable\",\n      \"description\": \"Read the lifetime from settings instead of the hard-coded 5 minutes.\",\n      \"files\": [\n        \"{related_file}\",\n        \"src/config.rs\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"2\",\n      \"title\": \"Expire reset links after the configured lifetime\",\n      \"description\": \"Check the token age when the link is opened.\",\n      \"files\": [\n        \"src/token.rs\"\n      ],\n      \"depends_on\": [\n        \"1\"\n      ]\n    },\n    {\n      \"id\": \"3\",\n      \"title\": \"Show a clear message for expired links\",\n      \"description\": \"Render an 'expired, request a new link' page.\",\n      \"files\": [\n        \"templates/expired.html\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"4\",\n      \"title\": \"Revoke older reset links when a new one is sent\",\n      \"description\": \"Per the review feedback.\",\n      \"files\": [\n        \"src/token.rs\"\n      ],\n      \"depends_on\": [\n        \"2\"\n      ]\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"A reset link works for 30 minutes after it was sent.\",\n    \"An expired link shows a page that offers a new link.\"\n  ],\n  \"assumptions\": [\n    \"Builds on {related_ticket}, which changed {related_changed}.\",\n    \"Reset links expire after 30 minutes (answered by the user).\"\n  ],\n  \"test_strategy\": \"Black-box HTTP tests against the reset endpoints with a fake clock.\",\n  \"checkpoints\": [\n    {\n      \"after_subtasks\": [\n        \"2\"\n      ],\n      \"what\": \"Links expire on time\"\n    },\n    {\n      \"after_subtasks\": [\n        \"3\"\n      ],\n      \"what\": \"Expired page is shown\"\n    }\n  ]\n}"
+     }
+    }
+   ],
+   "text": "Revised plan written."
+  }
+ ]
+}

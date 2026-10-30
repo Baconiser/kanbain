@@ -239,6 +239,34 @@ scramble code results. To check the fallback, `docker stop
 kb-rerank` mid-run: every search should still answer, with `reranked
 0/41`.
 
+## 8d. Planning flow (Phase 4)
+
+The planner runs in the sandbox like any agent. `mock-script-planning.json`
+uses the mock's `phases`: the phase whose `when` text is in the latest
+prompt plays its steps, so one session can ask questions (`Mode: ask`),
+continue after the answer, revise after a send-back, or plan straight away
+(`Mode: yolo`). Steps fill `{related_ticket}`, `{related_changed}` and
+`{related_file}` from the `related.md` the planner read.
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-planning.json /tmp/mock-plan.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as in section 5
+node $D/planning.mjs http://localhost:$FRONTEND_PORT /tmp/shots $BACKEND_PORT \
+  $KANBAIN_LAUNCH_TOKEN /tmp/repos/plan-shop /tmp/mock-plan.log
+```
+
+It builds a repo where PLN-1 (Done) changed `src/mailer.rs`, then in the UI
+assigns PLN-2 to the planner, answers its questions, edits plan v1 into v2,
+sends v2 back (v3), approves, and checks the timeline. PLN-3 (yolo) is moved
+to Planning through the bulk API and must get a plan citing PLN-1. It also
+checks the mock log: `related.md` was read, a Write outside `/kanbain/out`
+was refused, and the planner had no Edit or Bash. The search embedder is
+optional; without one, related search falls back to keywords. A full run
+takes 10 to 25 minutes, mostly sandbox start-up per planner turn.
+
+The bulk update body is flat: `[{ "id": …, "status_id": … }]`. Unknown
+keys such as `changes` are ignored silently.
+
 ## 9. Stop
 
 ```bash

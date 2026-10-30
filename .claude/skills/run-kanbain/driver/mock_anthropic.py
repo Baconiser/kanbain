@@ -16,6 +16,12 @@ SCRIPT.json: {"commands": ["...", ...], "output_tokens": 50000,
 first step's tool isn't offered, `steps_without_search` is used instead.
 `size_usage` reports input tokens as request bytes / 4, so the token
 benchmark sees how much context each run sends.
+`phases` script resumed sessions (the planner): [{"when": "text", "steps": [...],
+"text": "final answer"}, ...]. The phase whose `when` appears in the latest
+user prompt (not a tool result) wins; its steps count only tool results after
+that prompt. Step inputs may use {related_ticket}, {related_changed} and
+{related_file}, filled from the first ticket with a "Changed:" line, and a
+file, in earlier tool results (the planner's related.md).
 Text answers (no tool call left) use the first `text_replies` entry whose
 `when` appears in the request's messages; headless intake and history jobs
 get their JSON or Markdown answers this way.
@@ -75,7 +81,11 @@ class Handler(BaseHTTPRequestHandler):
             if c.get("type") == "tool_result"
         )
         commands = SCRIPT.get("commands", [])
-        step = next_step(body, tools, tool_results) if "steps" in SCRIPT else None
+        phase = current_phase(body) if "phases" in SCRIPT else None
+        if phase is not None:
+            step = phase_step(body, tools, phase)
+        else:
+            step = next_step(body, tools, tool_results) if "steps" in SCRIPT else None
         if step is not None:
             block = dict(step, id="toolu_" + uuid.uuid4().hex[:20], type="tool_use")
             stop = "tool_use"
@@ -84,7 +94,8 @@ class Handler(BaseHTTPRequestHandler):
                      "input": {"command": commands[tool_results], "description": "scripted step"}}
             stop = "tool_use"
         else:
-            block = {"type": "text", "text": scripted_text(body)}
+            text = phase[1].get("text") if phase is not None else None
+            block = {"type": "text", "text": text or scripted_text(body)}
             stop = "end_turn"
         out_tokens = SCRIPT.get("output_tokens", 200) if bash in tools else 20
         input_tokens = len(raw) // 4 if SCRIPT.get("size_usage") else 1500
@@ -224,6 +235,85 @@ def next_step(body, tools, done):
             path = found.group(1).split("/", 1)[1] if found.group(1).count("/") else found.group(1)
             command = step["bash_from_result"].format(path=path, start=found.group(2), end=found.group(3))
     return {"name": bash, "input": {"command": command, "description": "scripted step"}}
+
+
+def is_prompt(message):
+    """A user message with text of its own, not only tool results."""
+    if message.get("role") != "user":
+        return False
+    content = message.get("content")
+    if isinstance(content, str):
+        return True
+    return any(c.get("type") == "text" and "<system-reminder>" not in c.get("text", "")
+               for c in content or [])
+
+
+def current_phase(body):
+    """(index of the prompt, phase) for the latest prompt naming a phase."""
+    found = None
+    for idx, m in enumerate(body.get("messages", [])):
+        if not is_prompt(m):
+            continue
+        text = json.dumps(m.get("content"))
+        for phase in SCRIPT["phases"]:
+            if json.dumps(phase["when"])[1:-1] in text:
+                found = (idx, phase)
+    return found
+
+
+def tool_results_text(messages):
+    out = []
+    for m in messages:
+        if m.get("role") != "user" or not isinstance(m.get("content"), list):
+            continue
+        for c in m["content"]:
+            if c.get("type") == "tool_result":
+                content = c.get("content")
+                if isinstance(content, list):
+                    out.extend(x.get("text", "") for x in content if isinstance(x, dict))
+                else:
+                    out.append(str(content or ""))
+    return "\n".join(out)
+
+
+def fill_related(value, results):
+    import re
+    # Claude Code's Read prefixes each line with its number and a tab or arrow.
+    results = re.sub(r"(?m)^\s*\d+(?:\t|→)", "", results)
+    # The first related ticket that changed code: what a plan builds on.
+    found = re.search(r'- (\S+) "([^"]+)" \(([^)]+)\)\n\s+Changed: (.+)', results)
+    ticket = found or re.search(r'- (\S+) "([^"]+)" \(([^)]+)\)', results)
+    changed = re.search(r"Changed: (.+)", results)
+    if found:
+        changed = re.search(r"(.+)", found.group(4))
+    path = re.search(r"- ([\w./-]+\.\w+):\d+-\d+", results)
+    fills = {
+        # Typographic quotes: the fill often lands in JSON inside a JSON string.
+        "{related_ticket}": f"{ticket.group(1)} (“{ticket.group(2)}”, {ticket.group(3)})"
+        if ticket else "no related ticket",
+        "{related_changed}": changed.group(1).strip() if changed else "nothing",
+        "{related_file}": (path.group(1) if path else
+                           (re.search(r"in ([\w./-]+\.\w+)", changed.group(1)).group(1)
+                            if changed and re.search(r"in ([\w./-]+\.\w+)", changed.group(1))
+                            else "src/unknown.rs")),
+    }
+    text = json.dumps(value)
+    for key, fill in fills.items():
+        text = text.replace(key, json.dumps(fill)[1:-1])
+    return json.loads(text)
+
+
+def phase_step(body, tools, found):
+    idx, phase = found
+    later = body.get("messages", [])[idx + 1:]
+    done = sum(1 for m in later if m.get("role") == "user" and isinstance(m.get("content"), list)
+               for c in m["content"] if c.get("type") == "tool_result")
+    steps = phase.get("steps", [])
+    if not tools or done >= len(steps):
+        return None
+    step = steps[done]
+    results = tool_results_text(body.get("messages", []))
+    return {"name": step["tool"], "input": fill_related(step.get("input", {}), results)}
 
 
 def scripted_text(body):

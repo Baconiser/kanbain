@@ -966,3 +966,148 @@ is not in the evaluation set. At 0.75 the reranker pushed
   that had already run on the dev database. sqlx's checksum check failed,
   and the index was dropped and rebuilt (as designed for an unreadable
   index). Never edit a migration after it has run anywhere.
+
+## Phase 4: Planning flow and approval gate (2026-10-30)
+
+**Goal:** a ticket assigned to the AI gets a plan from a sandboxed planner,
+which can ask questions first; no coding starts before you approve the plan.
+
+### What changed
+
+- **Planner runs (D20).** Assigning a ticket ("Plan with AI" in the ticket
+  panel) or moving it into a Planning status (board drag, bulk update)
+  starts a run of the `planner` agent (`local-deployment/src/planning.rs`).
+  - The run is an ordinary sandboxed coding session in the ticket's own
+    workspace on `kanbain/<ID>-<slug>`, with all of the project's repos.
+    It runs without setup or cleanup scripts.
+  - The task message carries the ticket id, the ask/yolo mode and the
+    `plan.json` contract. It points at `ticket.md`, `prior_work.md` and
+    `related.md` in `/kanbain/context`.
+  - A run waits up to 5 minutes for a prior-work summary that is still
+    being written (the 3b leftover).
+  - One planner run per ticket at a time. A run interrupted by a restart is
+    marked failed at the next start.
+- **`related.md` (E22, D43).** Before each planner run the backend runs
+  `related` for the ticket and writes `/kanbain/context/related.md`: up to
+  5 similar tickets with their status, what their commits changed and
+  whether they have runs, then up to 10 code locations with the tickets
+  that changed them. It is capped at 8 KB and never goes into the system
+  prompt.
+- **Write fence for read-only agents.** Agents with tools but without
+  `edit` (the planner, the scribe) now get `Write`, limited to
+  `/kanbain/out`:
+  - Claude Code: a `PreToolUse` hook (`out_only.sh`) refuses Write, Edit
+    and NotebookEdit outside `/kanbain/out/` and any path with `..`.
+  - OpenCode: `edit` is `{"*": "deny", "*kanbain/out/*": "allow"}` plus an
+    `external_directory` allow for `/kanbain/out/*`. OpenCode 1.4.7 matches
+    edit patterns against the path relative to the worktree (checked in
+    its binary), so the pattern is depth-free.
+- **Questions (D20).** A `questions.md` becomes an agent comment ("Questions
+  from the planner"). The ticket shows "Waiting for your answer" in the
+  panel and on its board card, and you get a notification. Your next
+  comment resumes the same Claude Code session (`--resume`) with your
+  answers.
+- **`plan.json` (D20).** `PlanDocument` in `db::models::plan` (ts-rs):
+  subtasks with id, title, description, files and `depends_on`;
+  acceptance criteria, assumptions, test strategy and checkpoints.
+  - Numeric ids are accepted. Validation catches missing subtasks, ids or
+    titles, duplicate ids, unknown or self dependencies, cycles and bad
+    checkpoint references.
+  - An invalid `plan.json` gets one automatic follow-up with the errors.
+    If that fails too, the planning fails with the reason.
+  - A JSON plan in the final message counts when no file was written.
+- **Plans and planning state.** `plans` stores every version (`draft`,
+  `approved`, `rejected`; source `planner` or `edited`; feedback; the run).
+  `issue_planning` stores the planner's workspace, session, current run and
+  state (`planning`, `waiting_for_answer`, `awaiting_approval`, `approved`,
+  `failed`). The board stream carries the state live.
+- **Approval gate (D21).** The ticket panel's **Plan** section shows the
+  versions and the newest one as a form.
+  - **Approve** marks it approved and moves the ticket to In progress.
+  - **Save as new version** stores your edit as a new `edited` version.
+  - **Send back** stores your feedback on the version and resumes the
+    planner, which writes the next version. It sees the version you
+    reviewed as `/kanbain/context/current_plan.json`.
+  - Only the newest draft can be approved, edited or sent back, and not
+    while the planner runs.
+  - A new plan moves the ticket to Awaiting approval, with a notification.
+- **Timeline (D19).** New entries: planner started (assigned, answers,
+  feedback, repair), questions, plan versions, approved, sent back with the
+  feedback, and failed.
+- **Search (E6).** The newest plan of each ticket is indexed as kind
+  `plan`, in Related, `/api/search` and `search_knowledge`.
+- **API.** `GET /api/issues/{id}/planning`, `POST
+  /api/issues/{id}/planning/start`, `PUT /api/plans/{id}`, `POST
+  /api/plans/{id}/approve`, `POST /api/plans/{id}/send-back`.
+
+### Demo (Linux dev container)
+
+`planning.mjs` with the scripted mock upstream (`mock-script-planning.json`,
+which uses the mock's new `phases`), the seeded `planner` agent (Claude Code
+2.1.119, Opus) in the real sandbox, and one TEI CPU container as the
+embedder:
+
+- **Ask mode.** "Plan with AI" on PLN-2 ("Password reset link should
+  expire") started the planner.
+  - It read `related.md`, which listed PLN-1 (Done) with "Changed: fn
+    send_reset_mail in mailer.rs" and the code location `src/mailer.rs:1-3`
+    "changed by PLN-1".
+  - Its Write to `/workspace/plan-notes.md` was refused by the hook.
+  - Its `questions.md` became the comment "Questions from the planner".
+  - The panel and the board card showed "Waiting for your answer".
+  - That run: 9 s, 6,080 tokens, $0.03.
+- **Answer.** Replying in the comments resumed the same session. Plan v1
+  (3 subtasks) cited "PLN-1 (Password reset mail never arrives, Done),
+  which changed fn send_reset_mail in mailer.rs". The ticket moved to
+  Awaiting approval, and the card showed "Plan to approve".
+- **Edit, send back, approve.** Editing the assumptions saved v2
+  (edited). Sending v2 back with "Also revoke older links when a new one is
+  sent." marked it rejected and resumed the planner, which read
+  `current_plan.json` and wrote v3 with 4 subtasks. Approve moved the
+  ticket to In progress.
+- **Timeline:** assigned, 2 questions, resumed with answers, v1 by the
+  planner, v2 edited, v2 sent back with the feedback, v3, v3 approved, each
+  run with its tokens and cost.
+- **Yolo by drag.** PLN-3, moved to Planning through the board's bulk
+  update, got a plan without questions. Its assumptions list the decisions
+  it made alone and cite PLN-1 and `mailer.rs`. The ticket moved to
+  Awaiting approval.
+- The plan is found by `/api/search` with kind `plan`. The planner had
+  `Write` but no `Edit` or `Bash`. No console errors or failed API calls.
+- `cargo test --workspace` (308 passed), `pnpm run check`, `pnpm run lint`
+  with clippy, `generate-types:check`, `prepare-db:check` and the i18n check
+  pass.
+
+Bugs the demo found and fixed on the way:
+
+- `related.md` listed tickets of **other projects** that share a repo
+  ("changed by PLN-1, PLN-1, PLN-1"). It now keeps the project's own
+  tickets (D47), each named once.
+- The first run's mock wrote an invalid `plan.json`. That took the real
+  repair path: one automatic follow-up with the parse error, then "Planning
+  failed" with the reason on the ticket and its card.
+
+### Not verified here
+
+- **A real model.** The mock writes fixed files. A real planner's question
+  quality, plan size and cost are still unknown, and so is whether it uses
+  `related.md` well.
+- **OpenCode planners.** The out-fence permission is unit-tested and its
+  pattern semantics were read from the OpenCode 1.4.7 binary, but no
+  OpenCode planner ran in the sandbox.
+- **Windows:** notifications for questions and approvals go through the
+  existing notification service. In this container they only log the
+  missing PowerShell.
+
+### Known leftovers
+
+- Seeded agents in an existing data folder keep their old definitions, so
+  `dev_assets`' planner runs without the `search` capability. New data
+  folders are seeded with it.
+- Approving a plan only moves the ticket to In progress. Phase 5's
+  orchestrator starts the coders from the approved version.
+- Editing an approved plan is refused. Re-planning ("Plan again") starts a
+  fresh planner session in the same workspace.
+- The planner's workspace is a normal workspace, listed under the ticket's
+  workspaces, and its container stays until the workspace is removed (D37
+  applies to automated runs from Phase 5 on).
