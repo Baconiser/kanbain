@@ -116,7 +116,10 @@ fn main() {
 
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+        // Warnings and errors for Settings → Logs, unfiltered.
+        .with(utils::app_log::layer())
         .init();
+    utils::app_log::app_log().open_file(&utils::assets::asset_dir().join("logs"));
 
     // Shared token so we can tell the server to shut down when the app quits.
     let shutdown_token = Arc::new(CancellationToken::new());

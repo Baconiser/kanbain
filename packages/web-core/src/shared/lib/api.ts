@@ -15,6 +15,7 @@ import {
   ExecutionProcessEvent,
   ExecutionProcessRepoState,
   SandboxStatus,
+  AppLogView,
   SetModelCredential,
   AgentDefinition,
   AgentLibraryMeta,
@@ -699,6 +700,27 @@ export const executionProcessesApi = {
 };
 
 // Docker sandbox and model credentials
+export const logsApi = {
+  get: async (params: {
+    since?: number;
+    warnings?: boolean;
+  }): Promise<AppLogView> => {
+    const query = new URLSearchParams({
+      since: String(params.since ?? 0),
+      warnings: String(params.warnings ?? false),
+    });
+    const response = await makeRequest(`/api/logs?${query}`, {
+      cache: 'no-store',
+    });
+    return handleApiResponse<AppLogView>(response);
+  },
+
+  clear: async (): Promise<void> => {
+    const response = await makeRequest('/api/logs', { method: 'DELETE' });
+    return handleApiResponse<void>(response);
+  },
+};
+
 export const sandboxApi = {
   getStatus: async (): Promise<SandboxStatus> => {
     const response = await makeRequest('/api/sandbox/status', {

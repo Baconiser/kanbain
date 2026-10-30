@@ -72,6 +72,8 @@ fn generate_types_content() -> String {
         db::models::orchestration::OrchestrationSubtask::decl(),
         local_deployment::orchestrator::SubtaskView::decl(),
         local_deployment::orchestrator::OrchestrationView::decl(),
+        utils::app_log::AppLogEntry::decl(),
+        server::routes::logs::AppLogView::decl(),
         embeddings::config::SearchConfig::decl(),
         embeddings::config::EmbedderConfig::decl(),
         embeddings::config::EmbedderProvider::decl(),

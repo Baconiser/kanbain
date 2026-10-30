@@ -8023,6 +8023,7 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "ts-rs",
  "uuid",
  "which",

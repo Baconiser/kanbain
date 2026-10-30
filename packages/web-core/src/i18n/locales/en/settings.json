@@ -31,6 +31,8 @@
         "searchDesc": "Embedders, reranker and the search index",
         "mcp": "MCP Servers",
         "mcpDesc": "Model Context Protocol servers",
+        "logs": "Logs",
+        "logsDesc": "The app's raw warnings and errors",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "Projects",
@@ -808,6 +810,17 @@
         "deleteMessage": "Delete the skill {{name}} and all its files?",
         "fileCount": "Files: {{count}}"
       }
+    },
+    "logs": {
+      "title": "App logs",
+      "description": "Warnings and errors from the KanbAIn backend, newest last. Copy them into a bug report or a chat to see why something failed.",
+      "warnings": "Show warnings too",
+      "follow": "Follow new lines",
+      "copy": "Copy all",
+      "copied": "Copied",
+      "clear": "Clear",
+      "empty": "Nothing logged yet.",
+      "file": "Full log file:"
     }
   },
   "integrations": {

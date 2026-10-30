@@ -27,6 +27,8 @@
         "searchDesc": "Embedders, reranker et index de recherche",
         "mcp": "Serveurs MCP",
         "mcpDesc": "Serveurs Model Context Protocol",
+        "logs": "Journaux",
+        "logsDesc": "Avertissements et erreurs bruts de l'app",
         "organizations": "Paramètres de l'organisation",
         "organizationsDesc": "Gérer les membres et les permissions de l'organisation",
         "remote-projects": "Projets",
@@ -808,6 +810,17 @@
         "deleteMessage": "Supprimer le skill {{name}} et tous ses fichiers ?",
         "fileCount": "Fichiers : {{count}}"
       }
+    },
+    "logs": {
+      "title": "Journaux de l'app",
+      "description": "Avertissements et erreurs du backend KanbAIn, les plus récents en dernier. Copiez-les dans un rapport de bug ou une discussion pour comprendre pourquoi quelque chose a échoué.",
+      "warnings": "Afficher aussi les avertissements",
+      "follow": "Suivre les nouvelles lignes",
+      "copy": "Tout copier",
+      "copied": "Copié",
+      "clear": "Effacer",
+      "empty": "Rien n'a encore été journalisé.",
+      "file": "Fichier journal complet :"
     }
   },
   "integrations": {

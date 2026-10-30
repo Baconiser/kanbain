@@ -27,6 +27,8 @@
         "searchDesc": "Embedders, reranker e índice de búsqueda",
         "mcp": "Servidores MCP",
         "mcpDesc": "Servidores de Protocolo de Contexto de Modelo (MCP)",
+        "logs": "Registros",
+        "logsDesc": "Advertencias y errores sin procesar de la app",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "Proyectos",
@@ -808,6 +810,17 @@
         "deleteMessage": "¿Eliminar la skill {{name}} y todos sus archivos?",
         "fileCount": "Archivos: {{count}}"
       }
+    },
+    "logs": {
+      "title": "Registros de la app",
+      "description": "Advertencias y errores del backend de KanbAIn, los más recientes al final. Cópialos en un informe de error o un chat para ver por qué algo falló.",
+      "warnings": "Mostrar también advertencias",
+      "follow": "Seguir las líneas nuevas",
+      "copy": "Copiar todo",
+      "copied": "Copiado",
+      "clear": "Limpiar",
+      "empty": "Aún no hay nada registrado.",
+      "file": "Archivo de registro completo:"
     }
   },
   "integrations": {

@@ -1,5 +1,6 @@
 import {
   GearIcon,
+  ListMagnifyingGlassIcon,
   MagnifyingGlassIcon,
   GitBranchIcon,
   CpuIcon,
@@ -10,12 +11,13 @@ import type { Icon } from '@phosphor-icons/react';
 import { GeneralSettingsSection } from './GeneralSettingsSection';
 import { ReposSettingsSection } from './ReposSettingsSection';
 import { AgentsSettingsSection } from './AgentsSettingsSection';
+import { LogsSettingsSection } from './LogsSettingsSection';
 import { McpSettingsSection } from './McpSettingsSection';
 import { SandboxSettingsSection } from './SandboxSettingsSection';
 import { SearchSettingsSection } from './SearchSettingsSection';
 
 export type SettingsSectionType =
-  'general' | 'repos' | 'agents' | 'sandbox' | 'search' | 'mcp';
+  'general' | 'repos' | 'agents' | 'sandbox' | 'search' | 'mcp' | 'logs';
 
 export type SettingsSectionInitialState = {
   general: undefined;
@@ -24,6 +26,7 @@ export type SettingsSectionInitialState = {
   sandbox: undefined;
   search: undefined;
   mcp: undefined;
+  logs: undefined;
 };
 
 export interface SettingsSectionDefinition {
@@ -38,6 +41,7 @@ export const SETTINGS_SECTION_DEFINITIONS: SettingsSectionDefinition[] = [
   { id: 'sandbox', icon: ShieldCheckIcon },
   { id: 'search', icon: MagnifyingGlassIcon },
   { id: 'mcp', icon: PlugIcon },
+  { id: 'logs', icon: ListMagnifyingGlassIcon },
 ];
 
 export function renderSettingsSection(
@@ -62,6 +66,8 @@ export function renderSettingsSection(
       return <SearchSettingsSection />;
     case 'mcp':
       return <McpSettingsSection />;
+    case 'logs':
+      return <LogsSettingsSection />;
     default:
       return <GeneralSettingsSection />;
   }

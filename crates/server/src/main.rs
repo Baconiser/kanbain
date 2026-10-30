@@ -38,7 +38,10 @@ async fn main() -> Result<(), KanbainError> {
     let env_filter = EnvFilter::try_new(filter_string).expect("Failed to create tracing filter");
     tracing_subscriber::registry()
         .with(tracing_subscriber::fmt::layer().with_filter(env_filter))
+        // Warnings and errors for Settings → Logs, unfiltered.
+        .with(utils::app_log::layer())
         .init();
+    utils::app_log::app_log().open_file(&utils::assets::asset_dir().join("logs"));
 
     let shutdown_token = CancellationToken::new();
 

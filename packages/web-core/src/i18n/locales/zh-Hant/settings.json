@@ -27,6 +27,8 @@
         "searchDesc": "嵌入模型、重排序模型與搜尋索引",
         "mcp": "MCP 伺服器",
         "mcpDesc": "模型上下文協議伺服器",
+        "logs": "日誌",
+        "logsDesc": "應用程式的原始警告與錯誤",
         "organizations": "組織設定",
         "organizationsDesc": "管理組織成員與權限",
         "remote-projects": "專案",
@@ -808,6 +810,17 @@
         "deleteMessage": "刪除技能 {{name}} 及其所有檔案?",
         "fileCount": "檔案:{{count}}"
       }
+    },
+    "logs": {
+      "title": "應用程式日誌",
+      "description": "KanbAIn 後端的警告與錯誤，最新的在最後。複製到錯誤回報或聊天中，查看失敗原因。",
+      "warnings": "同時顯示警告",
+      "follow": "跟隨新行",
+      "copy": "全部複製",
+      "copied": "已複製",
+      "clear": "清除",
+      "empty": "尚無日誌記錄。",
+      "file": "完整日誌檔案："
     }
   },
   "integrations": {

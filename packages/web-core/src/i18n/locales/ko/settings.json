@@ -27,6 +27,8 @@
         "searchDesc": "임베더, 리랭커 및 검색 색인",
         "mcp": "MCP 서버",
         "mcpDesc": "Model Context Protocol 서버",
+        "logs": "로그",
+        "logsDesc": "앱의 원시 경고 및 오류",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "프로젝트",
@@ -808,6 +810,17 @@
         "deleteMessage": "스킬 {{name}}과(와) 모든 파일을 삭제할까요?",
         "fileCount": "파일: {{count}}"
       }
+    },
+    "logs": {
+      "title": "앱 로그",
+      "description": "KanbAIn 백엔드의 경고와 오류입니다(최신 항목이 마지막). 버그 보고서나 채팅에 복사해 실패 원인을 확인하세요.",
+      "warnings": "경고도 표시",
+      "follow": "새 줄 따라가기",
+      "copy": "모두 복사",
+      "copied": "복사됨",
+      "clear": "지우기",
+      "empty": "아직 기록된 내용이 없습니다.",
+      "file": "전체 로그 파일:"
     }
   },
   "integrations": {

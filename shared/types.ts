@@ -243,6 +243,30 @@ export type OrchestrationView = { orchestration: TicketOrchestration | null,
  */
 ticket_branch: string | null, subtasks: Array<SubtaskView>, };
 
+export type AppLogEntry = { 
+/**
+ * Increases by one per entry, for "everything since" polling.
+ */
+seq: number, timestamp: string, 
+/**
+ * `ERROR` or `WARN`.
+ */
+level: string, 
+/**
+ * The module that logged it, e.g. `local_deployment::orchestrator`.
+ */
+target: string, 
+/**
+ * The message plus any structured fields, as `key=value`.
+ */
+message: string, };
+
+export type AppLogView = { entries: Array<AppLogEntry>, 
+/**
+ * Where the full log is written, when the file could be opened.
+ */
+file_path: string | null, };
+
 export type SearchConfig = { 
 /**
  * Embedder for tickets, comments, attachments and runs. Without one,

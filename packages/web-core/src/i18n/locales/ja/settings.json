@@ -27,6 +27,8 @@
         "searchDesc": "埋め込みモデル、リランカー、検索インデックス",
         "mcp": "MCPサーバー",
         "mcpDesc": "モデルコンテキストプロトコルサーバー",
+        "logs": "ログ",
+        "logsDesc": "アプリの生の警告とエラー",
         "organizations": "Organization Settings",
         "organizationsDesc": "Manage organization members and permissions",
         "remote-projects": "プロジェクト",
@@ -808,6 +810,17 @@
         "deleteMessage": "スキル {{name}} とそのすべてのファイルを削除しますか?",
         "fileCount": "ファイル: {{count}}"
       }
+    },
+    "logs": {
+      "title": "アプリのログ",
+      "description": "KanbAIn バックエンドの警告とエラー（新しいものが最後）。バグ報告やチャットに貼り付けて、失敗の原因を確認できます。",
+      "warnings": "警告も表示",
+      "follow": "新しい行を追跡",
+      "copy": "すべてコピー",
+      "copied": "コピーしました",
+      "clear": "クリア",
+      "empty": "まだ何も記録されていません。",
+      "file": "ログファイル全体:"
     }
   },
   "integrations": {
