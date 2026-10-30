@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO orchestration_subtasks (id, issue_id, plan_subtask_id, position,\n                                                   sub_issue_id)\n               VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "79af25e94aa3daf7b4f5dc2cbf8b48007656989101e60646fbe79397b392ee35"
+}

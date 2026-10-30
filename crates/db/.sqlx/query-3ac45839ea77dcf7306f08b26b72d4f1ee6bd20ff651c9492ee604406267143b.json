@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET status = 'stopped',\n                   error = 'Interrupted by an app restart',\n                   updated_at = datetime('now', 'subsec')\n               WHERE status = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "3ac45839ea77dcf7306f08b26b72d4f1ee6bd20ff651c9492ee604406267143b"
+}

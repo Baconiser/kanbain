@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET status = $2, error = $3,\n                   finished_at = CASE WHEN $4 THEN datetime('now', 'subsec') ELSE finished_at END,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "91775f508c1c32ad27e51c7d149faaa47b250e0b681ee314e0944683e1de9fd3"
+}

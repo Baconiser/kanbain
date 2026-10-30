@@ -1,0 +1,56 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT issue_id as \"issue_id!: Uuid\",\n                      plan_id as \"plan_id!: Uuid\",\n                      workspace_id as \"workspace_id: Uuid\",\n                      status as \"status!: OrchestrationStatus\",\n                      error,\n                      created_at as \"created_at!: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM ticket_orchestrations\n               WHERE issue_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "plan_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 2,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status!: OrchestrationStatus",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "created_at!: DateTime<Utc>",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 6,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "9e824a3b3498f84ec870314859430e3a9bb98063634ce3bf70b113b616ab678e"
+}

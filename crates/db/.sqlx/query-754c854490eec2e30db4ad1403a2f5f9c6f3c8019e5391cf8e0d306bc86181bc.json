@@ -1,0 +1,104 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      issue_id as \"issue_id!: Uuid\",\n                      plan_subtask_id,\n                      position,\n                      sub_issue_id as \"sub_issue_id: Uuid\",\n                      workspace_id as \"workspace_id: Uuid\",\n                      execution_process_id as \"execution_process_id: Uuid\",\n                      status as \"status!: SubtaskStatus\",\n                      fix_round,\n                      conflict as \"conflict: Json<SubtaskConflict>\",\n                      merge_commits as \"merge_commits: Json<BTreeMap<String, String>>\",\n                      error,\n                      started_at as \"started_at: DateTime<Utc>\",\n                      finished_at as \"finished_at: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM orchestration_subtasks\n               WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "plan_subtask_id",
+        "ordinal": 2,
+        "type_info": "Text"
+      },
+      {
+        "name": "position",
+        "ordinal": 3,
+        "type_info": "Integer"
+      },
+      {
+        "name": "sub_issue_id: Uuid",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "workspace_id: Uuid",
+        "ordinal": 5,
+        "type_info": "Blob"
+      },
+      {
+        "name": "execution_process_id: Uuid",
+        "ordinal": 6,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status!: SubtaskStatus",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "fix_round",
+        "ordinal": 8,
+        "type_info": "Integer"
+      },
+      {
+        "name": "conflict: Json<SubtaskConflict>",
+        "ordinal": 9,
+        "type_info": "Text"
+      },
+      {
+        "name": "merge_commits: Json<BTreeMap<String, String>>",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "started_at: DateTime<Utc>",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "finished_at: DateTime<Utc>",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 14,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "754c854490eec2e30db4ad1403a2f5f9c6f3c8019e5391cf8e0d306bc86181bc"
+}

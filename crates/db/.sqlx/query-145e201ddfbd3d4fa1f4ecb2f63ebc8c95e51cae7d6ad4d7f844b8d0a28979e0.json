@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET workspace_id = $2,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "145e201ddfbd3d4fa1f4ecb2f63ebc8c95e51cae7d6ad4d7f844b8d0a28979e0"
+}

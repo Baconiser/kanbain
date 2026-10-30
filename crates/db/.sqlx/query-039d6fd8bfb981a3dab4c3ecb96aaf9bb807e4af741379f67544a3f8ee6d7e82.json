@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET status = 'pending',\n                   updated_at = datetime('now', 'subsec')\n               WHERE status = 'running'\n                 AND issue_id IN (SELECT issue_id FROM ticket_orchestrations\n                                  WHERE status = 'running')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "039d6fd8bfb981a3dab4c3ecb96aaf9bb807e4af741379f67544a3f8ee6d7e82"
+}

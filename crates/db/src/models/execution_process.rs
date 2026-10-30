@@ -535,6 +535,22 @@ impl ExecutionProcess {
         Ok(())
     }
 
+    /// Record the sub-ticket an orchestrated coder run works on (Phase 5).
+    pub async fn set_subtask(
+        pool: &SqlitePool,
+        id: Uuid,
+        subtask_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE execution_processes SET subtask_id = ? WHERE id = ?",
+            subtask_id,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
     /// Record which agent definition ran this process.
     pub async fn set_agent_definition(
         pool: &SqlitePool,

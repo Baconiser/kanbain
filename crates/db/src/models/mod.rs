@@ -14,6 +14,7 @@ pub mod issue_event;
 pub mod issue_history;
 pub mod issue_relationship;
 pub mod merge;
+pub mod orchestration;
 pub mod plan;
 pub mod project;
 pub mod project_status;

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET status = 'merged', merge_commits = $2,\n                   error = NULL, finished_at = datetime('now', 'subsec'),\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "01f0591f7fc27f69e100afded00b1e094233264488a0a787cf0423b7b0409b53"
+}

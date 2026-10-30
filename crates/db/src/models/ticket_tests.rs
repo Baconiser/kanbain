@@ -638,3 +638,123 @@ async fn plans_get_versions_and_planning_is_claimed_once() {
             .is_empty()
     );
 }
+
+#[tokio::test]
+async fn orchestration_claims_conflicts_and_restart_requeue() {
+    use super::{
+        orchestration::{
+            OrchestrationStatus, OrchestrationSubtask, SubtaskConflict, SubtaskStatus,
+            TicketOrchestration,
+        },
+        plan::{Plan, PlanDocument, PlanSource},
+        workspace::{CreateWorkspace, Workspace},
+    };
+
+    let pool = pool().await;
+    let project = project(&pool, None).await;
+    let issue = Issue::create(&pool, project.id, &new_issue("Code me"))
+        .await
+        .unwrap();
+    let doc = PlanDocument::from_value(serde_json::json!({
+        "subtasks": [{"id": "1", "title": "A"}, {"id": "2", "title": "B"}]
+    }))
+    .unwrap();
+    let plan = Plan::create(&pool, issue.id, &doc, PlanSource::Planner, None)
+        .await
+        .unwrap();
+    let workspace = Workspace::create(
+        &pool,
+        &CreateWorkspace {
+            branch: "kanbain/KAN-1-code-me".into(),
+            name: None,
+            issue_id: Some(issue.id),
+        },
+        uuid::Uuid::new_v4(),
+    )
+    .await
+    .unwrap();
+    TicketOrchestration::upsert(&pool, issue.id, plan.id, workspace.id)
+        .await
+        .unwrap();
+    let a = OrchestrationSubtask::create(&pool, issue.id, "1", 0, None)
+        .await
+        .unwrap();
+    let b = OrchestrationSubtask::create(&pool, issue.id, "2", 1, None)
+        .await
+        .unwrap();
+    assert_eq!(a.status, SubtaskStatus::Pending);
+
+    // A subtask is claimed once.
+    assert!(OrchestrationSubtask::claim(&pool, a.id).await.unwrap());
+    assert!(!OrchestrationSubtask::claim(&pool, a.id).await.unwrap());
+
+    // A conflict queues the re-run with its context.
+    let conflict = SubtaskConflict {
+        files: vec!["shop/src/mail.rs".into()],
+        previous_diff: "+x".into(),
+    };
+    OrchestrationSubtask::set_conflict(&pool, a.id, &conflict)
+        .await
+        .unwrap();
+    let a = OrchestrationSubtask::find_by_id(&pool, a.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((a.status, a.fix_round), (SubtaskStatus::Pending, 1));
+    assert_eq!(a.conflict.unwrap().0, conflict);
+
+    let mut commits = std::collections::BTreeMap::new();
+    commits.insert("shop".to_string(), "abc".to_string());
+    OrchestrationSubtask::set_merged(&pool, a.id, &commits)
+        .await
+        .unwrap();
+
+    // Restart: a running ticket's running subtask goes back to pending.
+    assert!(OrchestrationSubtask::claim(&pool, b.id).await.unwrap());
+    assert_eq!(
+        OrchestrationSubtask::requeue_interrupted(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    let subtasks = OrchestrationSubtask::find_by_issue(&pool, issue.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        subtasks.iter().map(|s| s.status).collect::<Vec<_>>(),
+        [SubtaskStatus::Merged, SubtaskStatus::Pending]
+    );
+    assert_eq!(subtasks[0].merge_commits.as_ref().unwrap().0["shop"], "abc");
+    assert_eq!(
+        TicketOrchestration::find_running(&pool).await.unwrap(),
+        [issue.id]
+    );
+
+    // A stopped ticket's interrupted run stays stopped.
+    assert!(OrchestrationSubtask::claim(&pool, b.id).await.unwrap());
+    TicketOrchestration::set_status(&pool, issue.id, OrchestrationStatus::Stopped, None)
+        .await
+        .unwrap();
+    assert_eq!(
+        OrchestrationSubtask::requeue_interrupted(&pool)
+            .await
+            .unwrap(),
+        0
+    );
+    let b = OrchestrationSubtask::find_by_id(&pool, b.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(b.status, SubtaskStatus::Stopped);
+    assert!(OrchestrationSubtask::requeue(&pool, b.id).await.unwrap());
+
+    Issue::set_fix_round(&pool, issue.id, 2).await.unwrap();
+    assert_eq!(
+        Issue::find_by_id(&pool, issue.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .fix_round,
+        2
+    );
+}

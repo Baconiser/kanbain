@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT issue_id as \"issue_id!: Uuid\" FROM ticket_orchestrations\n               WHERE status = 'running'",
+  "describe": {
+    "columns": [
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9267cd8e7f96fd8404334302fb2de80f48119408bb9cb9d3ddf09bd8bb492219"
+}

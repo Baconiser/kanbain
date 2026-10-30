@@ -539,6 +539,15 @@ impl Issue {
             .ok_or(sqlx::Error::RowNotFound)?)
     }
 
+    /// Fix rounds count merge-conflict re-runs (Phase 5) and, later, tester
+    /// rounds (D24).
+    pub async fn set_fix_round(pool: &SqlitePool, id: Uuid, round: i64) -> Result<(), sqlx::Error> {
+        sqlx::query!("UPDATE issues SET fix_round = $2 WHERE id = $1", id, round)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn delete(pool: &SqlitePool, id: Uuid) -> Result<u64, sqlx::Error> {
         let result = sqlx::query!("DELETE FROM issues WHERE id = $1", id)
             .execute(pool)

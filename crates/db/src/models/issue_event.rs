@@ -46,6 +46,21 @@ pub enum IssueEventType {
     PlanRejected,
     /// A planner run ended without a usable plan or questions.
     PlanningFailed,
+    /// The orchestrator started coding an approved plan (`version`,
+    /// `subtasks`), or resumed it (`reason`: retry, restart).
+    CodingStarted,
+    /// A subtask's coder run started (`subtask`, `title`, `fix_round`).
+    SubtaskStarted,
+    /// A subtask's branch was merged into the ticket branch.
+    SubtaskMerged,
+    /// Merging a subtask conflicted; its coder re-runs (`files`,
+    /// `fix_round`).
+    MergeConflict,
+    /// A subtask's run failed or was stopped (`subtask`, `error`).
+    SubtaskFailed,
+    SubtaskStopped,
+    /// The orchestrator finished: `status` done, blocked or stopped.
+    CodingFinished,
     RunStarted,
     RunFinished,
 }

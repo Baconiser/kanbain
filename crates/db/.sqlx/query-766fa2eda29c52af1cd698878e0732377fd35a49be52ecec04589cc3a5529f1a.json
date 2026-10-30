@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM orchestration_subtasks WHERE issue_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "766fa2eda29c52af1cd698878e0732377fd35a49be52ecec04589cc3a5529f1a"
+}

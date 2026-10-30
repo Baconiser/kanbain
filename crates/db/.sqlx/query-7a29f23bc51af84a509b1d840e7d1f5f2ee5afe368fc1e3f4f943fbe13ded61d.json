@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO ticket_orchestrations (issue_id, plan_id, workspace_id)\n               VALUES ($1, $2, $3)\n               ON CONFLICT (issue_id) DO UPDATE\n                   SET plan_id = $2, workspace_id = $3, status = 'running', error = NULL,\n                       updated_at = datetime('now', 'subsec')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "7a29f23bc51af84a509b1d840e7d1f5f2ee5afe368fc1e3f4f943fbe13ded61d"
+}

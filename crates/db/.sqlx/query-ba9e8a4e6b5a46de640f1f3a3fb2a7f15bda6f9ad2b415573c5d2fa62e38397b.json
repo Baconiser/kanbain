@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\" FROM orchestration_subtasks\n               WHERE workspace_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "ba9e8a4e6b5a46de640f1f3a3fb2a7f15bda6f9ad2b415573c5d2fa62e38397b"
+}

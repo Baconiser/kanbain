@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_subtasks SET status = 'pending', conflict = $2,\n                   fix_round = fix_round + 1, finished_at = datetime('now', 'subsec'),\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "eb53455be9a5be574c62582455e28cedeafe43bb04c895335a3c2ec7d716fa97"
+}
