@@ -34,6 +34,7 @@ pub mod history;
 pub mod intake;
 pub mod jobs;
 pub mod knowledge;
+pub mod planning;
 pub mod pty;
 pub mod sandbox;
 pub mod search;
@@ -62,6 +63,7 @@ pub struct LocalDeployment {
     jobs: jobs::AgentJobs,
     intake: intake::IntakeService,
     history: history::HistoryService,
+    planning: planning::PlanningService,
     search: Option<embeddings::SearchService>,
 }
 
@@ -185,6 +187,9 @@ impl Deployment for LocalDeployment {
         if let Err(e) = db::models::issue_history::IssueHistory::fail_interrupted(&db.pool).await {
             tracing::warn!("Closing interrupted history analyses failed: {e}");
         }
+        if let Err(e) = db::models::plan::IssuePlanning::fail_interrupted(&db.pool).await {
+            tracing::warn!("Closing interrupted planner runs failed: {e}");
+        }
         if let Err(e) = sqlx::query(
             "UPDATE ticket_intakes SET status = 'failed', \
              error = 'Interrupted by an app restart' WHERE status = 'enhancing'",
@@ -213,6 +218,15 @@ impl Deployment for LocalDeployment {
 
         let history = history::HistoryService::new(db.clone(), jobs.clone());
         container.set_history(history.clone());
+        let planning = planning::PlanningService::new(
+            db.clone(),
+            container.clone(),
+            workspace_manager.clone(),
+            git.clone(),
+            agent_library.clone(),
+            jobs.clone(),
+        );
+        container.set_planning(planning.clone());
 
         let search_config = config.read().await.search.clone();
         let search = search::start_search(
@@ -223,6 +237,7 @@ impl Deployment for LocalDeployment {
         )
         .await;
         if let Some(search) = &search {
+            planning.set_search(search.clone());
             container
                 .sandbox()
                 .set_tools(std::sync::Arc::new(knowledge::KnowledgeTools::new(
@@ -266,6 +281,7 @@ impl Deployment for LocalDeployment {
             jobs,
             intake,
             history,
+            planning,
             search,
         };
 
@@ -360,6 +376,10 @@ impl LocalDeployment {
 
     pub fn history(&self) -> &history::HistoryService {
         &self.history
+    }
+
+    pub fn planning(&self) -> &planning::PlanningService {
+        &self.planning
     }
 
     /// `None` when the search index could not be opened.

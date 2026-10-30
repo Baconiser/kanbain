@@ -50,7 +50,7 @@ impl AgentJobs {
 
     /// The agent for a role: the one named after the role, else the first
     /// valid definition with that role.
-    async fn agent_name_for(&self, role: AgentRole) -> Result<String, String> {
+    pub async fn agent_name_for(&self, role: AgentRole) -> Result<String, String> {
         let agents = self
             .library
             .list_agents()

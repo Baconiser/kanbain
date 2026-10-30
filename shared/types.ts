@@ -101,7 +101,7 @@ actor: string, payload: Record<string, unknown>,
  */
 occurred_at: string, created_at: string, };
 
-export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", run_started = "run_started", run_finished = "run_finished" }
+export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", run_started = "run_started", run_finished = "run_finished" }
 
 export type AgentJob = { id: string, project_id: string | null, issue_id: string | null, kind: string, agent_def_id: string | null, model: string | null, status: AgentJobStatus, container_id: string | null, output: string | null, error: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, cost_usd: number, model_calls: number, budget_usd: number | null, started_at: string | null, completed_at: string | null, created_at: string, };
 
@@ -161,6 +161,36 @@ job: AgentJob | null,
  * The project skips the permission prompt.
  */
 always_allow: boolean, };
+
+export type PlanSubtask = { id: string, title: string, description: string, 
+/**
+ * Files the subtask likely touches; disjoint sets may run in parallel.
+ */
+files: Array<string>, 
+/**
+ * Ids of subtasks that must finish first.
+ */
+depends_on: Array<string>, };
+
+export type PlanCheckpoint = { after_subtasks: Array<string>, what: string, };
+
+export type PlanDocument = { subtasks: Array<PlanSubtask>, acceptance_criteria: Array<string>, assumptions: Array<string>, test_strategy: string, checkpoints: Array<PlanCheckpoint>, };
+
+export type PlanStatus = "draft" | "approved" | "rejected";
+
+export type PlanSource = "planner" | "edited";
+
+export type Plan = { id: string, issue_id: string, version: number, plan: PlanDocument, status: PlanStatus, source: PlanSource, feedback: string | null, execution_process_id: string | null, created_at: string, decided_at: string | null, };
+
+export type PlanningStatus = "idle" | "planning" | "waiting_for_answer" | "awaiting_approval" | "approved" | "failed";
+
+export type IssuePlanning = { issue_id: string, workspace_id: string | null, session_id: string | null, execution_process_id: string | null, status: PlanningStatus, repair_attempts: number, error: string | null, updated_at: string, };
+
+export type BoardPlanning = { issue_id: string, project_id: string, status: PlanningStatus, };
+
+export type PlanningView = { planning: IssuePlanning | null, plans: Array<Plan>, };
+
+export type SendBackPlanRequest = { feedback: string, };
 
 export type SearchConfig = { 
 /**

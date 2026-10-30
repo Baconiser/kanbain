@@ -372,11 +372,13 @@ async fn bulk_update_issues(
     let pool = &deployment.db().pool;
     let mut updated = Vec::with_capacity(payload.len());
     for item in &payload {
-        match Issue::find_by_id(pool, item.id).await? {
-            Some(issue) if issue.project_id == project_id => {}
+        let before = match Issue::find_by_id(pool, item.id).await? {
+            Some(issue) if issue.project_id == project_id => issue,
             _ => return Err(ApiError::Database(sqlx::Error::RowNotFound)),
-        }
-        updated.push(Issue::update(pool, item.id, &item.changes).await?);
+        };
+        let issue = Issue::update(pool, item.id, &item.changes).await?;
+        super::issues::start_planning_on_status(&deployment, &before, &issue).await;
+        updated.push(issue);
     }
     Ok(ResponseJson(ApiResponse::success(updated)))
 }

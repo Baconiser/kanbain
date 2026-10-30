@@ -36,7 +36,7 @@ use executors::{
         coding_agent_follow_up::CodingAgentFollowUpRequest,
         coding_agent_initial::CodingAgentInitialRequest,
     },
-    adapters::{RunSettings, adapter_for},
+    adapters::{AgentRole, RunSettings, adapter_for},
     approvals::{ExecutorApprovalService, NoopExecutorApprovalService},
     env::{ExecutionEnv, RepoContext, SandboxTarget},
     executors::{BaseCodingAgent, CancellationToken, ExecutorExitResult, ExecutorExitSignal},
@@ -97,6 +97,9 @@ pub struct LocalContainerService {
     /// Set once the deployment is built (the history service needs the
     /// sandbox this service owns).
     history: Arc<std::sync::OnceLock<crate::history::HistoryService>>,
+    /// Set once the deployment is built; the planning service starts runs
+    /// through this service.
+    planning: Arc<std::sync::OnceLock<crate::planning::PlanningService>>,
 }
 
 impl LocalContainerService {
@@ -139,6 +142,7 @@ impl LocalContainerService {
             sandbox,
             agent_library,
             history: Arc::default(),
+            planning: Arc::default(),
         };
 
         container.spawn_workspace_cleanup();
@@ -293,6 +297,10 @@ impl LocalContainerService {
         let _ = self.history.set(history);
     }
 
+    pub fn set_planning(&self, planning: crate::planning::PlanningService) {
+        let _ = self.planning.set(planning);
+    }
+
     /// Re-check a ticket's git history in the background (D18): at run
     /// start for new prior work, at run end for the run's commits (E19).
     fn spawn_history_check(&self, issue_id: Option<Uuid>) {
@@ -407,6 +415,7 @@ impl LocalContainerService {
         repos: &[Repo],
         workspace_root: &Path,
         agent_budget: Option<f64>,
+        agent_role: Option<AgentRole>,
     ) -> Result<(SandboxTarget, Option<f64>), ContainerError> {
         let pool = &self.db.pool;
         let agent_run = execution_process.run_reason == ExecutionProcessRunReason::CodingAgent;
@@ -462,6 +471,13 @@ impl LocalContainerService {
                 .and_then(|h| h.prior_work),
             None => None,
         };
+        // Planner runs get `related.md` and the current plan (Phase 4).
+        let extra_context = match (&issue, agent_role, self.planning.get()) {
+            (Some(issue), Some(AgentRole::Planner), Some(planning)) if agent_run => {
+                planning.context_files(issue).await
+            }
+            _ => Vec::new(),
+        };
         let target = self
             .sandbox
             .prepare(
@@ -475,6 +491,7 @@ impl LocalContainerService {
                     agent_run,
                     budget_usd: budget,
                     prior_work: prior_work.as_deref(),
+                    extra_context,
                 },
                 &log,
             )
@@ -1044,6 +1061,12 @@ impl LocalContainerService {
                 let _ = child.start_kill();
             }
             child_store.write().await.remove(&exec_id);
+
+            // Last, so a run the planner starts next (a repair) finds this
+            // one fully finished.
+            if let Some(planning) = container.planning.get() {
+                planning.on_run_finished(exec_id).await;
+            }
         })
     }
 
@@ -1658,6 +1681,7 @@ impl ContainerService for LocalContainerService {
                     &repos,
                     &current_dir,
                     agent.as_ref().and_then(|a| a.definition.limits.budget_usd),
+                    agent.as_ref().map(|a| a.definition.role),
                 )
                 .await?;
             if let Some(agent) = &agent {

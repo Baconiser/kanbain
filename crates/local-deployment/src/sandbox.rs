@@ -185,6 +185,8 @@ pub struct PrepareRun<'a> {
     pub budget_usd: Option<f64>,
     /// The ticket's prior-work summary (D18), as `prior_work.md`.
     pub prior_work: Option<&'a str>,
+    /// More `/kanbain/context` files by name (`related.md` for planners).
+    pub extra_context: Vec<(String, String)>,
 }
 
 fn random_token(prefix: &str) -> String {
@@ -599,6 +601,9 @@ impl SandboxRuntime {
             let mut files = vec![FileEntry::new("ticket.md", ticket).owned_by_root()];
             if let Some(prior_work) = run.prior_work {
                 files.push(FileEntry::new("prior_work.md", prior_work).owned_by_root());
+            }
+            for (name, contents) in &run.extra_context {
+                files.push(FileEntry::new(name, contents.as_str()).owned_by_root());
             }
             ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
         }

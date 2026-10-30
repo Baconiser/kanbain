@@ -53,7 +53,30 @@ async fn update_issue(
     if issue.external_id != before.external_id {
         deployment.history().spawn_check(issue.id);
     }
+    start_planning_on_status(&deployment, &before, &issue).await;
     Ok(ResponseJson(ApiResponse::success(issue)))
+}
+
+/// Dragging a ticket into a Planning status assigns it to the planner.
+/// Failures show on the ticket's planning, not on the move.
+pub(crate) async fn start_planning_on_status(
+    deployment: &DeploymentImpl,
+    before: &Issue,
+    after: &Issue,
+) {
+    let planning = deployment.planning();
+    match planning.should_start_on_status(before, after).await {
+        Ok(true) => {
+            if let Err(e) = planning
+                .start(after.id, local_deployment::planning::PlanTrigger::Assigned)
+                .await
+            {
+                tracing::warn!("Starting the planner for ticket {} failed: {e}", after.id);
+            }
+        }
+        Ok(false) => {}
+        Err(e) => tracing::warn!("Checking ticket {} for planning failed: {e}", after.id),
+    }
 }
 
 async fn delete_issue(
@@ -148,6 +171,10 @@ async fn create_comment(
     load_issue(&deployment, issue_id).await?;
     let comment =
         IssueComment::create(&deployment.db().pool, issue_id, USER_AUTHOR, &payload).await?;
+    // An answer to the planner's questions resumes it (D20).
+    if let Err(e) = deployment.planning().on_comment(&comment).await {
+        tracing::warn!("Resuming the planner for ticket {issue_id} failed: {e}");
+    }
     Ok(ResponseJson(ApiResponse::success(comment)))
 }
 

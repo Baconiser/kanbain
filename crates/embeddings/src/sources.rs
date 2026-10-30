@@ -1,6 +1,6 @@
 //! Text sources of a ticket (E15, D44): the ticket, its dropped original,
-//! comments, attachments' extracted text, the prior-work summary and
-//! summaries of finished runs. Every chunk header names the ticket.
+//! comments, attachments' extracted text, the prior-work summary, the
+//! newest plan (E6, Phase 4) and summaries of finished runs. Every chunk header names the ticket.
 
 use std::collections::HashSet;
 
@@ -8,7 +8,7 @@ use db::models::{
     attachment_text::AttachmentText, coding_agent_turn::CodingAgentTurn,
     execution_process::ExecutionProcess, execution_process_repo_state::ExecutionProcessRepoState,
     file::File, issue::Issue, issue_comment::IssueComment, issue_description::IssueDescription,
-    issue_history::IssueHistory, project::Project, repo::Repo,
+    issue_history::IssueHistory, plan::Plan, project::Project, repo::Repo,
 };
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -20,6 +20,7 @@ pub const KIND_COMMENT: &str = "comment";
 pub const KIND_ATTACHMENT: &str = "attachment";
 pub const KIND_PRIOR_WORK: &str = "prior_work";
 pub const KIND_RUN: &str = "run";
+pub const KIND_PLAN: &str = "plan";
 
 /// Text kinds this phase indexes; E21 lists more for later phases.
 pub const TEXT_KINDS: &[&str] = &[
@@ -28,6 +29,7 @@ pub const TEXT_KINDS: &[&str] = &[
     KIND_ATTACHMENT,
     KIND_PRIOR_WORK,
     KIND_RUN,
+    KIND_PLAN,
 ];
 
 /// One source to store.
@@ -213,6 +215,21 @@ pub async fn ticket_sources(
             issue_ref.clone(),
             &header,
             &format!("Prior work from the git history:\n\n{prior}"),
+        ));
+    }
+
+    // Only the newest version: older ones would crowd out other tickets.
+    if let Some(plan) = Plan::latest(pool, issue.id).await? {
+        sources.extend(source(
+            KIND_PLAN,
+            issue_ref.clone(),
+            &header,
+            &format!(
+                "Plan v{} ({}):\n\n{}",
+                plan.version,
+                plan.status,
+                plan.plan.0.to_markdown()
+            ),
         ));
     }
 
