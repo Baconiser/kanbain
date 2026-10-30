@@ -72,13 +72,33 @@ pub struct ExportQuery {
     pub agents: Option<String>,
 }
 
-async fn meta() -> ResponseJson<ApiResponse<AgentLibraryMeta>> {
+async fn meta(
+    State(deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<AgentLibraryMeta>> {
+    let mut opencode_models = suggested_models(AgentRuntime::Opencode);
+    match deployment.model_providers().list().await {
+        Ok(providers) => {
+            for provider in providers {
+                opencode_models.extend(provider.models.iter().map(|model| RuntimeModelOption {
+                    id: format!("{}/{model}", provider.id),
+                    label: format!("{model} ({})", provider.name),
+                }));
+                if provider.models.is_empty() {
+                    opencode_models.push(RuntimeModelOption {
+                        id: format!("{}/", provider.id),
+                        label: format!("{}/<model> ({})", provider.id, provider.name),
+                    });
+                }
+            }
+        }
+        Err(e) => tracing::warn!("Reading the model providers failed: {e}"),
+    }
     ResponseJson(ApiResponse::success(AgentLibraryMeta {
         roles: AgentRole::all(),
         runtimes: vec![AgentRuntime::ClaudeCode, AgentRuntime::Opencode],
         capabilities: Capability::all(),
         claude_code_models: suggested_models(AgentRuntime::ClaudeCode),
-        opencode_models: suggested_models(AgentRuntime::Opencode),
+        opencode_models,
         default_test_commands: DEFAULT_TEST_COMMANDS
             .iter()
             .map(|s| s.to_string())

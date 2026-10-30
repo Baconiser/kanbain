@@ -2,18 +2,21 @@
 
 use axum::{
     Extension, Router,
-    extract::State,
+    extract::{Path, State},
     middleware::from_fn_with_state,
     response::Json as ResponseJson,
-    routing::{get, post, put},
+    routing::{delete, get, post, put},
 };
 use db::models::{
     execution_process::ExecutionProcess, execution_process_event::ExecutionProcessEvent,
 };
 use deployment::Deployment;
 use local_deployment::{claude_login::ClaudeLoginState, sandbox::SandboxStatus};
-use serde::Deserialize;
-use services::services::secrets::{ANTHROPIC_API_KEY, OPENAI_API_KEY};
+use serde::{Deserialize, Serialize};
+use services::services::{
+    model_providers::{CustomModelProvider, api_key_secret},
+    secrets::{ANTHROPIC_API_KEY, OPENAI_API_KEY},
+};
 use ts_rs::TS;
 use utils::response::ApiResponse;
 
@@ -59,6 +62,102 @@ async fn set_credential(
     result.map_err(|e| ApiError::BadRequest(e.to_string()))?;
     Ok(ResponseJson(ApiResponse::success(
         deployment.sandbox().status().await,
+    )))
+}
+
+/// A custom provider as the settings show it; the key never leaves the
+/// backend.
+#[derive(Debug, Serialize, TS)]
+pub struct ModelProviderInfo {
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub provider: CustomModelProvider,
+    pub api_key_configured: bool,
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct SaveModelProvider {
+    #[serde(flatten)]
+    #[ts(flatten)]
+    pub provider: CustomModelProvider,
+    /// A new API key; `null` keeps the stored one.
+    #[serde(default)]
+    #[ts(optional)]
+    pub api_key: Option<String>,
+    /// Forget the stored key (for servers that take none).
+    #[serde(default)]
+    #[ts(optional)]
+    pub clear_api_key: Option<bool>,
+}
+
+async fn provider_infos(deployment: &DeploymentImpl) -> Result<Vec<ModelProviderInfo>, ApiError> {
+    let providers = deployment
+        .model_providers()
+        .list()
+        .await
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let mut infos = Vec::with_capacity(providers.len());
+    for provider in providers {
+        let api_key_configured = deployment
+            .secrets()
+            .contains(&api_key_secret(&provider.id))
+            .await
+            .unwrap_or(false);
+        infos.push(ModelProviderInfo {
+            provider,
+            api_key_configured,
+        });
+    }
+    Ok(infos)
+}
+
+async fn list_model_providers(
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<Vec<ModelProviderInfo>>>, ApiError> {
+    Ok(ResponseJson(ApiResponse::success(
+        provider_infos(&deployment).await?,
+    )))
+}
+
+/// Add or update a custom provider (by id).
+async fn save_model_provider(
+    State(deployment): State<DeploymentImpl>,
+    ResponseJson(payload): ResponseJson<SaveModelProvider>,
+) -> Result<ResponseJson<ApiResponse<Vec<ModelProviderInfo>>>, ApiError> {
+    let provider = deployment
+        .model_providers()
+        .upsert(payload.provider)
+        .await
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    let secret = api_key_secret(&provider.id);
+    let secrets = deployment.secrets();
+    let result = match payload.api_key.as_deref().map(str::trim) {
+        Some(key) if !key.is_empty() => secrets.set(&secret, key).await,
+        _ if payload.clear_api_key == Some(true) => secrets.remove(&secret).await,
+        _ => Ok(()),
+    };
+    result.map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    Ok(ResponseJson(ApiResponse::success(
+        provider_infos(&deployment).await?,
+    )))
+}
+
+async fn delete_model_provider(
+    State(deployment): State<DeploymentImpl>,
+    Path(id): Path<String>,
+) -> Result<ResponseJson<ApiResponse<Vec<ModelProviderInfo>>>, ApiError> {
+    deployment
+        .model_providers()
+        .remove(&id)
+        .await
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    deployment
+        .secrets()
+        .remove(&api_key_secret(&id))
+        .await
+        .map_err(|e| ApiError::BadRequest(e.to_string()))?;
+    Ok(ResponseJson(ApiResponse::success(
+        provider_infos(&deployment).await?,
     )))
 }
 
@@ -139,15 +238,20 @@ pub(super) fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
         .route("/sandbox/status", get(get_status))
         .route("/sandbox/credentials", put(set_credential))
         .route(
+            "/sandbox/model-providers",
+            get(list_model_providers).put(save_model_provider),
+        )
+        .route(
+            "/sandbox/model-providers/{id}",
+            delete(delete_model_provider),
+        )
+        .route(
             "/sandbox/claude-login",
             get(get_claude_login)
                 .post(start_claude_login)
                 .delete(cancel_claude_login),
         )
         .route("/sandbox/claude-login/code", post(submit_claude_login_code))
-        .route(
-            "/sandbox/claude-account",
-            axum::routing::delete(disconnect_claude_account),
-        )
+        .route("/sandbox/claude-account", delete(disconnect_claude_account))
         .merge(events)
 }

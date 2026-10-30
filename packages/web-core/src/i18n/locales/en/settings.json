@@ -634,6 +634,28 @@
         "submit": "Connect",
         "exchanging": "Finishing the sign-in…",
         "costNote": "Costs shown for subscription runs are API-equivalent estimates, and budgets apply to them."
+      },
+      "modelProviders": {
+        "title": "Custom model providers",
+        "description": "OpenAI-compatible APIs such as DeepSeek, OpenRouter, Groq or a local Ollama/vLLM. Calls go through the model proxy, which adds the key; agents never see it. Use them in OpenCode agents as <id>/<model>.",
+        "add": "Add provider",
+        "edit": "Edit",
+        "remove": "Remove",
+        "save": "Save provider",
+        "id": "ID",
+        "idHelper": "Lowercase letters, digits and dashes. Agents use models as <id>/<model>.",
+        "name": "Name",
+        "baseUrl": "Base URL",
+        "baseUrlHelper": "The URL before /chat/completions, usually ending in /v1.",
+        "models": "Models",
+        "modelsHelper": "Model IDs, separated by commas. They show up in the agent editor.",
+        "apiKey": "API key",
+        "apiKeyHelper": "Stored encrypted. Leave empty for servers that take no key.",
+        "apiKeyKeep": "Leave empty to keep the stored key.",
+        "keyConfigured": "API key stored",
+        "keyMissing": "No API key stored",
+        "noModels": "No models listed; use {{id}}/<model>.",
+        "costNote": "Without prices for these models, runs on them show no cost and budgets don't limit them."
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "Role",
         "runtime": "Runtime",
         "model": "Model",
-        "modelHelper": "opus, sonnet, haiku or a full model ID. On OpenCode, openai/<model> uses the OpenAI-compatible provider.",
+        "modelHelper": "opus, sonnet, haiku or a full model ID. On OpenCode, openai/<model> uses the OpenAI-compatible provider and <id>/<model> a custom provider from Settings → Sandbox.",
         "rolePrompt": "Role prompt",
         "rolePromptHelper": "Added to the runtime's system prompt. The task itself is sent as the first message.",
         "styles": "Style blocks",

@@ -124,8 +124,9 @@ pub struct AgentDefinition {
     pub description: Option<String>,
     pub role: AgentRole,
     pub runtime: AgentRuntime,
-    /// `opus`, `sonnet`, `haiku`, a full model id, or `openai/<model>` for
-    /// the OpenAI-compatible provider (OpenCode only).
+    /// `opus`, `sonnet`, `haiku`, a full model id, `openai/<model>` for the
+    /// OpenAI-compatible provider, or `<id>/<model>` for a custom provider
+    /// from the settings (both OpenCode only).
     pub model: String,
     /// The role layer of the system prompt.
     #[serde(default)]
@@ -227,9 +228,10 @@ impl AgentDefinition {
         if self.model.trim().is_empty() {
             return Err(DefinitionError::Invalid("model is required".into()));
         }
-        if self.runtime == AgentRuntime::ClaudeCode && self.model.starts_with("openai/") {
+        if self.runtime == AgentRuntime::ClaudeCode && self.model.contains('/') {
             return Err(DefinitionError::Invalid(
-                "Claude Code only runs Anthropic models; use the opencode runtime for openai/ models"
+                "Claude Code only runs Anthropic models; use the opencode runtime for openai/ \
+                 and custom provider models"
                     .into(),
             ));
         }

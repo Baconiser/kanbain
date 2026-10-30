@@ -59,6 +59,7 @@ pub struct LocalDeployment {
     pty: PtyService,
     pr_sync_notify: Arc<Notify>,
     secrets: Arc<services::services::secrets::SecretStore>,
+    model_providers: Arc<services::services::model_providers::ModelProviderStore>,
     agent_library: Arc<services::services::agent_library::AgentLibrary>,
     claude_login: claude_login::ClaudeLogin,
     jobs: jobs::AgentJobs,
@@ -168,8 +169,16 @@ impl Deployment for LocalDeployment {
         let secrets = Arc::new(services::services::secrets::SecretStore::new(
             utils::assets::asset_dir(),
         ));
-        let (sandbox, budget_rx) =
-            crate::sandbox::SandboxRuntime::new(db.clone(), config.clone(), secrets.clone()).await;
+        let model_providers = Arc::new(
+            services::services::model_providers::ModelProviderStore::new(utils::assets::asset_dir()),
+        );
+        let (sandbox, budget_rx) = crate::sandbox::SandboxRuntime::new(
+            db.clone(),
+            config.clone(),
+            secrets.clone(),
+            model_providers.clone(),
+        )
+        .await;
 
         let agent_library = services::services::agent_library::AgentLibrary::new(
             utils::assets::asset_dir(),
@@ -296,6 +305,7 @@ impl Deployment for LocalDeployment {
             pty,
             pr_sync_notify,
             secrets,
+            model_providers,
             agent_library,
             claude_login,
             jobs,
@@ -377,6 +387,10 @@ impl LocalDeployment {
 
     pub fn secrets(&self) -> &Arc<services::services::secrets::SecretStore> {
         &self.secrets
+    }
+
+    pub fn model_providers(&self) -> &Arc<services::services::model_providers::ModelProviderStore> {
+        &self.model_providers
     }
 
     pub fn agent_library(&self) -> &Arc<services::services::agent_library::AgentLibrary> {

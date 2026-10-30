@@ -634,6 +634,28 @@
         "submit": "接続",
         "exchanging": "サインインを完了しています…",
         "costNote": "サブスクリプションでの実行のコストは API 換算の見積もりで、予算はこの見積もりに適用されます。"
+      },
+      "modelProviders": {
+        "title": "カスタムモデルプロバイダー",
+        "description": "DeepSeek、OpenRouter、Groq、ローカルの Ollama/vLLM などの OpenAI 互換 API。呼び出しはモデルプロキシを経由し、プロキシがキーを付与するため、エージェントからキーは見えません。OpenCode エージェントでは <id>/<モデル> として使います。",
+        "add": "プロバイダーを追加",
+        "edit": "編集",
+        "remove": "削除",
+        "save": "プロバイダーを保存",
+        "id": "ID",
+        "idHelper": "小文字、数字、ハイフン。エージェントはモデルを <id>/<モデル> と指定します。",
+        "name": "名前",
+        "baseUrl": "ベース URL",
+        "baseUrlHelper": "/chat/completions の手前の URL。通常 /v1 で終わります。",
+        "models": "モデル",
+        "modelsHelper": "カンマ区切りのモデル ID。エージェントエディターに表示されます。",
+        "apiKey": "API キー",
+        "apiKeyHelper": "暗号化して保存されます。キー不要のサーバーでは空のままにします。",
+        "apiKeyKeep": "空のままにすると保存済みのキーを維持します。",
+        "keyConfigured": "API キー保存済み",
+        "keyMissing": "API キー未保存",
+        "noModels": "モデル未登録。{{id}}/<モデル> を使用してください。",
+        "costNote": "これらのモデルには価格がないため、実行のコストは表示されず、予算による制限もかかりません。"
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "ロール",
         "runtime": "ランタイム",
         "model": "モデル",
-        "modelHelper": "opus、sonnet、haiku、または完全なモデル ID。OpenCode では openai/<モデル> で OpenAI 互換プロバイダーを使います。",
+        "modelHelper": "opus、sonnet、haiku、または完全なモデル ID。OpenCode では openai/<モデル> で OpenAI 互換プロバイダー、<id>/<モデル> で 設定 → サンドボックス のカスタムプロバイダーを使います。",
         "rolePrompt": "ロールプロンプト",
         "rolePromptHelper": "ランタイムのシステムプロンプトに追加されます。タスク自体は最初のメッセージとして送信されます。",
         "styles": "スタイルブロック",

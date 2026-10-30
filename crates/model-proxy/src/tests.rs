@@ -104,6 +104,7 @@ async fn start_proxy(upstream: &str) -> (ModelProxy, Arc<RecordingEvents>, Strin
         Arc::new(StaticCredentials {
             anthropic: Some(StaticCredentials::anthropic_api_key(upstream, "real-key")),
             openai: None,
+            custom: HashMap::new(),
         }),
         events.clone(),
     );
@@ -296,6 +297,7 @@ async fn oauth_credential_merges_beta_flags() {
                 "sk-ant-oat01-real",
             )),
             openai: None,
+            custom: HashMap::new(),
         }),
         Arc::new(RecordingEvents::default()),
     );
@@ -322,6 +324,75 @@ async fn oauth_credential_merges_beta_flags() {
         beta,
         "fine-grained-tool-streaming-2025-05-14,oauth-2025-04-20"
     );
+}
+
+#[tokio::test]
+async fn custom_provider_route_swaps_key_and_meters_usage() {
+    let seen = Arc::new(StdMutex::new(None::<(String, Value)>));
+    let seen_in = seen.clone();
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(move |headers: HeaderMap, Json(body): Json<Value>| {
+            let seen = seen_in.clone();
+            async move {
+                let auth = headers["authorization"].to_str().unwrap().to_string();
+                *seen.lock().unwrap() = Some((auth, body));
+                Json(json!({"model": "deepseek-chat", "choices": [],
+                            "usage": {"prompt_tokens": 10, "completion_tokens": 5}}))
+            }
+        }),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let upstream = format!("http://{}/v1", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, app).await });
+
+    let events = Arc::new(RecordingEvents::default());
+    let proxy = ModelProxy::new(
+        PriceTable::default(),
+        Arc::new(StaticCredentials {
+            anthropic: None,
+            openai: None,
+            custom: HashMap::from([(
+                "deepseek".to_string(),
+                StaticCredentials::bearer(&upstream, "sk-deepseek"),
+            )]),
+        }),
+        events.clone(),
+    );
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(proxy.clone().serve(listener));
+    let token = proxy.issue_token(Uuid::new_v4(), None, 0.0);
+    let client = reqwest::Client::new();
+    let body = json!({"model": "deepseek-chat", "messages": []});
+
+    let response = client
+        .post(format!("http://{addr}/p/deepseek/chat/completions"))
+        .header("authorization", format!("Bearer {token}"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    let (auth, sent) = seen.lock().unwrap().clone().unwrap();
+    assert_eq!(auth, "Bearer sk-deepseek");
+    assert_eq!(sent["model"], "deepseek-chat");
+    let calls = events.wait_for_calls(1).await;
+    assert_eq!(calls[0].provider, Provider::Custom("deepseek".into()));
+    assert_eq!(
+        serde_json::to_value(&calls[0].provider).unwrap(),
+        "deepseek"
+    );
+    assert_eq!(calls[0].usage.input_tokens, 10);
+
+    let response = client
+        .post(format!("http://{addr}/p/unknown/chat/completions"))
+        .header("authorization", format!("Bearer {token}"))
+        .json(&body)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 503);
 }
 
 struct EchoTools;

@@ -634,6 +634,28 @@
         "submit": "연결",
         "exchanging": "로그인을 마무리하는 중…",
         "costNote": "구독으로 실행한 비용은 API 기준 추정치이며, 예산은 이 추정치에 적용됩니다."
+      },
+      "modelProviders": {
+        "title": "사용자 지정 모델 공급자",
+        "description": "DeepSeek, OpenRouter, Groq 또는 로컬 Ollama/vLLM 같은 OpenAI 호환 API입니다. 호출은 모델 프록시를 거치며 프록시가 키를 추가하므로 에이전트는 키를 볼 수 없습니다. OpenCode 에이전트에서 <id>/<모델>로 사용하세요.",
+        "add": "공급자 추가",
+        "edit": "편집",
+        "remove": "제거",
+        "save": "공급자 저장",
+        "id": "ID",
+        "idHelper": "소문자, 숫자, 대시만 사용합니다. 에이전트는 모델을 <id>/<모델>로 지정합니다.",
+        "name": "이름",
+        "baseUrl": "기본 URL",
+        "baseUrlHelper": "/chat/completions 앞의 URL로, 보통 /v1로 끝납니다.",
+        "models": "모델",
+        "modelsHelper": "쉼표로 구분한 모델 ID입니다. 에이전트 편집기에 표시됩니다.",
+        "apiKey": "API 키",
+        "apiKeyHelper": "암호화되어 저장됩니다. 키가 필요 없는 서버는 비워 두세요.",
+        "apiKeyKeep": "비워 두면 저장된 키를 유지합니다.",
+        "keyConfigured": "API 키 저장됨",
+        "keyMissing": "저장된 API 키 없음",
+        "noModels": "등록된 모델 없음. {{id}}/<모델>을 사용하세요.",
+        "costNote": "이 모델들은 가격 정보가 없어 실행 비용이 표시되지 않으며 예산 제한도 적용되지 않습니다."
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "역할",
         "runtime": "런타임",
         "model": "모델",
-        "modelHelper": "opus, sonnet, haiku 또는 전체 모델 ID. OpenCode에서는 openai/<모델>이 OpenAI 호환 제공자를 사용합니다.",
+        "modelHelper": "opus, sonnet, haiku 또는 전체 모델 ID. OpenCode에서는 openai/<모델>이 OpenAI 호환 공급자를, <id>/<모델>이 설정 → 샌드박스의 사용자 지정 공급자를 사용합니다.",
         "rolePrompt": "역할 프롬프트",
         "rolePromptHelper": "런타임의 시스템 프롬프트에 추가됩니다. 작업 자체는 첫 메시지로 전송됩니다.",
         "styles": "스타일 블록",

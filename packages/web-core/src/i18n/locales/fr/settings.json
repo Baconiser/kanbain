@@ -634,6 +634,28 @@
         "submit": "Connecter",
         "exchanging": "Finalisation de la connexion…",
         "costNote": "Les coûts des exécutions avec abonnement sont des estimations équivalentes à l'API, et les budgets s'y appliquent."
+      },
+      "modelProviders": {
+        "title": "Fournisseurs de modèles personnalisés",
+        "description": "API compatibles OpenAI comme DeepSeek, OpenRouter, Groq ou un Ollama/vLLM local. Les appels passent par le proxy de modèles, qui ajoute la clé ; les agents ne la voient jamais. Utilisez-les dans les agents OpenCode sous la forme <id>/<modèle>.",
+        "add": "Ajouter un fournisseur",
+        "edit": "Modifier",
+        "remove": "Supprimer",
+        "save": "Enregistrer le fournisseur",
+        "id": "ID",
+        "idHelper": "Minuscules, chiffres et tirets. Les agents utilisent les modèles sous la forme <id>/<modèle>.",
+        "name": "Nom",
+        "baseUrl": "URL de base",
+        "baseUrlHelper": "L'URL avant /chat/completions, se terminant généralement par /v1.",
+        "models": "Modèles",
+        "modelsHelper": "Identifiants de modèles séparés par des virgules. Ils apparaissent dans l'éditeur d'agents.",
+        "apiKey": "Clé API",
+        "apiKeyHelper": "Stockée chiffrée. Laissez vide pour les serveurs sans clé.",
+        "apiKeyKeep": "Laissez vide pour conserver la clé enregistrée.",
+        "keyConfigured": "Clé API enregistrée",
+        "keyMissing": "Aucune clé API enregistrée",
+        "noModels": "Aucun modèle listé ; utilisez {{id}}/<modèle>.",
+        "costNote": "Sans prix pour ces modèles, leurs exécutions n'affichent aucun coût et les budgets ne les limitent pas."
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "Rôle",
         "runtime": "Runtime",
         "model": "Modèle",
-        "modelHelper": "opus, sonnet, haiku ou un identifiant de modèle complet. Sur OpenCode, openai/<modèle> utilise le fournisseur compatible OpenAI.",
+        "modelHelper": "opus, sonnet, haiku ou un identifiant de modèle complet. Sur OpenCode, openai/<modèle> utilise le fournisseur compatible OpenAI et <id>/<modèle> un fournisseur personnalisé de Paramètres → Sandbox.",
         "rolePrompt": "Prompt de rôle",
         "rolePromptHelper": "Ajouté au prompt système du runtime. La tâche est envoyée comme premier message.",
         "styles": "Blocs de style",

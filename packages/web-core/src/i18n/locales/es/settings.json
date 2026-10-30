@@ -634,6 +634,28 @@
         "submit": "Conectar",
         "exchanging": "Finalizando el inicio de sesión…",
         "costNote": "Los costes de las ejecuciones con suscripción son estimaciones equivalentes a la API, y los presupuestos se aplican a ellas."
+      },
+      "modelProviders": {
+        "title": "Proveedores de modelos personalizados",
+        "description": "APIs compatibles con OpenAI como DeepSeek, OpenRouter, Groq o un Ollama/vLLM local. Las llamadas pasan por el proxy de modelos, que añade la clave; los agentes nunca la ven. Úsalos en agentes de OpenCode como <id>/<modelo>.",
+        "add": "Añadir proveedor",
+        "edit": "Editar",
+        "remove": "Quitar",
+        "save": "Guardar proveedor",
+        "id": "ID",
+        "idHelper": "Minúsculas, dígitos y guiones. Los agentes usan los modelos como <id>/<modelo>.",
+        "name": "Nombre",
+        "baseUrl": "URL base",
+        "baseUrlHelper": "La URL antes de /chat/completions, normalmente terminada en /v1.",
+        "models": "Modelos",
+        "modelsHelper": "IDs de modelo separados por comas. Aparecen en el editor de agentes.",
+        "apiKey": "Clave de API",
+        "apiKeyHelper": "Se guarda cifrada. Déjala vacía para servidores sin clave.",
+        "apiKeyKeep": "Déjala vacía para conservar la clave guardada.",
+        "keyConfigured": "Clave de API guardada",
+        "keyMissing": "No hay clave de API guardada",
+        "noModels": "No hay modelos; usa {{id}}/<modelo>.",
+        "costNote": "Sin precios para estos modelos, sus ejecuciones no muestran coste y los presupuestos no los limitan."
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "Rol",
         "runtime": "Runtime",
         "model": "Modelo",
-        "modelHelper": "opus, sonnet, haiku o un ID de modelo completo. En OpenCode, openai/<modelo> usa el proveedor compatible con OpenAI.",
+        "modelHelper": "opus, sonnet, haiku o un ID de modelo completo. En OpenCode, openai/<modelo> usa el proveedor compatible con OpenAI y <id>/<modelo> un proveedor personalizado de Ajustes → Sandbox.",
         "rolePrompt": "Prompt de rol",
         "rolePromptHelper": "Se añade al prompt de sistema del runtime. La tarea se envía como primer mensaje.",
         "styles": "Bloques de estilo",

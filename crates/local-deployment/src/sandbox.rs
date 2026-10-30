@@ -43,6 +43,7 @@ use serde::Serialize;
 use serde_json::json;
 use services::services::{
     config::Config,
+    model_providers::{ModelProviderStore, api_key_secret},
     secrets::{ANTHROPIC_API_KEY, CLAUDE_OAUTH_TOKEN, OPENAI_API_KEY, SecretStore},
 };
 use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore, mpsc};
@@ -209,6 +210,7 @@ impl SandboxRuntime {
         db: DBService,
         config: Arc<RwLock<Config>>,
         secrets: Arc<SecretStore>,
+        model_providers: Arc<ModelProviderStore>,
     ) -> (Self, mpsc::UnboundedReceiver<Uuid>) {
         let instance = format!(
             "{:08x}",
@@ -222,6 +224,7 @@ impl SandboxRuntime {
             prices,
             Arc::new(SecretCredentials {
                 secrets: secrets.clone(),
+                model_providers,
             }),
             Arc::new(RunEvents {
                 db: db.clone(),
@@ -1342,12 +1345,39 @@ async fn load_prices() -> PriceTable {
 /// `KANBAIN_OPENAI_BASE_URL` point the proxy at another upstream.
 struct SecretCredentials {
     secrets: Arc<SecretStore>,
+    model_providers: Arc<ModelProviderStore>,
+}
+
+impl SecretCredentials {
+    /// A custom provider's base URL and stored key.
+    async fn custom(&self, id: &str) -> Option<Upstream> {
+        let provider = match self.model_providers.get(id).await {
+            Ok(provider) => provider?,
+            Err(e) => {
+                tracing::error!("Reading the model providers failed: {e}");
+                return None;
+            }
+        };
+        match self.secrets.get(&api_key_secret(id)).await {
+            Ok(Some(key)) => Some(StaticCredentials::bearer(&provider.base_url, &key)),
+            // Local servers (Ollama, vLLM) often take no key.
+            Ok(None) => Some(Upstream {
+                base_url: provider.base_url,
+                headers: vec![],
+            }),
+            Err(e) => {
+                tracing::error!("Reading the API key of provider {id} failed: {e}");
+                None
+            }
+        }
+    }
 }
 
 #[async_trait]
 impl model_proxy::Credentials for SecretCredentials {
-    async fn upstream(&self, provider: Provider) -> Option<Upstream> {
+    async fn upstream(&self, provider: &Provider) -> Option<Upstream> {
         let (secret, env_key, base_env, default_base) = match provider {
+            Provider::Custom(id) => return self.custom(id).await,
             Provider::Anthropic => (
                 ANTHROPIC_API_KEY,
                 "ANTHROPIC_API_KEY",
@@ -1363,7 +1393,7 @@ impl model_proxy::Credentials for SecretCredentials {
         };
         let base = std::env::var(base_env).unwrap_or_else(|_| default_base.to_string());
         // A connected Claude account takes precedence over an API key.
-        if provider == Provider::Anthropic {
+        if *provider == Provider::Anthropic {
             match self.secrets.get(CLAUDE_OAUTH_TOKEN).await {
                 Ok(Some(token)) => return Some(StaticCredentials::anthropic_oauth(&base, &token)),
                 Ok(None) => {}
@@ -1380,7 +1410,7 @@ impl model_proxy::Credentials for SecretCredentials {
         };
         Some(match provider {
             Provider::Anthropic => StaticCredentials::anthropic_api_key(&base, &key),
-            Provider::OpenAi => StaticCredentials::bearer(&base, &key),
+            Provider::OpenAi | Provider::Custom(_) => StaticCredentials::bearer(&base, &key),
         })
     }
 }

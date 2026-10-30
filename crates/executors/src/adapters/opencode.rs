@@ -2,7 +2,8 @@
 //! tests).
 //!
 //! Everything goes into `OPENCODE_CONFIG_CONTENT`: providers pointing at the
-//! KanbAIn model proxy (OpenCode has no base-URL env var), one primary agent
+//! KanbAIn model proxy (OpenCode has no base-URL env var; custom providers
+//! from the settings sit at `/p/<id>` on it), one primary agent
 //! with `steps` and the fine-grained `permission` map, and `instructions`
 //! naming a file with the role and styles. Instructions are appended to
 //! OpenCode's own system prompt, like Claude Code's `--append-system-prompt`.
@@ -25,15 +26,43 @@ pub const OPENAI_PROVIDER_ID: &str = "kanbain-openai";
 
 pub struct OpencodeAdapter;
 
+/// OpenCode's provider id for a custom provider from the settings.
+fn custom_provider_id(id: &str) -> String {
+    format!("kanbain-{id}")
+}
+
+/// A custom provider model (`<id>/<model>`): the provider id and model.
+/// `openai/` and `anthropic/` are the built-in providers.
+pub fn custom_provider_model(model: &str) -> Option<(&str, &str)> {
+    let (id, model) = model.split_once('/')?;
+    (!matches!(id, "openai" | "anthropic") && !id.is_empty() && !model.is_empty())
+        .then_some((id, model))
+}
+
 /// `provider/model` for OpenCode.
 pub fn opencode_model(model: &str) -> String {
     if let Some(rest) = model.strip_prefix("openai/") {
         format!("{OPENAI_PROVIDER_ID}/{rest}")
+    } else if let Some((id, rest)) = custom_provider_model(model) {
+        format!("{}/{rest}", custom_provider_id(id))
     } else if model.contains('/') {
         model.to_string()
     } else {
         format!("anthropic/{}", resolve_alias(model))
     }
+}
+
+/// An OpenAI-compatible OpenCode provider with one model.
+fn openai_compatible(name: &str, base_url: &str, model: &str) -> Value {
+    json!({
+        "npm": "@ai-sdk/openai-compatible",
+        "name": name,
+        "options": {
+            "baseURL": base_url,
+            "apiKey": "{env:OPENAI_API_KEY}"
+        },
+        "models": { model: { "name": model, "tool_call": true } }
+    })
 }
 
 /// Where agents hand in their results (`sandbox::OUT_DIR`; executors
@@ -122,15 +151,21 @@ impl RuntimeAdapter for OpencodeAdapter {
         if let Some(openai_model) = model.strip_prefix(&format!("{OPENAI_PROVIDER_ID}/")) {
             providers.insert(
                 OPENAI_PROVIDER_ID.into(),
-                json!({
-                    "npm": "@ai-sdk/openai-compatible",
-                    "name": "OpenAI-compatible (KanbAIn proxy)",
-                    "options": {
-                        "baseURL": "{env:OPENAI_BASE_URL}",
-                        "apiKey": "{env:OPENAI_API_KEY}"
-                    },
-                    "models": { openai_model: { "name": openai_model, "tool_call": true } }
-                }),
+                openai_compatible(
+                    "OpenAI-compatible (KanbAIn proxy)",
+                    "{env:OPENAI_BASE_URL}",
+                    openai_model,
+                ),
+            );
+        } else if let Some((id, custom_model)) = custom_provider_model(&def.model) {
+            // The proxy root is ANTHROPIC_BASE_URL; it adds the real key.
+            providers.insert(
+                custom_provider_id(id),
+                openai_compatible(
+                    &format!("{id} (KanbAIn proxy)"),
+                    &format!("{{env:ANTHROPIC_BASE_URL}}/p/{id}"),
+                    custom_model,
+                ),
             );
         }
         config.insert("provider".into(), Value::Object(providers));
@@ -280,6 +315,23 @@ mod tests {
         assert_eq!(provider["npm"], "@ai-sdk/openai-compatible");
         assert_eq!(provider["options"]["baseURL"], "{env:OPENAI_BASE_URL}");
         assert!(provider["models"]["gpt-4.1-mini"].is_object());
+    }
+
+    #[test]
+    fn custom_provider_goes_through_the_proxy() {
+        let (launch, config) = launch(
+            "name: d\nrole: coder\nruntime: opencode\nmodel: openrouter/meta-llama/llama-4\n",
+        );
+        assert_eq!(launch.model, "kanbain-openrouter/meta-llama/llama-4");
+        let provider = &config["provider"]["kanbain-openrouter"];
+        assert_eq!(provider["npm"], "@ai-sdk/openai-compatible");
+        assert_eq!(
+            provider["options"]["baseURL"],
+            "{env:ANTHROPIC_BASE_URL}/p/openrouter"
+        );
+        assert_eq!(provider["options"]["apiKey"], "{env:OPENAI_API_KEY}");
+        assert!(provider["models"]["meta-llama/llama-4"].is_object());
+        assert_eq!(opencode_model("anthropic/claude-x"), "anthropic/claude-x");
     }
 
     #[test]

@@ -14,6 +14,7 @@ pub mod notification;
 pub mod orchestrator;
 pub mod pr_monitor;
 
+pub mod model_providers;
 #[cfg(feature = "qa-mode")]
 pub mod qa_repos;
 pub mod queued_message;

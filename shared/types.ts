@@ -999,8 +999,9 @@ wall_minutes?: number | null, };
 
 export type AgentDefinition = { name: string, description?: string | null, role: AgentRole, runtime: AgentRuntime, 
 /**
- * `opus`, `sonnet`, `haiku`, a full model id, or `openai/<model>` for
- * the OpenAI-compatible provider (OpenCode only).
+ * `opus`, `sonnet`, `haiku`, a full model id, `openai/<model>` for the
+ * OpenAI-compatible provider, or `<id>/<model>` for a custom provider
+ * from the settings (both OpenCode only).
  */
 model: string, 
 /**
@@ -1074,6 +1075,71 @@ export type SetModelCredential = { provider: CredentialProvider,
 api_key: string | null, };
 
 export type ClaudeLoginCode = { code: string, };
+
+export type CustomModelProvider = { 
+/**
+ * Lowercase slug; agents name models as `<id>/<model>`.
+ */
+id: string, 
+/**
+ * Display name.
+ */
+name: string, 
+/**
+ * OpenAI-compatible base URL, e.g. `https://api.deepseek.com/v1`.
+ * Requests go to `<base_url>/chat/completions`.
+ */
+base_url: string, 
+/**
+ * Model ids offered in the agent editor.
+ */
+models: Array<string>, };
+
+export type ModelProviderInfo = { api_key_configured: boolean, 
+/**
+ * Lowercase slug; agents name models as `<id>/<model>`.
+ */
+id: string, 
+/**
+ * Display name.
+ */
+name: string, 
+/**
+ * OpenAI-compatible base URL, e.g. `https://api.deepseek.com/v1`.
+ * Requests go to `<base_url>/chat/completions`.
+ */
+base_url: string, 
+/**
+ * Model ids offered in the agent editor.
+ */
+models: Array<string>, };
+
+export type SaveModelProvider = { 
+/**
+ * A new API key; `null` keeps the stored one.
+ */
+api_key?: string, 
+/**
+ * Forget the stored key (for servers that take none).
+ */
+clear_api_key?: boolean, 
+/**
+ * Lowercase slug; agents name models as `<id>/<model>`.
+ */
+id: string, 
+/**
+ * Display name.
+ */
+name: string, 
+/**
+ * OpenAI-compatible base URL, e.g. `https://api.deepseek.com/v1`.
+ * Requests go to `<base_url>/chat/completions`.
+ */
+base_url: string, 
+/**
+ * Model ids offered in the agent editor.
+ */
+models: Array<string>, };
 
 export type ClaudeLoginState = { "state": "idle" } | { "state": "starting" } | { "state": "waiting_for_code", url: string, } | { "state": "exchanging" } | { "state": "connected" } | { "state": "failed", message: string, };
 

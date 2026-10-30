@@ -9,6 +9,8 @@
 //! Routes:
 //! - `/v1/*`: Anthropic API (Claude Code with `ANTHROPIC_BASE_URL` = proxy root).
 //! - `/openai/v1/*`: an OpenAI-compatible API (`/chat/completions`, `/responses`).
+//! - `/p/<id>/*`: a custom OpenAI-compatible provider added in the settings;
+//!   the rest of the path is appended to its base URL.
 
 pub mod mcp;
 pub mod prices;
@@ -46,12 +48,27 @@ const MAX_REQUEST_BYTES: usize = 64 * 1024 * 1024;
 /// response is still streaming (Anthropic reports output tokens at the end).
 const CHARS_PER_TOKEN: u64 = 4;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Provider {
     Anthropic,
     #[serde(rename = "openai")]
     OpenAi,
+    /// A custom OpenAI-compatible provider, by id. Serialized as the id.
+    #[serde(untagged)]
+    Custom(String),
+}
+
+impl Provider {
+    /// Speaks the OpenAI API (chat completions, usage chunks).
+    fn is_openai_compatible(&self) -> bool {
+        matches!(self, Provider::OpenAi | Provider::Custom(_))
+    }
+}
+
+/// The proxy path prefix for a custom provider.
+pub fn custom_provider_path(id: &str) -> String {
+    format!("/p/{id}")
 }
 
 /// Where to send a provider's requests and which auth headers to add.
@@ -65,7 +82,7 @@ pub struct Upstream {
 /// Supplies real credentials. They never reach the container.
 #[async_trait]
 pub trait Credentials: Send + Sync {
-    async fn upstream(&self, provider: Provider) -> Option<Upstream>;
+    async fn upstream(&self, provider: &Provider) -> Option<Upstream>;
 }
 
 /// One proxied model call, reported when its response has finished.
@@ -283,6 +300,11 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
 
     let (provider, upstream_path) = if let Some(rest) = path_and_query.strip_prefix("/openai") {
         (Provider::OpenAi, rest.to_string())
+    } else if let Some(rest) = path_and_query.strip_prefix("/p/")
+        && let Some((id, rest)) = rest.split_once('/')
+        && !id.is_empty()
+    {
+        (Provider::Custom(id.to_string()), format!("/{rest}"))
     } else if path_and_query.starts_with("/v1/") {
         (Provider::Anthropic, path_and_query.clone())
     } else {
@@ -312,7 +334,7 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
         );
     }
 
-    let Some(upstream) = inner.credentials.upstream(provider).await else {
+    let Some(upstream) = inner.credentials.upstream(&provider).await else {
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "authentication_error",
@@ -330,7 +352,7 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
             );
         }
     };
-    let (body, requested_model) = prepare_body(provider, &upstream_path, body);
+    let (body, requested_model) = prepare_body(&provider, &upstream_path, body);
 
     let url = format!(
         "{}{}",
@@ -385,7 +407,7 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
         grant,
         record: ModelCallRecord {
             run_id: Uuid::nil(),
-            provider,
+            provider: provider.clone(),
             path: parts.uri.path().to_string(),
             model: requested_model.clone(),
             status: status.as_u16(),
@@ -398,7 +420,7 @@ async fn proxy_handler(State(inner): State<Arc<Inner>>, request: Request) -> Res
         tracker: UsageTracker::with_model(requested_model),
         started,
         // Only metered endpoints produce usage; count_tokens etc. are free.
-        metered: is_metered(provider, parts.uri.path()),
+        metered: is_metered(&provider, parts.uri.path()),
     };
 
     let body = if streamed {
@@ -440,16 +462,17 @@ fn merge_betas(values: &[String]) -> Option<String> {
     (!flags.is_empty()).then(|| flags.join(","))
 }
 
-fn is_metered(provider: Provider, path: &str) -> bool {
-    match provider {
-        Provider::Anthropic => path == "/v1/messages",
-        Provider::OpenAi => path.ends_with("/chat/completions") || path.ends_with("/responses"),
+fn is_metered(provider: &Provider, path: &str) -> bool {
+    if provider.is_openai_compatible() {
+        path.ends_with("/chat/completions") || path.ends_with("/responses")
+    } else {
+        path == "/v1/messages"
     }
 }
 
 /// Read the requested model and, for streamed OpenAI chat completions, ask
 /// for the final usage chunk.
-fn prepare_body(provider: Provider, path: &str, body: Bytes) -> (Bytes, Option<String>) {
+fn prepare_body(provider: &Provider, path: &str, body: Bytes) -> (Bytes, Option<String>) {
     let Ok(mut value) = serde_json::from_slice::<Value>(&body) else {
         return (body, None);
     };
@@ -457,7 +480,7 @@ fn prepare_body(provider: Provider, path: &str, body: Bytes) -> (Bytes, Option<S
         .get("model")
         .and_then(Value::as_str)
         .map(str::to_string);
-    if provider == Provider::OpenAi
+    if provider.is_openai_compatible()
         && path.contains("/chat/completions")
         && value.get("stream").and_then(Value::as_bool) == Some(true)
         && let Some(object) = value.as_object_mut()
@@ -622,6 +645,7 @@ fn delta_chars(value: &Value) -> u64 {
 pub struct StaticCredentials {
     pub anthropic: Option<Upstream>,
     pub openai: Option<Upstream>,
+    pub custom: HashMap<String, Upstream>,
 }
 
 impl StaticCredentials {
@@ -653,10 +677,11 @@ impl StaticCredentials {
 
 #[async_trait]
 impl Credentials for StaticCredentials {
-    async fn upstream(&self, provider: Provider) -> Option<Upstream> {
+    async fn upstream(&self, provider: &Provider) -> Option<Upstream> {
         match provider {
             Provider::Anthropic => self.anthropic.clone(),
             Provider::OpenAi => self.openai.clone(),
+            Provider::Custom(id) => self.custom.get(id).cloned(),
         }
     }
 }

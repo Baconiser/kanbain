@@ -17,6 +17,8 @@ import {
   SandboxStatus,
   AppLogView,
   SetModelCredential,
+  ModelProviderInfo,
+  SaveModelProvider,
   AgentDefinition,
   AgentLibraryMeta,
   AgentSummary,
@@ -771,6 +773,31 @@ export const sandboxApi = {
       method: 'DELETE',
     });
     return handleApiResponse<SandboxStatus>(response);
+  },
+
+  listModelProviders: async (): Promise<ModelProviderInfo[]> => {
+    const response = await makeRequest('/api/sandbox/model-providers', {
+      cache: 'no-store',
+    });
+    return handleApiResponse<ModelProviderInfo[]>(response);
+  },
+
+  saveModelProvider: async (
+    data: SaveModelProvider
+  ): Promise<ModelProviderInfo[]> => {
+    const response = await makeRequest('/api/sandbox/model-providers', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return handleApiResponse<ModelProviderInfo[]>(response);
+  },
+
+  deleteModelProvider: async (id: string): Promise<ModelProviderInfo[]> => {
+    const response = await makeRequest(
+      `/api/sandbox/model-providers/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    );
+    return handleApiResponse<ModelProviderInfo[]>(response);
   },
 };
 

@@ -634,6 +634,28 @@
         "submit": "連結",
         "exchanging": "正在完成登入…",
         "costNote": "訂閱執行顯示的費用是依 API 價格估算的,預算依此估算執行。"
+      },
+      "modelProviders": {
+        "title": "自訂模型提供者",
+        "description": "相容 OpenAI 的 API,例如 DeepSeek、OpenRouter、Groq 或本機 Ollama/vLLM。呼叫會經過模型代理,由代理加入金鑰;代理程式永遠看不到金鑰。在 OpenCode 代理程式中以 <id>/<模型> 使用。",
+        "add": "新增提供者",
+        "edit": "編輯",
+        "remove": "移除",
+        "save": "儲存提供者",
+        "id": "ID",
+        "idHelper": "小寫字母、數字和連字號。代理程式以 <id>/<模型> 指定模型。",
+        "name": "名稱",
+        "baseUrl": "基礎 URL",
+        "baseUrlHelper": "/chat/completions 之前的 URL,通常以 /v1 結尾。",
+        "models": "模型",
+        "modelsHelper": "以逗號分隔的模型 ID,會顯示在代理程式編輯器中。",
+        "apiKey": "API 金鑰",
+        "apiKeyHelper": "加密儲存。不需要金鑰的伺服器請留空。",
+        "apiKeyKeep": "留空則保留已儲存的金鑰。",
+        "keyConfigured": "已儲存 API 金鑰",
+        "keyMissing": "未儲存 API 金鑰",
+        "noModels": "未列出模型;請使用 {{id}}/<模型>。",
+        "costNote": "這些模型沒有價格資訊,其執行不會顯示費用,預算也不會限制它們。"
       }
     },
     "search": {
@@ -740,7 +762,7 @@
         "role": "角色",
         "runtime": "執行環境",
         "model": "模型",
-        "modelHelper": "opus、sonnet、haiku 或完整的模型 ID。在 OpenCode 中,openai/<模型> 會使用相容 OpenAI 的提供者。",
+        "modelHelper": "opus、sonnet、haiku 或完整的模型 ID。在 OpenCode 中,openai/<模型> 會使用相容 OpenAI 的提供者,<id>/<模型> 會使用 設定 → 沙箱 中的自訂提供者。",
         "rolePrompt": "角色提示詞",
         "rolePromptHelper": "附加到執行環境的系統提示詞。任務本身會作為第一則訊息傳送。",
         "styles": "樣式區塊",

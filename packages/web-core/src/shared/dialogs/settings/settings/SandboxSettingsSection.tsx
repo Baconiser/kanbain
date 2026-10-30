@@ -21,6 +21,7 @@ import {
 } from './SettingsComponents';
 import { useSettingsDirty } from './SettingsDirtyContext';
 import { ClaudeAccountCard } from './ClaudeAccountCard';
+import { ModelProvidersCard } from './ModelProvidersCard';
 
 function parseNumber(value: string): number | null {
   const n = Number.parseFloat(value);
@@ -249,6 +250,8 @@ export function SandboxSettingsSection() {
       </SettingsCard>
 
       <ClaudeAccountCard />
+
+      <ModelProvidersCard />
 
       <SettingsCard
         title={t('settings.sandbox.limits.title')}
