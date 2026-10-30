@@ -429,3 +429,73 @@ fn squash_merge_libgit2_sets_author_without_user() {
         assert_eq!(email.as_deref(), Some("noreply@kanbain.local"));
     }
 }
+
+#[test]
+fn merge_branch_no_ff_merges_skips_and_aborts_on_conflict() {
+    let td = TempDir::new().unwrap();
+    let repo_path = init_repo_main(&td);
+    let s = GitService::new();
+    let cli = GitCli::new();
+    write_file(&repo_path, "shared.txt", "one\n");
+    add_path(&repo_path, "shared.txt");
+    cli.git(&repo_path, ["commit", "-q", "-m", "base"]).unwrap();
+
+    // Two subtask branches off the ticket branch (`main` here).
+    cli.git(&repo_path, ["branch", "sub-a"]).unwrap();
+    cli.git(&repo_path, ["branch", "sub-b"]).unwrap();
+    cli.git(&repo_path, ["checkout", "-q", "sub-a"]).unwrap();
+    write_file(&repo_path, "a.txt", "a\n");
+    write_file(&repo_path, "shared.txt", "from a\n");
+    add_path(&repo_path, ".");
+    cli.git(&repo_path, ["commit", "-q", "-m", "a"]).unwrap();
+    cli.git(&repo_path, ["checkout", "-q", "sub-b"]).unwrap();
+    write_file(&repo_path, "shared.txt", "from b\n");
+    add_path(&repo_path, ".");
+    cli.git(&repo_path, ["commit", "-q", "-m", "b"]).unwrap();
+    cli.git(&repo_path, ["checkout", "-q", "main"]).unwrap();
+
+    let head = s
+        .merge_branch_no_ff(&repo_path, "sub-a", "merge a")
+        .unwrap()
+        .expect("sub-a brings a commit");
+    let parents = cli
+        .git(&repo_path, ["rev-list", "--parents", "-n", "1", &head])
+        .unwrap();
+    assert_eq!(parents.split_whitespace().count(), 3, "a merge commit");
+    // Merging it again brings nothing.
+    assert!(
+        s.merge_branch_no_ff(&repo_path, "sub-a", "again")
+            .unwrap()
+            .is_none()
+    );
+
+    match s.merge_branch_no_ff(&repo_path, "sub-b", "merge b") {
+        Err(git::GitServiceError::MergeConflicts {
+            conflicted_files, ..
+        }) => assert_eq!(conflicted_files, ["shared.txt"]),
+        other => panic!("expected a conflict, got {other:?}"),
+    }
+    // Aborted: still at the first merge, clean.
+    assert_eq!(
+        cli.git(&repo_path, ["rev-parse", "HEAD"]).unwrap().trim(),
+        head
+    );
+    assert!(!cli.is_merge_in_progress(&repo_path).unwrap());
+    assert_eq!(
+        fs::read_to_string(repo_path.join("shared.txt")).unwrap(),
+        "from a\n"
+    );
+
+    // The re-run starts sub-b over on the ticket branch.
+    cli.git(&repo_path, ["checkout", "-q", "sub-b"]).unwrap();
+    let diff = s.diff_text(&repo_path, "main...sub-b", 10_000).unwrap();
+    assert!(
+        diff.contains("+from b") && !diff.contains("a.txt"),
+        "{diff}"
+    );
+    s.reset_branch_to(&repo_path, "main").unwrap();
+    assert_eq!(
+        fs::read_to_string(repo_path.join("shared.txt")).unwrap(),
+        "from a\n"
+    );
+}

@@ -88,6 +88,19 @@ pub fn ticket_branch_name(id: &str, title: &str) -> String {
     }
 }
 
+/// A subtask's branch, `<ticket branch>--<subtask id>`. Not `…/<n>` as the
+/// plan sketched: git stores refs as files, so `kanbain/X-slug` and
+/// `kanbain/X-slug/1` can't both exist.
+pub fn subtask_branch_name(ticket_branch: &str, subtask_id: &str) -> String {
+    let id = branch_safe(subtask_id);
+    let id = if id.is_empty() {
+        "subtask"
+    } else {
+        id.as_str()
+    };
+    format!("{ticket_branch}--{id}")
+}
+
 /// `<ID>: <message>`, unless the message already starts with the id.
 pub fn ticket_commit_message(id: &str, message: &str) -> String {
     let message = message.trim();
@@ -159,6 +172,14 @@ mod tests {
             "kanbain/PROJ-123-password-reset-mail-never-arrives"
         );
         assert_eq!(ticket_branch_name("#45", "  "), "kanbain/45");
+        assert_eq!(
+            subtask_branch_name("kanbain/PROJ-1-login", "2"),
+            "kanbain/PROJ-1-login--2"
+        );
+        assert_eq!(
+            subtask_branch_name("kanbain/PROJ-1-login", "a b/c"),
+            "kanbain/PROJ-1-login--a-b-c"
+        );
         assert_eq!(
             ticket_commit_message("PROJ-1", "Fix login"),
             "PROJ-1: Fix login"

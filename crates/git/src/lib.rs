@@ -957,6 +957,106 @@ impl GitService {
         Ok(())
     }
 
+    /// Merge `branch` into the branch checked out at `worktree_path` with a
+    /// merge commit (the orchestrator merging a subtask into its ticket
+    /// branch). Returns the new head, or `None` when `branch` brings nothing
+    /// new. On conflicts the merge is aborted, the worktree is left as it
+    /// was, and the conflicted files come back in
+    /// [`GitServiceError::MergeConflicts`].
+    pub fn merge_branch_no_ff(
+        &self,
+        worktree_path: &Path,
+        branch: &str,
+        message: &str,
+    ) -> Result<Option<String>, GitServiceError> {
+        let cli = GitCli::new();
+        let status = cli.git(
+            worktree_path,
+            [
+                "--no-optional-locks",
+                "status",
+                "--porcelain",
+                "--untracked-files=no",
+            ],
+        )?;
+        if !status.trim().is_empty() {
+            return Err(GitServiceError::WorktreeDirty(
+                self.get_current_branch(worktree_path)
+                    .unwrap_or_else(|_| worktree_path.display().to_string()),
+                status.lines().take(5).collect::<Vec<_>>().join(", "),
+            ));
+        }
+        self.get_branch_oid(worktree_path, branch)?;
+        if cli
+            .git(
+                worktree_path,
+                ["merge-base", "--is-ancestor", branch, "HEAD"],
+            )
+            .is_ok()
+        {
+            return Ok(None);
+        }
+        self.ensure_cli_commit_identity(worktree_path)?;
+        match cli.git(
+            worktree_path,
+            ["merge", "--no-ff", "--no-edit", "-m", message, branch],
+        ) {
+            Ok(_) => {}
+            Err(e) => {
+                let conflicted_files = cli.get_conflicted_files(worktree_path).unwrap_or_default();
+                let _ = cli.abort_merge(worktree_path);
+                if conflicted_files.is_empty() {
+                    return Err(GitServiceError::InvalidRepository(format!(
+                        "git merge failed: {e}"
+                    )));
+                }
+                return Err(GitServiceError::MergeConflicts {
+                    message: format!(
+                        "Merging '{branch}' conflicts in {}",
+                        conflicted_files.join(", ")
+                    ),
+                    conflicted_files,
+                });
+            }
+        }
+        Ok(Some(
+            cli.git(worktree_path, ["rev-parse", "HEAD"])?
+                .trim()
+                .to_string(),
+        ))
+    }
+
+    /// Move the branch checked out at `worktree_path` to `commit` (`reset
+    /// --hard`), keeping untracked files.
+    pub fn reset_branch_to(
+        &self,
+        worktree_path: &Path,
+        commit: &str,
+    ) -> Result<(), GitServiceError> {
+        GitCli::new().git(worktree_path, ["reset", "-q", "--hard", commit])?;
+        Ok(())
+    }
+
+    /// The textual diff of a revision range (`a..b`, or `a...b` for what `b`
+    /// changed since it forked from `a`), cut at `max_bytes`.
+    pub fn diff_text(
+        &self,
+        repo_path: &Path,
+        range: &str,
+        max_bytes: usize,
+    ) -> Result<String, GitServiceError> {
+        let mut text = GitCli::new().git(repo_path, ["diff", range])?;
+        if text.len() > max_bytes {
+            let mut cut = max_bytes;
+            while !text.is_char_boundary(cut) {
+                cut -= 1;
+            }
+            text.truncate(cut);
+            text.push_str("\n[diff cut here]\n");
+        }
+        Ok(text)
+    }
+
     /// Add a worktree for a branch, optionally creating the branch
     pub fn add_worktree(
         &self,
