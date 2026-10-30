@@ -29,6 +29,7 @@ import type {
   IntakeView,
   IssueHistoryView,
   IssuePlanning,
+  OrchestrationView,
   Plan,
   PlanDocument,
   PlanningView,
@@ -138,6 +139,21 @@ export const planningApi = {
     request<Plan>(`/api/plans/${planId}/approve`, 'POST'),
   sendBack: (planId: string, feedback: string) =>
     request<Plan>(`/api/plans/${planId}/send-back`, 'POST', { feedback }),
+};
+
+export const codingApi = {
+  get: (issueId: string) =>
+    request<OrchestrationView>(`/api/issues/${issueId}/coding`),
+  start: (issueId: string) =>
+    request<OrchestrationView>(`/api/issues/${issueId}/coding/start`, 'POST'),
+  stop: (issueId: string) =>
+    request<OrchestrationView>(`/api/issues/${issueId}/coding/stop`, 'POST'),
+  retry: (issueId: string) =>
+    request<OrchestrationView>(`/api/issues/${issueId}/coding/retry`, 'POST'),
+  stopSubtask: (subtaskId: string) =>
+    request<OrchestrationView>(`/api/subtasks/${subtaskId}/stop`, 'POST'),
+  retrySubtask: (subtaskId: string) =>
+    request<OrchestrationView>(`/api/subtasks/${subtaskId}/retry`, 'POST'),
 };
 
 export const searchApi = {

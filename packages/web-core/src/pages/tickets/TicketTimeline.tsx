@@ -96,6 +96,27 @@ export function describeEvent(event: IssueEvent): string {
       return `Plan version ${num(p.version)} sent back: ${str(p.feedback)}`;
     case 'planning_failed':
       return `Planning failed: ${str(p.error)}`;
+    case 'coding_started':
+      if (p.reason === 'retry') return 'Coding retried';
+      if (p.reason === 'restart') return 'Coding resumed after a restart';
+      return `Coding started from plan version ${num(p.version)} (${num(p.subtasks)} subtask${num(p.subtasks) === 1 ? '' : 's'}) on ${str(p.branch)}`;
+    case 'subtask_started':
+      return `Subtask ${str(p.subtask)} started: ${str(p.title)}${num(p.fix_round) ? ` (fix round ${num(p.fix_round)})` : ''}`;
+    case 'subtask_merged':
+      return `Subtask ${str(p.subtask)} merged into ${str(p.into)}: ${str(p.title)}`;
+    case 'merge_conflict':
+      return `Subtask ${str(p.subtask)} conflicted in ${Array.isArray(p.files) ? p.files.join(', ') : 'some files'}; re-running (fix round ${num(p.fix_round)})`;
+    case 'subtask_failed':
+      return `Subtask ${str(p.subtask)} failed: ${str(p.error)}`;
+    case 'subtask_stopped':
+      return `Subtask ${str(p.subtask)} stopped`;
+    case 'coding_finished': {
+      if (p.status === 'done') return 'All subtasks merged; ready for review';
+      if (p.status === 'blocked') return `Coding blocked: ${str(p.error)}`;
+      if (p.status === 'not_started')
+        return `Coding could not start: ${str(p.error)}`;
+      return 'Coding stopped';
+    }
     case 'run_started':
       return `Run started${p.agent ? ` (${str(p.agent)})` : ''}`;
     case 'run_finished':

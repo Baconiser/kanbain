@@ -32,6 +32,7 @@ import { buildWorkspaceCreateInitialState } from '@/shared/lib/workspaceCreateSt
 import { setCreateModeSeedState } from '@/features/create-mode/model/createModeSeedStore';
 import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { TicketAttachments } from './TicketAttachments';
+import { TicketCoding } from './TicketCoding';
 import { TicketComments } from './TicketComments';
 import { TicketHistory } from './TicketHistory';
 import { TicketPlan } from './TicketPlan';
@@ -169,6 +170,21 @@ export function TicketPanel({
       e.event_type === 'plan_rejected' ||
       e.event_type === 'planning_failed'
   ).length;
+
+  const codingEvents = timeline.events.filter(
+    (e) =>
+      e.event_type === 'plan_approved' ||
+      e.event_type === 'coding_started' ||
+      e.event_type === 'subtask_started' ||
+      e.event_type === 'subtask_merged' ||
+      e.event_type === 'merge_conflict' ||
+      e.event_type === 'subtask_failed' ||
+      e.event_type === 'subtask_stopped' ||
+      e.event_type === 'coding_finished'
+  ).length;
+  const planApproved = timeline.events.some(
+    (e) => e.event_type === 'plan_approved'
+  );
 
   const update = useCallback(
     (data: UpdateIssue) =>
@@ -729,6 +745,14 @@ export function TicketPanel({
         <TicketPlan
           issueId={issue.id}
           refreshKey={planningEvents}
+          onOpenWorkspace={(id) => appNavigation.goToWorkspace(id)}
+          onError={onError}
+        />
+
+        <TicketCoding
+          issueId={issue.id}
+          refreshKey={codingEvents}
+          planApproved={planApproved}
           onOpenWorkspace={(id) => appNavigation.goToWorkspace(id)}
           onError={onError}
         />
