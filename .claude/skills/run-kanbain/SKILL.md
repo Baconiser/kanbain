@@ -267,6 +267,33 @@ takes 10 to 25 minutes, mostly sandbox start-up per planner turn.
 The bulk update body is flat: `[{ "id": …, "status_id": … }]`. Unknown
 keys such as `changes` are ignored silently.
 
+## 8e. Orchestrator (Phase 5)
+
+Approving a plan starts coders: one sandboxed `coder` run per subtask, in
+its own workspace on `<ticket branch>--<id>`, merged into the ticket branch
+on the host. `mock-script-orchestration.json` scripts the yolo planner
+(3 subtasks: 1 and 2 disjoint, 3 after both) and the coders by phase
+(`Implement subtask N of ticket`; the conflict re-run phase is last because
+the last matching phase wins). Coders 1 and 2 both append to `src/lib.rs`,
+and 2 sleeps first, so 2's merge conflicts and re-runs deterministically.
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-orchestration.json /tmp/mock-orc.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as in section 5,
+# started by a script the driver can call again to restart it:
+node $D/orchestration.mjs http://localhost:$FRONTEND_PORT /tmp/shots $BACKEND_PORT \
+  $KANBAIN_LAUNCH_TOKEN /tmp/repos/orc-shop /tmp/mock-orc.log ./restart-backend.sh
+```
+
+The restart script must kill only the **listening** process
+(`lsof -ti:$BACKEND_PORT -sTCP:LISTEN`); a plain `lsof -ti:<port>` also
+matches clients and takes Vite down with it. It must wait for
+`/api/health` before it returns. A run takes about 5 minutes.
+
+`logs.mjs` (frontend URL, shots dir, backend port, token) checks Settings →
+Logs: the app's WARN/ERROR lines, also written to
+`dev_assets/logs/kanbain.log`.
+
 ## 9. Stop
 
 ```bash

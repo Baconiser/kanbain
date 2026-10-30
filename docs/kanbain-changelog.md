@@ -1111,3 +1111,155 @@ Bugs the demo found and fixed on the way:
 - The planner's workspace is a normal workspace, listed under the ticket's
   workspaces, and its container stays until the workspace is removed (D37
   applies to automated runs from Phase 5 on).
+
+## Phase 5: Orchestrator (2026-10-30)
+
+**Goal:** an approved plan is coded without you: subtasks run as separate
+sandboxed coders, in parallel where their files allow, and are merged into
+the ticket branch. A merge conflict re-runs the subtask instead of stopping.
+
+### What changed
+
+- **Scheduler (D22).** `services::services::orchestrator` is the
+  deterministic state machine. It builds a DAG from `depends_on` plus file
+  overlap and returns which pending subtasks may start and whether the
+  ticket is done, blocked or stopped.
+  - Subtasks with disjoint files run in parallel. The sandbox's slot limit
+    (3 by default) caps how many actually run; the rest are queued.
+  - Overlapping subtasks run in dependency order, with plan order breaking
+    ties. Overlap means equal paths, a directory containing a file, or a
+    glob whose literal prefix covers the other path.
+  - A subtask without a file list runs alone.
+- **Runtime.** `local-deployment/src/orchestrator.rs` starts when a plan is
+  approved, or with "Start coding" on the ticket.
+  - Every subtask becomes a sub-ticket (`parent_issue_id`) that moves
+    Backlog → In progress → Done (Blocked when it fails).
+  - Every subtask gets its own workspace on `<ticket branch>--<id>`,
+    branched from the ticket branch (the planner's workspace), with all of
+    its repos. Not `…/<n>` as the plan sketched: git can't hold
+    `kanbain/X-slug` and `kanbain/X-slug/1` as refs at the same time.
+  - The coder (the `coder` agent) gets `subtask.md` (its subtask, the files,
+    what is already merged, what runs in parallel, the acceptance criteria),
+    `plan.json` and `related.md` with the code hits for the subtask's
+    title, description and files. That is the Phase 4 leftover.
+  - The run records its sub-ticket in `execution_processes.subtask_id`. It
+    is budgeted against the parent ticket.
+  - A finished run's branch is merged into the ticket branch on the host
+    with `git merge --no-ff` ("ORC-1: Merge subtask 2: …"), per repo.
+  - Then the run's container is removed (D37). The merged subtask's
+    workspace is archived: still reachable, but not under "Needs attention".
+- **Conflicts (D22).** When a merge conflicts, it is aborted. The subtask
+  branch is reset onto the updated ticket branch and its coder runs again
+  with `conflict.md` (the conflicted files, what to do) and
+  `previous_attempt.diff` (its earlier changes, up to 64 KB), to re-apply
+  with `git apply --3way`.
+  - Each re-run raises the ticket's `fix_round`. Past 3 rounds the subtask
+    fails and the ticket goes to Blocked (D24).
+- **Outcome.** All merged moves the ticket to Review ("Ready for review"
+  notification). Phase 6 puts the tester in between. A failed subtask
+  leaves the others running; once nothing can move, the ticket goes to
+  Blocked with the reasons and a notification.
+- **Stop and Retry.** These work per subtask and per ticket.
+  - Stop kills a running coder; a stopped ticket keeps its pending
+    subtasks.
+  - Retry requeues failed and stopped subtasks and resets the fix rounds.
+- **Resumable.** All state is in SQLite (`ticket_orchestrations`,
+  `orchestration_subtasks`). At startup, coder runs of running tickets go
+  back to pending and the orchestrator resumes them.
+  - A graceful shutdown marks runs it kills as interrupted, not failed (see
+    the bugs below).
+- **Ticket panel.** A **Coding** section shows the state, merged count, cost
+  and ticket branch. Each subtask shows its status, sub-ticket, branch,
+  "after 1, 2", fix round, conflict note, cost and workspace link, with Stop
+  and Retry.
+  - The timeline has entries for coding started, retried and resumed;
+    subtask started, merged, conflicted, failed and stopped; and coding
+    finished.
+- **API.** `GET /api/issues/{id}/coding`, `POST
+  /api/issues/{id}/coding/{start,stop,retry}`, `POST
+  /api/subtasks/{id}/{stop,retry}`.
+- **Settings → Logs (new, your request).** The backend's warnings and errors
+  are now visible in the app, raw.
+  - A tracing layer keeps the last 2000 WARN/ERROR events, whatever the
+    console filter.
+  - It also appends them to `logs/kanbain.log` in the data folder, rotated
+    at 5 MB. `GET/DELETE /api/logs` serves and clears them.
+  - The page polls live, filters errors or warnings, follows new lines,
+    copies everything, and shows the file path. The desktop app has no
+    console, so until now these messages went nowhere.
+
+### Demo (Linux dev container)
+
+`orchestration.mjs` runs against the scripted mock
+(`mock-script-orchestration.json`), the real sandbox, Claude Code 2.1.119
+and no embedder (keyword search). Result: 32/32 PASS.
+
+- The planner (yolo) wrote a 3-subtask plan for ORC-1 "Order checkout":
+  1 `src/model.rs`, 2 `src/mail.rs`, and 3 `src/route.rs`, which depends on
+  1 and 2. Approving it in the panel started coding.
+- **Parallel.** Subtasks 1 and 2 ran at the same time; 3 showed "Waiting
+  after 1, 2". The parallel coders' `subtask.md` listed each other under
+  "Running in parallel".
+- **Forced conflict.** Both coders also appended to `src/lib.rs`, which the
+  plan didn't list. 1 merged first and 2's merge conflicted in
+  `orc-shop/src/lib.rs`. The panel showed the conflict, and the timeline
+  showed "re-running (fix round 1)".
+  - The re-run read `conflict.md` and `previous_attempt.diff`, re-applied
+    with `git apply --3way`, resolved, and merged. The ticket's `fix_round`
+    is 1.
+- **Stop, Retry, restart.** Subtask 3 was stopped mid-run from the panel:
+  the run was killed and coding showed "Stopped". Retry started it again.
+  - The backend was then restarted under the running coder. After the
+    restart the orchestrator requeued and resumed it ("Coding resumed after
+    a restart"), and it merged.
+- **Result.** The ticket branch has the three merge commits "ORC-1: Merge
+  subtask 1/2/3", and its `src/lib.rs` has model, mail and route.
+  - `main` is untouched. The ticket is in Review, the 3 sub-tickets are
+    Done and the subtask workspaces are archived.
+  - The three subtasks cost $0.16 on the mock's usage. No console errors or
+    failed API calls outside the restart window.
+- `logs.mjs`: Settings → Logs lists the newest backend warning with its
+  level and shows `dev_assets/logs/kanbain.log`. The endpoint needs the
+  launch token.
+- `planning.mjs` (Phase 4) still passes: 27/27. The Phase 4 entry said
+  28/28; that was a miscount, the driver has 27 checks. Approving there now
+  also starts coders.
+- `cargo test --workspace`: 321 passed. Also passing: `pnpm run check`,
+  `pnpm run lint` (clippy `-D warnings`), `generate-types:check`,
+  `prepare-db:check` and `check-i18n.sh`.
+
+Bugs the demo found and fixed on the way:
+
+- **A graceful shutdown failed in-flight subtasks.** On SIGTERM the backend
+  kills all runs. The coder's exit then read as "stopped (budget or time
+  limit)", and the ticket went to Blocked instead of resuming. Now the
+  orchestrator is told before the kill: those runs stay `running` and are
+  requeued at the next start, and nothing new starts during shutdown.
+  - The first fix only covered `startup.rs`. The server binary has its own
+    copy of `perform_cleanup_actions` in `main.rs`; both are patched now.
+- Async recursion (launch → schedule → spawn launch) wasn't provably
+  `Send`; the launch future is boxed.
+
+### Not verified here
+
+- **A real model.** The mock's coders follow a script. Real coders' respect
+  for file boundaries, conflict re-apply quality and cost are unknown.
+- **OpenCode coders.** Not run in the sandbox. You hit "OpenCode
+  session.prompt returned empty response body" (`error.txt`); that is still
+  open.
+- **Windows:** worktrees, merges and notifications on Windows, and the log
+  file path in `%APPDATA%`.
+- Commits between `a39fae03` and `93b94eb0` were not built one by one; the
+  final tree was.
+
+### Known leftovers
+
+- A coder that finishes without commits counts as merged ("nothing to
+  merge"). Phase 6's tester should catch subtasks that did nothing; the
+  timeline doesn't flag it yet.
+- No setup script runs before coders; they install what they need.
+- The board card of the parent ticket has no coding marker; sub-ticket
+  cards and the panel show progress.
+- A newly approved plan replaces the old one's unfinished subtasks (their
+  sub-tickets are deleted); merged work stays on the ticket branch.
+- Checkpoints in the plan are ignored until Phase 6.

@@ -1,0 +1,121 @@
+{
+ "output_tokens": 300,
+ "markers": [
+  "Implement subtask",
+  "Running in parallel",
+  "Already merged into your branch",
+  "Merge conflict (fix round",
+  "previous_attempt.diff",
+  "Code locations",
+  "pub mod model;\\npub mod mail;"
+ ],
+ "phases": [
+  {
+   "when": "Mode: yolo",
+   "steps": [
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Order model\",\n      \"description\": \"Add the Order type.\",\n      \"files\": [\n        \"src/model.rs\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"2\",\n      \"title\": \"Order mail\",\n      \"description\": \"Mail the order confirmation.\",\n      \"files\": [\n        \"src/mail.rs\"\n      ],\n      \"depends_on\": []\n    },\n    {\n      \"id\": \"3\",\n      \"title\": \"Order route\",\n      \"description\": \"Expose POST /orders using the model and the mail.\",\n      \"files\": [\n        \"src/route.rs\"\n      ],\n      \"depends_on\": [\n        \"1\",\n        \"2\"\n      ]\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"POST /orders stores an order and mails a confirmation.\"\n  ],\n  \"assumptions\": [\n    \"Decided without asking: one confirmation mail per order.\"\n  ],\n  \"test_strategy\": \"Black-box HTTP test of POST /orders with a fake mailer.\",\n  \"checkpoints\": [\n    {\n      \"after_subtasks\": [\n        \"3\"\n      ],\n      \"what\": \"Orders are stored and mailed\"\n    }\n  ]\n}"
+     }
+    }
+   ],
+   "text": "Plan written to /kanbain/out/plan.json."
+  },
+  {
+   "when": "Implement subtask 1 of ticket",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/subtask.md; ls /kanbain/context",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf 'pub struct Order;\\n' > src/model.rs && printf 'pub mod model;\\n' >> src/lib.rs && git add -A && git commit -qm 'ORC-1: Add the order model' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Order model committed."
+  },
+  {
+   "when": "Implement subtask 2 of ticket",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/subtask.md; ls /kanbain/context",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "sleep 25; cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf 'pub fn confirm() {}\\n' > src/mail.rs && printf 'pub mod mail;\\n' >> src/lib.rs && git add -A && git commit -qm 'ORC-1: Mail the order confirmation' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Order mail committed."
+  },
+  {
+   "when": "Implement subtask 3 of ticket",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/subtask.md; cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && cat src/lib.rs",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "sleep 40",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf 'pub fn post_orders() {}\\n' > src/route.rs && printf 'pub mod route;\\n' >> src/lib.rs && git add -A && git commit -qm 'ORC-1: Expose POST /orders' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Order route committed."
+  },
+  {
+   "when": "conflict.md: why you are running again",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/conflict.md; head -c 600 /kanbain/context/previous_attempt.diff",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && (git apply --3way /kanbain/context/previous_attempt.diff || true) && git status --short",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf '// modules\\npub mod model;\\npub mod mail;\\n' > src/lib.rs && git add -A && git commit -qm 'ORC-1: Re-apply the order mail on the updated ticket branch' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Re-applied and committed."
+  }
+ ]
+}
