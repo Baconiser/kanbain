@@ -82,6 +82,8 @@ pub struct SandboxStatus {
     /// A Claude account is connected; it is used instead of the API key.
     pub claude_account_connected: bool,
     pub openai_key_configured: bool,
+    /// Custom providers added in the settings.
+    pub custom_provider_count: usize,
     pub running_containers: usize,
 }
 
@@ -117,6 +119,7 @@ struct Inner {
     db: DBService,
     config: Arc<RwLock<Config>>,
     secrets: Arc<SecretStore>,
+    model_providers: Arc<ModelProviderStore>,
     instance: String,
     ready: Option<Ready>,
     error: Option<String>,
@@ -224,7 +227,7 @@ impl SandboxRuntime {
             prices,
             Arc::new(SecretCredentials {
                 secrets: secrets.clone(),
-                model_providers,
+                model_providers: model_providers.clone(),
             }),
             Arc::new(RunEvents {
                 db: db.clone(),
@@ -247,6 +250,7 @@ impl SandboxRuntime {
                 db,
                 config,
                 secrets,
+                model_providers,
                 instance,
                 ready,
                 error,
@@ -386,6 +390,12 @@ impl SandboxRuntime {
                 .await
                 .unwrap_or(false)
                 || std::env::var("OPENAI_API_KEY").is_ok(),
+            custom_provider_count: self
+                .inner
+                .model_providers
+                .list()
+                .await
+                .map_or(0, |providers| providers.len()),
             running_containers,
         }
     }

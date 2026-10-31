@@ -5,16 +5,22 @@ import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 
 /**
  * Setup notice shown while the sandbox is on but can't run agents: Docker is
- * missing, or no model API key is stored.
+ * missing, or no model credential (API key, Claude account or custom
+ * provider) is set up.
  */
 export function SandboxBanner() {
   const { t } = useTranslation('common');
   const { data: status } = useSandboxStatus();
 
   if (!status?.enabled) return null;
+  const hasCredential =
+    status.anthropic_key_configured ||
+    status.claude_account_connected ||
+    status.openai_key_configured ||
+    status.custom_provider_count > 0;
   const message = !status.docker_available
     ? t('sandboxBanner.noDocker')
-    : !status.anthropic_key_configured
+    : !hasCredential
       ? t('sandboxBanner.noKey')
       : null;
   if (!message) return null;

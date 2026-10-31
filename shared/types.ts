@@ -975,7 +975,11 @@ error: string | null, image: string | null, image_ready: boolean, image_building
 /**
  * A Claude account is connected; it is used instead of the API key.
  */
-claude_account_connected: boolean, openai_key_configured: boolean, running_containers: number, };
+claude_account_connected: boolean, openai_key_configured: boolean, 
+/**
+ * Custom providers added in the settings.
+ */
+custom_provider_count: number, running_containers: number, };
 
 export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history";
 

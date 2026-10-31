@@ -40,6 +40,10 @@ use sdk::{
     run_slash_command,
 };
 use slash_commands::{OpencodeSlashCommand, hardcoded_slash_commands};
+
+/// One discovery server at a time: servers started together race OpenCode's
+/// one-time database migration on first launch and fail with SQLite errors.
+static DISCOVERY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 use types::{Config, ProviderModelInfo};
 
 #[derive(Derivative, Clone, Serialize, Deserialize, TS, JsonSchema)]
@@ -646,6 +650,18 @@ impl StandardCodingAgentExecutor for Opencode {
         let discovery_stream = async_stream::stream! {
             let discovery_path = target_path.as_deref().unwrap_or(Path::new(".")).to_path_buf();
             let mut final_options = default_discovered_options();
+
+            let _discovery = DISCOVERY_LOCK.lock().await;
+            // A discovery that held the lock may have answered this already.
+            let done_key = ExecutorConfigCacheKey::new(
+                target_path.as_ref(),
+                cmd_key_for_discovery.clone(),
+                BaseCodingAgent::Opencode,
+            );
+            if let Some(cached) = executor_options_cache().get(&done_key) {
+                yield patch::executor_discovered_options(cached.as_ref().clone().with_loading(false));
+                return;
+            }
 
             let env = ExecutionEnv::new(RepoContext::default(), false, String::new());
             let env = setup_permissions_env(this.auto_approve, &env);

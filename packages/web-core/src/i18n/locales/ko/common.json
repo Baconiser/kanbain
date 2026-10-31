@@ -465,7 +465,7 @@
   },
   "sandboxBanner": {
     "noDocker": "Docker를 사용할 수 없어 에이전트를 샌드박스에서 실행할 수 없습니다.",
-    "noKey": "에이전트를 샌드박스에서 실행하려면 Anthropic API 키를 추가하세요.",
+    "noKey": "에이전트를 샌드박스에서 실행하려면 모델 API 키, Claude 계정 또는 사용자 지정 공급자를 추가하세요.",
     "openSettings": "샌드박스 설정 열기"
   }
 }

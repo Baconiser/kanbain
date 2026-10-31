@@ -465,7 +465,7 @@
   },
   "sandboxBanner": {
     "noDocker": "Docker n'est pas disponible, les agents ne peuvent donc pas s'exécuter dans la sandbox.",
-    "noKey": "Ajoutez une clé d'API Anthropic pour que les agents puissent s'exécuter dans la sandbox.",
+    "noKey": "Ajoutez une clé d'API de modèle, un compte Claude ou un fournisseur personnalisé pour que les agents puissent s'exécuter dans la sandbox.",
     "openSettings": "Ouvrir les réglages de la sandbox"
   }
 }

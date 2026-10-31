@@ -465,7 +465,7 @@
   },
   "sandboxBanner": {
     "noDocker": "Docker 不可用，因此代理无法在沙箱中运行。",
-    "noKey": "请添加 Anthropic API 密钥，以便代理在沙箱中运行。",
+    "noKey": "请添加模型 API 密钥、Claude 账户或自定义提供方，以便代理在沙箱中运行。",
     "openSettings": "打开沙箱设置"
   }
 }
