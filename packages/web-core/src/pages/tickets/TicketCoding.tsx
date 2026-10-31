@@ -8,6 +8,7 @@ import type {
   SubtaskView,
 } from 'shared/types';
 import { codingApi } from '@/shared/lib/ticketsApi';
+import { TicketTesting } from './TicketTesting';
 
 interface TicketCodingProps {
   issueId: string;
@@ -26,10 +27,10 @@ function errorMessage(err: unknown, fallback: string): string {
 }
 
 const TICKET_STATUS: Record<OrchestrationStatus, string> = {
-  running: 'Coders working',
+  running: 'Working',
   stopped: 'Stopped',
   blocked: 'Blocked',
-  done: 'All subtasks merged',
+  done: 'Merged and tested',
 };
 
 const SUBTASK_STATUS: Record<
@@ -194,7 +195,8 @@ function SubtaskRow({
 /**
  * The orchestrator on a ticket (Phase 5, D22): the approved plan's subtasks,
  * each coded on its own branch and merged into the ticket branch, with
- * Stop and Retry per subtask and for the whole ticket.
+ * Stop and Retry per subtask and for the whole ticket. Below them, the
+ * checkpoints with their tester and fix runs (Phase 6).
  */
 export function TicketCoding({
   issueId,
@@ -247,7 +249,9 @@ export function TicketCoding({
   const orchestration = view.orchestration;
   if (!orchestration && !planApproved) return null;
   const merged = view.subtasks.filter((s) => s.status === 'merged').length;
-  const cost = view.subtasks.reduce((sum, s) => sum + s.cost_usd, 0);
+  const cost =
+    view.subtasks.reduce((sum, s) => sum + s.cost_usd, 0) +
+    view.checkpoints.reduce((sum, c) => sum + c.cost_usd, 0);
   const matches = FILTERS.find((f) => f.id === filter)!.matches;
   const shown = view.subtasks.filter((s) => matches(s.status));
 
@@ -412,6 +416,31 @@ export function TicketCoding({
           ))}
         </ul>
       )}
+
+      <TicketTesting
+        checkpoints={view.checkpoints}
+        issuesFound={view.issues_found}
+        busy={busy}
+        onOpenWorkspace={onOpenWorkspace}
+        onStop={(id) =>
+          void act(
+            () => codingApi.stopCheckpoint(id),
+            'Failed to stop the checkpoint'
+          )
+        }
+        onRetry={(id) =>
+          void act(
+            () => codingApi.retryCheckpoint(id),
+            'Failed to retest the checkpoint'
+          )
+        }
+        onSetIssueStatus={(id, status) =>
+          void act(
+            () => codingApi.setIssueFoundStatus(id, status),
+            'Failed to update the issue'
+          )
+        }
+      />
     </section>
   );
 }

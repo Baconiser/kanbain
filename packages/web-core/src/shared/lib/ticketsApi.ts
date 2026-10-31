@@ -25,6 +25,7 @@ import type {
   IssueComment,
   IssueDescription,
   IssueEvent,
+  IssueFoundStatus,
   IssueRelationship,
   IntakeView,
   IssueHistoryView,
@@ -154,6 +155,15 @@ export const codingApi = {
     request<OrchestrationView>(`/api/subtasks/${subtaskId}/stop`, 'POST'),
   retrySubtask: (subtaskId: string) =>
     request<OrchestrationView>(`/api/subtasks/${subtaskId}/retry`, 'POST'),
+  stopCheckpoint: (checkpointId: string) =>
+    request<OrchestrationView>(`/api/checkpoints/${checkpointId}/stop`, 'POST'),
+  retryCheckpoint: (checkpointId: string) =>
+    request<OrchestrationView>(
+      `/api/checkpoints/${checkpointId}/retry`,
+      'POST'
+    ),
+  setIssueFoundStatus: (id: string, status: IssueFoundStatus) =>
+    request<OrchestrationView>(`/api/issues-found/${id}`, 'PUT', { status }),
 };
 
 export const searchApi = {

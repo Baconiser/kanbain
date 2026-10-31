@@ -297,6 +297,9 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [searchExcludes, setSearchExcludes] = useState(
       project?.settings.search_exclude_globs.join('\n') ?? ''
     );
+    const [testPaths, setTestPaths] = useState(
+      project?.settings.test_paths.join('\n') ?? ''
+    );
     const [sandboxDomains, setSandboxDomains] = useState(
       project?.settings.sandbox_allowed_domains.join('\n') ?? ''
     );
@@ -365,6 +368,10 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                 history_always_allow: historyAlwaysAllow,
                 allow_remote_code_embedding: remoteCode,
                 search_exclude_globs: searchExcludes
+                  .split('\n')
+                  .map((g) => g.trim())
+                  .filter(Boolean),
+                test_paths: testPaths
                   .split('\n')
                   .map((g) => g.trim())
                   .filter(Boolean),
@@ -487,6 +494,22 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                     placeholder={'shared/types.ts\n**/*.generated.ts'}
                     value={searchExcludes}
                     onChange={(e) => setSearchExcludes(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-test-paths">
+                    Test paths: the only files the tester may add or change
+                    (globs per repo; empty uses the defaults)
+                  </Label>
+                  <textarea
+                    id="project-test-paths"
+                    data-testid="project-test-paths"
+                    className="min-h-12 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder={
+                      '**/tests/**\n**/__tests__/**\n**/*.test.*\n**/*_test.*'
+                    }
+                    value={testPaths}
+                    onChange={(e) => setTestPaths(e.target.value)}
                   />
                 </div>
                 <div className="col-span-2 flex flex-col gap-half">

@@ -245,7 +245,14 @@ export function TicketPanel({
       e.event_type === 'merge_conflict' ||
       e.event_type === 'subtask_failed' ||
       e.event_type === 'subtask_stopped' ||
-      e.event_type === 'coding_finished'
+      e.event_type === 'coding_finished' ||
+      e.event_type === 'tester_started' ||
+      e.event_type === 'tests_finished' ||
+      e.event_type === 'fix_started' ||
+      e.event_type === 'fix_merged' ||
+      e.event_type === 'checkpoint_passed' ||
+      e.event_type === 'checkpoint_failed' ||
+      e.event_type === 'issue_found_updated'
   ).length;
   const planApproved = timeline.events.some(
     (e) => e.event_type === 'plan_approved'

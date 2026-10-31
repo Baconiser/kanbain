@@ -28,6 +28,8 @@ export const KIND_LABELS: Record<string, string> = {
   attachment: 'Attachment',
   prior_work: 'Prior work',
   run: 'Run',
+  plan: 'Plan',
+  issue_found: 'Issue found',
   code: 'Code',
 };
 

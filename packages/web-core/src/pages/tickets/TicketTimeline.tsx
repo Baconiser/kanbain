@@ -108,14 +108,47 @@ export function describeEvent(event: IssueEvent): string {
       return `Subtask ${str(p.subtask)} started: ${str(p.title)}${num(p.fix_round) ? ` (fix round ${num(p.fix_round)})` : ''}`;
     case 'subtask_merged':
       return `Subtask ${str(p.subtask)} merged into ${str(p.into)}: ${str(p.title)}`;
-    case 'merge_conflict':
-      return `Subtask ${str(p.subtask)} conflicted in ${Array.isArray(p.files) ? p.files.join(', ') : 'some files'}; re-running (fix round ${num(p.fix_round)})`;
+    case 'merge_conflict': {
+      const who =
+        p.checkpoint !== undefined
+          ? `Checkpoint ${num(p.checkpoint)}`
+          : `Subtask ${str(p.subtask)}`;
+      return `${who} conflicted in ${Array.isArray(p.files) ? p.files.join(', ') : 'some files'}; re-running (fix round ${num(p.fix_round)})`;
+    }
     case 'subtask_failed':
       return `Subtask ${str(p.subtask)} failed: ${str(p.error)}`;
     case 'subtask_stopped':
       return `Subtask ${str(p.subtask)} stopped`;
+    case 'tester_started':
+      return num(p.round)
+        ? `Tester re-checking checkpoint ${num(p.checkpoint)} after fix ${num(p.round)}`
+        : `Tester started on checkpoint ${num(p.checkpoint)}: ${str(p.what)}`;
+    case 'tests_finished': {
+      const parts = [
+        `${num(p.new)} new`,
+        `${num(p.still_open)} still open`,
+        `${num(p.fixed)} fixed`,
+      ];
+      const rejected = Array.isArray(p.rejected) ? p.rejected.length : 0;
+      return `Tests for checkpoint ${num(p.checkpoint)}: ${parts.join(', ')}${rejected ? `; dropped ${rejected} change${rejected === 1 ? '' : 's'} outside the test paths` : ''}`;
+    }
+    case 'fix_started':
+      return `Fix round ${num(p.fix_round)}: a coder works on ${num(p.issues)} open issue${num(p.issues) === 1 ? '' : 's'} of checkpoint ${num(p.checkpoint)}`;
+    case 'fix_merged':
+      return p.empty
+        ? `Fix round ${num(p.fix_round)} ended without changes`
+        : `Fix round ${num(p.fix_round)} merged into the ticket branch`;
+    case 'checkpoint_passed':
+      return `Checkpoint ${num(p.checkpoint)} passed: ${str(p.what)}`;
+    case 'checkpoint_failed':
+      return p.stopped
+        ? `Checkpoint ${num(p.checkpoint)} stopped`
+        : `Checkpoint ${num(p.checkpoint)} failed: ${str(p.error)}`;
+    case 'issue_found_updated':
+      return `Issue marked ${p.status === 'wontfix' ? "won't fix" : str(p.status)}: ${str(p.description)}`;
     case 'coding_finished': {
-      if (p.status === 'done') return 'All subtasks merged; ready for review';
+      if (p.status === 'done')
+        return 'All subtasks merged and tested; ready for review';
       if (p.status === 'blocked') return `Coding blocked: ${str(p.error)}`;
       if (p.status === 'not_started')
         return `Coding could not start: ${str(p.error)}`;
