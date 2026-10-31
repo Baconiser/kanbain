@@ -5,6 +5,7 @@ import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
 import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { historyApi } from '@/shared/lib/ticketsApi';
 import { getActualTheme } from '@/shared/lib/theme';
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface TicketHistoryProps {
   issueId: string;
@@ -15,6 +16,8 @@ interface TicketHistoryProps {
 
 const POLL_MS = 2000;
 const AGENT_AUTHOR = 'KanbAIn agent';
+// Longer file lists show this many until expanded.
+const FILES_SHOWN = 8;
 
 function usd(value: number): string {
   return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`;
@@ -34,6 +37,7 @@ export function TicketHistory({
   const [view, setView] = useState<IssueHistoryView | null>(null);
   const [busy, setBusy] = useState(false);
   const [showCommits, setShowCommits] = useState(false);
+  const [showAllFiles, setShowAllFiles] = useState(false);
 
   const load = useCallback(
     () =>
@@ -78,10 +82,33 @@ export function TicketHistory({
     !view.always_allow &&
     !history.prior_work;
 
+  const meta =
+    !history || history.commit_count === 0
+      ? 'none found'
+      : [
+          `${view.commits.length} commit${view.commits.length === 1 ? '' : 's'}`,
+          view.files.length > 0 &&
+            `${view.files.length} file${view.files.length === 1 ? '' : 's'}`,
+          history.prior_work && 'summarized',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+  const shownFiles = showAllFiles
+    ? view.files
+    : view.files.slice(0, FILES_SHOWN);
+
   return (
-    <section className="flex flex-col gap-half" data-testid="ticket-history">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-normal">Prior work</h3>
+    <CollapsibleSection
+      id="prior-work"
+      title="Prior work"
+      meta={meta}
+      defaultOpen={false}
+      // Asking, working and failing all want the user's eyes.
+      forceOpen={
+        needsPermission || status === 'analyzing' || status === 'failed'
+      }
+      testId="ticket-history"
+      action={
         <button
           type="button"
           className="text-xs text-low hover:text-normal"
@@ -90,8 +117,8 @@ export function TicketHistory({
         >
           Check git history
         </button>
-      </div>
-
+      }
+    >
       {!history || history.commit_count === 0 ? (
         <p className="text-sm text-low">
           No commits mention {history?.searched_id ?? 'this ticket'} yet.
@@ -185,7 +212,7 @@ export function TicketHistory({
             Files changed ({view.files.length})
           </h4>
           <ul className="flex flex-col text-sm">
-            {view.files.map((f) => (
+            {shownFiles.map((f) => (
               <li
                 key={`${f.repo_id}:${f.path}:${f.symbol}`}
                 className="flex items-baseline gap-base"
@@ -205,6 +232,15 @@ export function TicketHistory({
               </li>
             ))}
           </ul>
+          {view.files.length > FILES_SHOWN && (
+            <button
+              type="button"
+              className="self-start text-xs text-low hover:text-normal"
+              onClick={() => setShowAllFiles((v) => !v)}
+            >
+              {showAllFiles ? 'Show fewer' : `Show all ${view.files.length}`}
+            </button>
+          )}
         </div>
       )}
 
@@ -243,6 +279,6 @@ export function TicketHistory({
           )}
         </div>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  CaretDownIcon,
   LinkIcon,
   PlayIcon,
   PlusIcon,
@@ -33,6 +32,7 @@ import { issuesApi, projectsApi } from '@/shared/lib/ticketsApi';
 import { buildWorkspaceCreateInitialState } from '@/shared/lib/workspaceCreateState';
 import { setCreateModeSeedState } from '@/features/create-mode/model/createModeSeedStore';
 import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
+import { CollapsibleSection } from './CollapsibleSection';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketCoding } from './TicketCoding';
 import { TicketComments } from './TicketComments';
@@ -93,43 +93,6 @@ function attachmentMarkdown(file: {
 }): string {
   const isImage = file.mime_type?.startsWith('image/');
   return `${isImage ? '!' : ''}[${file.original_name}](attachment://${file.id})`;
-}
-
-/** A titled block that folds away from its header. */
-function Section({
-  title,
-  action,
-  defaultOpen = true,
-  children,
-}: {
-  title: string;
-  action?: React.ReactNode;
-  defaultOpen?: boolean;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="flex flex-col gap-half">
-      <div className="flex items-center justify-between gap-base">
-        <button
-          type="button"
-          aria-expanded={open}
-          className="flex items-center gap-half text-sm font-medium text-normal hover:text-high"
-          onClick={() => setOpen((o) => !o)}
-        >
-          <CaretDownIcon
-            weight="fill"
-            className={`size-icon-xs text-low transition-transform ${
-              open ? '' : '-rotate-90'
-            }`}
-          />
-          {title}
-        </button>
-        {open && action}
-      </div>
-      {open && children}
-    </section>
-  );
 }
 
 function TabButton({
@@ -537,12 +500,14 @@ export function TicketPanel({
             onPasteFiles={(files) => void handlePasteFiles(files)}
           />
 
-          <Section
-            title={`Sub-tickets (${
+          <CollapsibleSection
+            id="sub-tickets"
+            title="Sub-tickets"
+            meta={
               children.length > 0
                 ? `${doneChildren}/${children.length} done`
-                : '0'
-            })`}
+                : 'none'
+            }
           >
             {children.length > 0 && (
               <ul className="flex flex-col">
@@ -601,10 +566,12 @@ export function TicketPanel({
                 <PlusIcon className="size-icon-xs" />
               </Button>
             </form>
-          </Section>
+          </CollapsibleSection>
 
-          <Section
-            title={`Relationships (${relationships.length})`}
+          <CollapsibleSection
+            id="relationships"
+            title="Relationships"
+            meta={relationships.length || 'none'}
             action={
               !linking && (
                 <button
@@ -658,9 +625,6 @@ export function TicketPanel({
                 </div>
               );
             })}
-            {relationships.length === 0 && !linking && (
-              <p className="text-sm text-low">No linked tickets.</p>
-            )}
             {linking && (
               <div className="grid grid-cols-[140px_1fr_auto] gap-half">
                 <Select
@@ -706,18 +670,18 @@ export function TicketPanel({
                 </Button>
               </div>
             )}
-          </Section>
+          </CollapsibleSection>
 
-          <Section
-            title={`Workspaces (${workspaces.length}${
+          <CollapsibleSection
+            id="workspaces"
+            title="Workspaces"
+            meta={`${workspaces.length || 'none'}${
               runningWorkspaces ? ` · ${runningWorkspaces} running` : ''
-            })`}
-            defaultOpen={workspaces.length <= 3}
+            }`}
           >
             {workspaces.length === 0 && (
               <p className="text-sm text-low">
-                No workspaces yet. Start one to work on this ticket with an
-                agent.
+                Start one from the header to work on this with an agent.
               </p>
             )}
             {workspaces.map((w) => (
@@ -734,7 +698,7 @@ export function TicketPanel({
                 )}
               </button>
             ))}
-          </Section>
+          </CollapsibleSection>
 
           <TicketRelated
             issueId={issue.id}

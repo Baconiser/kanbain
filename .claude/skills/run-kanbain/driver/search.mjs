@@ -172,6 +172,11 @@ check(related.length > 0 && related.every((r) => r.ticket.id !== reset.id), 'rel
 // 6. The UI.
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1600, height: 1100 } })).newPage();
+// Panel sections fold; open one (by its test id) before reading inside it.
+const unfold = async (testId) => {
+  const toggle = page.getByTestId(`${testId}-toggle`);
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+};
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -191,6 +196,7 @@ await page.waitForTimeout(1_500);
 await page.getByText('Password reset email never arrives').first().click();
 const relatedSection = page.getByTestId('ticket-related');
 await relatedSection.waitFor({ timeout: 15_000 });
+await unfold('ticket-related');
 await relatedSection.scrollIntoViewIfNeeded();
 check((await relatedSection.getByTestId('search-result').count()) > 0, 'Related section lists tickets');
 await shot('s01-related');

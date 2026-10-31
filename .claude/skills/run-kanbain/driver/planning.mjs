@@ -80,6 +80,11 @@ await until('PLN-1 in search', async () => {
 // 2. The UI.
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1600, height: 1100 } })).newPage();
+// Panel sections fold; open one (by its test id) before reading inside it.
+const unfold = async (testId) => {
+  const toggle = page.getByTestId(`${testId}-toggle`);
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+};
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -122,6 +127,7 @@ await page.getByLabel('New comment').fill('1. 30 minutes.\n2. Yes, revoke the ol
 await page.getByRole('button', { name: 'Comment', exact: true }).click();
 await page.getByTestId('ticket-tab-plan').click();
 await page.getByTestId('plan-version-1').waitFor({ timeout: 600_000 }).catch(failShot('p-fail-v1'));
+await page.getByTestId('plan-edit').click();
 const assumptions1 = await page.getByTestId('plan-assumptions').inputValue();
 check(assumptions1.includes('answered by the user'), 'plan v1 uses the answer');
 check(assumptions1.includes('PLN-1') && assumptions1.includes('mailer.rs'), `plan v1 cites PLN-1 and its file: ${assumptions1.split('\n')[0]}`);
@@ -152,6 +158,7 @@ const approved = await api('GET', `/issues/${pln2.id}`);
 check(approved.status_id === statusOf('in_progress').id, 'approved ticket moved to In progress');
 await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
+await unfold('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 await page.waitForTimeout(800);
 const timelineText = await timeline.textContent();

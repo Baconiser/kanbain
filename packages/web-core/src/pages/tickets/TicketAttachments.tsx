@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { FileIcon } from '@phosphor-icons/react';
 import type { AttachmentResponse, AttachmentText } from 'shared/types';
 import { issuesApi } from '@/shared/lib/ticketsApi';
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface TicketAttachmentsProps {
   issueId: string;
@@ -44,13 +45,13 @@ export function TicketAttachments({
   if (files.length === 0) return null;
 
   return (
-    <section
-      className="flex flex-col gap-half"
-      data-testid="ticket-attachments"
+    <CollapsibleSection
+      id="attachments"
+      title="Attachments"
+      meta={files.length}
+      defaultOpen={false}
+      testId="ticket-attachments"
     >
-      <h3 className="text-sm font-medium text-normal">
-        Attachments ({files.length})
-      </h3>
       <ul className="flex flex-col gap-half text-sm">
         {files.map((file) => {
           const text = texts[file.id];
@@ -85,6 +86,6 @@ export function TicketAttachments({
           );
         })}
       </ul>
-    </section>
+    </CollapsibleSection>
   );
 }

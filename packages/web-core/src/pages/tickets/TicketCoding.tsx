@@ -43,6 +43,14 @@ const SUBTASK_STATUS: Record<
   stopped: { label: 'Stopped', className: 'text-low' },
 };
 
+const PROGRESS_COLORS: Record<SubtaskStatus, string> = {
+  pending: 'bg-low/20',
+  running: 'animate-pulse bg-brand',
+  merged: 'bg-success',
+  failed: 'bg-error',
+  stopped: 'bg-low/50',
+};
+
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
 type Filter = 'all' | 'open' | 'failed' | 'merged';
@@ -298,6 +306,21 @@ export function TicketCoding({
         </div>
       </div>
 
+      {view.subtasks.length > 0 && (
+        // One segment per subtask, colored by where it stands.
+        <div
+          className="flex h-2 gap-px overflow-hidden rounded-full bg-secondary"
+          aria-hidden
+        >
+          {view.subtasks.map((s) => (
+            <span
+              key={s.id}
+              title={`${s.plan_subtask_id}. ${s.title}: ${SUBTASK_STATUS[s.status].label}`}
+              className={`flex-1 ${PROGRESS_COLORS[s.status]}`}
+            />
+          ))}
+        </div>
+      )}
       {orchestration && (
         <p
           className={`text-sm ${orchestration.status === 'blocked' ? 'text-error' : 'text-low'}`}

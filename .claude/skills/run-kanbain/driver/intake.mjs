@@ -17,6 +17,11 @@ const context = await browser.newContext({
 });
 const errors = [];
 const page = await context.newPage();
+// Panel sections fold; open one (by its test id) before reading inside it.
+const unfold = async (testId) => {
+  const toggle = page.getByTestId(`${testId}-toggle`);
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+};
 page.on('console', (msg) => {
   if (msg.type() === 'error') errors.push(msg.text());
 });
@@ -115,6 +120,7 @@ check(
 );
 await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
+await unfold('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 const timelineText = async () => (await timeline.textContent()) ?? '';
 check((await timelineText()).includes('Created in Backlog'), 'timeline: created');

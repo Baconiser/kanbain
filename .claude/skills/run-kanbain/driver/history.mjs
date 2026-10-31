@@ -57,6 +57,11 @@ const project = await api('POST', '/projects', {
 // 2. The UI: create the ticket, allow the analysis.
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1600, height: 1100 } })).newPage();
+// Panel sections fold; open one (by its test id) before reading inside it.
+const unfold = async (testId) => {
+  const toggle = page.getByTestId(`${testId}-toggle`);
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+};
 const errors = [];
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
@@ -91,6 +96,7 @@ await page.getByTestId('prior-work').waitFor({ timeout: 240_000 }).catch(async (
   await shot('h-fail-prior-work');
   throw e;
 });
+await unfold('ticket-history');
 const priorWork = await page.getByTestId('prior-work').textContent();
 check(priorWork.includes('What was left open') && priorWork.includes('token.rs'), 'prior-work summary shown');
 check(/history · haiku · \d+ tokens/.test(priorWork), 'history agent, model and tokens shown');
@@ -102,6 +108,7 @@ check(!files.includes('other.rs'), 'PROJEKTNAME-1234 is not PROJEKTNAME-123');
 await page.getByTestId('prior-work').scrollIntoViewIfNeeded();
 await shot('h02-prior-work');
 const timeline = page.getByTestId('ticket-timeline');
+await unfold('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 await page.waitForTimeout(500);
 const timelineText = await timeline.textContent();

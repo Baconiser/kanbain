@@ -4,11 +4,15 @@ import { Textarea } from '@kanbain/ui/components/Textarea';
 import type { IssueComment } from 'shared/types';
 import { useIssueComments } from '@/shared/hooks/useTicketStreams';
 import { issuesApi } from '@/shared/lib/ticketsApi';
+import { CollapsibleSection } from './CollapsibleSection';
 
 interface TicketCommentsProps {
   issueId: string;
   onError: (message: string) => void;
 }
+
+// Long threads show the latest few until expanded.
+const COMMENTS_SHOWN = 5;
 
 function authorLabel(author: string): string {
   if (author === 'user') return 'You';
@@ -113,6 +117,8 @@ export function TicketComments({ issueId, onError }: TicketCommentsProps) {
   const { comments, isLoading } = useIssueComments(issueId);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const hidden = showAll ? 0 : Math.max(0, comments.length - COMMENTS_SHOWN);
 
   const send = async () => {
     if (!message.trim()) return;
@@ -128,15 +134,28 @@ export function TicketComments({ issueId, onError }: TicketCommentsProps) {
   };
 
   return (
-    <section className="flex flex-col gap-half">
-      <h3 className="text-sm font-medium text-normal">
-        Comments ({comments.length})
-      </h3>
+    <CollapsibleSection
+      id="comments"
+      title="Comments"
+      meta={comments.length}
+      testId="ticket-comments"
+    >
       {isLoading ? (
         <p className="text-sm text-low">Loading…</p>
       ) : (
         <ul className="flex flex-col gap-half">
-          {comments.map((c) => (
+          {hidden > 0 && (
+            <li>
+              <button
+                type="button"
+                className="text-xs text-low hover:text-normal"
+                onClick={() => setShowAll(true)}
+              >
+                Show {hidden} earlier comment{hidden === 1 ? '' : 's'}
+              </button>
+            </li>
+          )}
+          {comments.slice(hidden).map((c) => (
             <CommentItem key={c.id} comment={c} onError={onError} />
           ))}
         </ul>
@@ -144,6 +163,7 @@ export function TicketComments({ issueId, onError }: TicketCommentsProps) {
       <Textarea
         aria-label="New comment"
         placeholder="Write a comment… (Ctrl+Enter to send)"
+        rows={2}
         value={message}
         onChange={(e) => setMessage(e.target.value)}
         onKeyDown={(e) => {
@@ -153,11 +173,11 @@ export function TicketComments({ issueId, onError }: TicketCommentsProps) {
           }
         }}
       />
-      <div>
-        <Button size="sm" onClick={send} disabled={sending || !message.trim()}>
+      <div className="flex justify-end">
+        <Button size="xs" onClick={send} disabled={sending || !message.trim()}>
           Comment
         </Button>
       </div>
-    </section>
+    </CollapsibleSection>
   );
 }

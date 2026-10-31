@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { IssueDescription, IssueEvent } from 'shared/types';
 import { issuesApi } from '@/shared/lib/ticketsApi';
+import { CollapsibleSection } from './CollapsibleSection';
 import { TextDiffView } from './TextDiffView';
+
+// Long histories show the latest events until expanded.
+const EVENTS_SHOWN = 10;
 
 interface TicketTimelineProps {
   issueId: string;
@@ -183,18 +187,35 @@ export function TicketTimeline({
   isLoading,
 }: TicketTimelineProps) {
   const [open, setOpen] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
   const created = Date.parse(createdAt);
+  const hidden = showAll ? 0 : Math.max(0, events.length - EVENTS_SHOWN);
+  const latest = events[events.length - 1];
 
   return (
-    <section className="flex flex-col gap-half" data-testid="ticket-timeline">
-      <h3 className="text-sm font-medium text-normal">
-        Timeline ({events.length})
-      </h3>
+    <CollapsibleSection
+      id="timeline"
+      title="Timeline"
+      meta={latest ? `${events.length} · latest: ${describeEvent(latest)}` : 0}
+      defaultOpen={false}
+      testId="ticket-timeline"
+    >
       {isLoading ? (
         <p className="text-sm text-low">Loading…</p>
       ) : (
         <ol className="flex flex-col">
-          {events.map((event) => {
+          {hidden > 0 && (
+            <li>
+              <button
+                type="button"
+                className="text-xs text-low hover:text-normal"
+                onClick={() => setShowAll(true)}
+              >
+                Show {hidden} earlier event{hidden === 1 ? '' : 's'}
+              </button>
+            </li>
+          )}
+          {events.slice(hidden).map((event) => {
             const before = Date.parse(event.occurred_at) < created - 1000;
             const version =
               event.event_type === 'description_version'
@@ -241,6 +262,6 @@ export function TicketTimeline({
           })}
         </ol>
       )}
-    </section>
+    </CollapsibleSection>
   );
 }

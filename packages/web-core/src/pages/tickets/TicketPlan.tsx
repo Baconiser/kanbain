@@ -11,6 +11,7 @@ import type {
   PlanningView,
 } from 'shared/types';
 import { planningApi } from '@/shared/lib/ticketsApi';
+import { PlanOverview } from './PlanOverview';
 
 interface TicketPlanProps {
   issueId: string;
@@ -463,6 +464,21 @@ function PlanForm({
   );
 }
 
+const STATUS_BADGES: Record<
+  Plan['status'],
+  { label: string; className: string }
+> = {
+  draft: {
+    label: 'Awaiting approval',
+    className: 'border-brand/50 text-brand',
+  },
+  approved: {
+    label: 'Approved',
+    className: 'border-success/50 text-success',
+  },
+  rejected: { label: 'Sent back', className: 'border-error/50 text-error' },
+};
+
 function versionLabel(plan: Plan): string {
   const who = plan.source === 'edited' ? 'edited' : 'planner';
   return `v${plan.version} · ${who} · ${plan.status}`;
@@ -484,6 +500,7 @@ export function TicketPlan({
   const [selected, setSelected] = useState<string | null>(null);
   const [draft, setDraft] = useState<PlanDocument | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(
@@ -517,6 +534,7 @@ export function TicketPlan({
     setSelected(null);
     setDraft(null);
     setFeedback(null);
+    setEditing(false);
   }, [latest?.id]);
 
   const editable =
@@ -542,12 +560,46 @@ export function TicketPlan({
   if (!view) return null;
   const planning = view.planning;
   const canStart = status !== 'planning' && status !== 'waiting_for_answer';
+  const badge = shown ? STATUS_BADGES[shown.status] : null;
 
   return (
-    <section className="flex flex-col gap-half" data-testid="ticket-plan">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-normal">Plan</h3>
-        <div className="flex items-center gap-base">
+    <section className="flex flex-col gap-base" data-testid="ticket-plan">
+      <div className="flex items-center justify-between gap-base">
+        <div className="flex min-w-0 flex-wrap items-center gap-half">
+          {badge && (
+            <span
+              className={`rounded-sm border px-half py-px text-xs ${badge.className}`}
+            >
+              {shown?.status === 'draft' && shown.id !== latest?.id
+                ? 'Superseded'
+                : badge.label}
+            </span>
+          )}
+          {!shown && <span className="text-sm text-low">No plan</span>}
+          {shown &&
+            plans.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                data-testid={`plan-version-${p.version}`}
+                title={versionLabel(p)}
+                className={`rounded-sm border px-half text-xs ${
+                  p.id === shown.id
+                    ? 'border-brand text-normal'
+                    : 'text-low hover:text-normal'
+                }`}
+                onClick={() => {
+                  setSelected(p.id);
+                  setDraft(null);
+                  setFeedback(null);
+                  setEditing(false);
+                }}
+              >
+                {versionLabel(p)}
+              </button>
+            ))}
+        </div>
+        <div className="flex shrink-0 items-center gap-base">
           {planning?.workspace_id && (
             <button
               type="button"
@@ -610,48 +662,22 @@ export function TicketPlan({
       )}
 
       {shown && (
-        <div className="flex flex-col gap-base rounded-sm border bg-secondary p-base">
-          <div className="flex flex-wrap items-center gap-half">
-            {plans.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                data-testid={`plan-version-${p.version}`}
-                className={`rounded-sm border px-half text-xs ${
-                  p.id === shown.id
-                    ? 'border-brand text-normal'
-                    : 'text-low hover:text-normal'
-                }`}
-                onClick={() => {
-                  setSelected(p.id);
-                  setDraft(null);
-                  setFeedback(null);
-                }}
-              >
-                {versionLabel(p)}
-              </button>
-            ))}
-          </div>
+        <>
           {shown.feedback && (
-            <p className="text-sm text-low">
+            <p className="rounded-sm border-l-2 border-error/50 bg-secondary px-base py-half text-sm text-low">
               Sent back: <span className="text-normal">{shown.feedback}</span>
             </p>
           )}
 
-          <PlanForm
-            // Remount per version so the form's raw text follows it.
-            key={shown.id}
-            plan={draft ?? shown.plan}
-            readOnly={!editable}
-            onChange={setDraft}
-          />
-
-          {editable && feedback === null && (
-            <div className="flex flex-wrap gap-half">
+          {/* Decisions sit above the plan, not under a long scroll. */}
+          {editable && feedback === null && !editing && (
+            <div className="flex flex-wrap gap-half rounded-sm border border-brand/30 bg-brand/5 p-base">
+              <span className="w-full text-sm text-normal">
+                Review the plan, then approve it to start coding.
+              </span>
               <Button
                 size="sm"
                 disabled={busy || dirty}
-                title={dirty ? 'Save your edits as a new version first' : ''}
                 data-testid="plan-approve"
                 onClick={() =>
                   void act(
@@ -665,6 +691,30 @@ export function TicketPlan({
               <Button
                 size="sm"
                 variant="outline"
+                disabled={busy}
+                data-testid="plan-edit"
+                onClick={() => setEditing(true)}
+              >
+                Edit
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                data-testid="plan-send-back"
+                onClick={() => setFeedback('')}
+              >
+                Send back
+              </Button>
+            </div>
+          )}
+          {editable && editing && (
+            <div className="sticky top-12 z-[5] flex flex-wrap items-center gap-half rounded-sm border bg-primary p-base shadow-sm">
+              <span className="mr-auto text-sm text-low">
+                {dirty ? 'Unsaved changes' : 'Editing'}
+              </span>
+              <Button
+                size="sm"
                 disabled={busy || !dirty}
                 data-testid="plan-save"
                 onClick={() =>
@@ -680,16 +730,17 @@ export function TicketPlan({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy || dirty}
-                data-testid="plan-send-back"
-                onClick={() => setFeedback('')}
+                onClick={() => {
+                  setDraft(null);
+                  setEditing(false);
+                }}
               >
-                Send back
+                {dirty ? 'Discard' : 'Done'}
               </Button>
             </div>
           )}
           {editable && feedback !== null && (
-            <div className="flex flex-col gap-half">
+            <div className="flex flex-col gap-half rounded-sm border p-base">
               <Textarea
                 aria-label="Feedback for the planner"
                 data-testid="plan-feedback"
@@ -722,11 +773,26 @@ export function TicketPlan({
             </div>
           )}
           {shown.status === 'approved' && (
-            <p className="text-sm text-success" data-testid="plan-approved">
+            <p
+              className="flex items-center gap-half rounded-sm border border-success/40 bg-success/5 px-base py-half text-sm text-success"
+              data-testid="plan-approved"
+            >
               Approved. Coding can start on this plan.
             </p>
           )}
-        </div>
+
+          {editable && editing ? (
+            <PlanForm
+              // Remount per version so the form's raw text follows it.
+              key={shown.id}
+              plan={draft ?? shown.plan}
+              readOnly={false}
+              onChange={setDraft}
+            />
+          ) : (
+            <PlanOverview plan={shown.plan} />
+          )}
+        </>
       )}
     </section>
   );

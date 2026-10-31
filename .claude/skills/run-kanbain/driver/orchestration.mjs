@@ -81,6 +81,11 @@ await until('the plan', async () => {
 // 3. Approve in the UI; coding starts.
 const browser = await chromium.launch({ args: ['--no-sandbox'] });
 const page = await (await browser.newContext({ viewport: { width: 1600, height: 1300 } })).newPage();
+// Panel sections fold; open one (by its test id) before reading inside it.
+const unfold = async (testId) => {
+  const toggle = page.getByTestId(`${testId}-toggle`);
+  if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+};
 const errors = [];
 let restarting = false;
 page.on('console', (m) => m.type() === 'error' && !restarting && errors.push(m.text()));
@@ -215,6 +220,7 @@ await page.getByTestId('coding-status').filter({ hasText: 'All subtasks merged' 
 await shot('o04-done');
 await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
+await unfold('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 await page.waitForTimeout(800);
 const timelineText = await timeline.textContent();
