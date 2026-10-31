@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PlayIcon, PlusIcon, TrashIcon, XIcon } from '@phosphor-icons/react';
+import {
+  CaretDownIcon,
+  LinkIcon,
+  PlayIcon,
+  PlusIcon,
+  TrashIcon,
+  XIcon,
+} from '@phosphor-icons/react';
 import { AutoResizeTextarea } from '@kanbain/ui/components/AutoResizeTextarea';
 import { Button } from '@kanbain/ui/components/Button';
 import { Input } from '@kanbain/ui/components/Input';
-import { KanbanBadge } from '@kanbain/ui/components/KanbanBadge';
-import { PriorityIcon } from '@kanbain/ui/components/PriorityIcon';
 import {
   Select,
   SelectContent,
@@ -14,14 +19,11 @@ import {
 } from '@kanbain/ui/components/Select';
 import type {
   Issue,
-  IssueMode,
-  IssuePriority,
   IssueRelationshipType,
   Project,
   UpdateIssue,
   WorkspaceWithStatus,
 } from 'shared/types';
-import WYSIWYGEditor from '@/shared/components/WYSIWYGEditor';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { resolveDefaultTargetBranch } from '@/shared/hooks/useProjectRepoDefaults';
@@ -34,19 +36,41 @@ import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketCoding } from './TicketCoding';
 import { TicketComments } from './TicketComments';
+import { TicketDescription } from './TicketDescription';
 import { TicketHistory } from './TicketHistory';
 import { TicketPlan } from './TicketPlan';
+import { TicketProperties } from './TicketProperties';
 import { TicketRelated } from './TicketRelated';
 import { TicketTimeline } from './TicketTimeline';
 import { internalTicketId, ticketDisplayId } from './ticketIds';
 
-const NONE = '__none__';
-const PRIORITIES: IssuePriority[] = ['urgent', 'high', 'medium', 'low'];
 const RELATIONSHIP_LABELS: Record<IssueRelationshipType, string> = {
   blocking: 'Blocks',
   related: 'Related to',
   has_duplicate: 'Duplicated by',
 };
+// Long sub-ticket lists show this many until expanded.
+const SUB_TICKETS_SHOWN = 5;
+
+type TabId = 'overview' | 'plan' | 'coding' | 'activity';
+const TAB_STORAGE_KEY = 'kanbain.ticketPanel.tab';
+
+function readStoredTab(): TabId {
+  try {
+    const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+    if (
+      stored === 'overview' ||
+      stored === 'plan' ||
+      stored === 'coding' ||
+      stored === 'activity'
+    ) {
+      return stored;
+    }
+  } catch {
+    // Storage can be unavailable (private mode); start on the overview.
+  }
+  return 'overview';
+}
 
 interface TicketPanelProps {
   project: Project;
@@ -71,40 +95,86 @@ function attachmentMarkdown(file: {
   return `${isImage ? '!' : ''}[${file.original_name}](attachment://${file.id})`;
 }
 
-function PropertyRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid grid-cols-[110px_1fr] items-center gap-base">
-      <span className="text-sm text-low">{label}</span>
-      <div className="min-w-0">{children}</div>
-    </div>
-  );
-}
-
+/** A titled block that folds away from its header. */
 function Section({
   title,
   action,
+  defaultOpen = true,
   children,
 }: {
   title: string;
   action?: React.ReactNode;
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <section className="flex flex-col gap-half">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-normal">{title}</h3>
-        {action}
+      <div className="flex items-center justify-between gap-base">
+        <button
+          type="button"
+          aria-expanded={open}
+          className="flex items-center gap-half text-sm font-medium text-normal hover:text-high"
+          onClick={() => setOpen((o) => !o)}
+        >
+          <CaretDownIcon
+            weight="fill"
+            className={`size-icon-xs text-low transition-transform ${
+              open ? '' : '-rotate-90'
+            }`}
+          />
+          {title}
+        </button>
+        {open && action}
       </div>
-      {children}
+      {open && children}
     </section>
   );
 }
+
+function TabButton({
+  active,
+  onClick,
+  label,
+  badge,
+  attention,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+  badge?: string;
+  attention?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      data-testid={`ticket-tab-${label.toLowerCase()}`}
+      onClick={onClick}
+      className={`relative flex items-center gap-half border-b-2 px-base py-base text-sm ${
+        active
+          ? 'border-brand text-high'
+          : 'border-transparent text-low hover:text-normal'
+      }`}
+    >
+      {label}
+      {badge && <span className="text-xs text-low">{badge}</span>}
+      {attention && (
+        <span
+          className="size-1.5 rounded-full bg-brand"
+          aria-label="Needs your attention"
+        />
+      )}
+    </button>
+  );
+}
+
+// `hidden` alone loses to Tailwind's `flex`, so the class switches too.
+const tabPanelClass = (active: boolean) =>
+  active
+    ? 'flex flex-col gap-double px-double py-double [&>*]:shrink-0'
+    : 'hidden';
 
 type WorkspacesState = { workspaces: Record<string, WorkspaceWithStatus> };
 const initialWorkspaces = (): WorkspacesState => ({ workspaces: {} });
@@ -119,23 +189,30 @@ export function TicketPanel({
 }: TicketPanelProps) {
   const appNavigation = useAppNavigation();
   const [title, setTitle] = useState(issue.title);
-  const [externalId, setExternalId] = useState(issue.external_id ?? '');
-  const [budget, setBudget] = useState(issue.budget_usd?.toString() ?? '');
   const [description, setDescription] = useState(issue.description ?? '');
   const [newSubTitle, setNewSubTitle] = useState('');
-  const [newTagName, setNewTagName] = useState('');
   const [relationType, setRelationType] =
     useState<IssueRelationshipType>('related');
+  const [linking, setLinking] = useState(false);
+  const [showAllChildren, setShowAllChildren] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [tab, setTabState] = useState<TabId>(readStoredTab);
   const savedDescription = useRef(issue.description ?? '');
+
+  const setTab = (next: TabId) => {
+    setTabState(next);
+    try {
+      window.localStorage.setItem(TAB_STORAGE_KEY, next);
+    } catch {
+      // Not remembering the tab is fine.
+    }
+  };
 
   // The page remounts this panel per ticket (`key`); here we only follow
   // remote changes to fields that are not being edited.
   useEffect(() => {
     setTitle(issue.title);
-    setExternalId(issue.external_id ?? '');
-    setBudget(issue.budget_usd?.toString() ?? '');
-  }, [issue.title, issue.external_id, issue.budget_usd]);
+  }, [issue.title]);
 
   // A description changed elsewhere (an intake update) replaces the local
   // one unless it has unsaved edits.
@@ -161,7 +238,7 @@ export function TicketPanel({
       e.event_type === 'prior_commit'
   ).length;
 
-  const planningEvents = timeline.events.filter(
+  const planningTimeline = timeline.events.filter(
     (e) =>
       e.event_type === 'planning_started' ||
       e.event_type === 'plan_questions' ||
@@ -169,7 +246,15 @@ export function TicketPanel({
       e.event_type === 'plan_approved' ||
       e.event_type === 'plan_rejected' ||
       e.event_type === 'planning_failed'
-  ).length;
+  );
+  const planningEvents = planningTimeline.length;
+  // The planner's last word was a question: the answer goes in the comments.
+  const planWaiting =
+    planningTimeline[planningTimeline.length - 1]?.event_type ===
+    'plan_questions';
+  const planToApprove =
+    planningTimeline[planningTimeline.length - 1]?.event_type ===
+    'plan_version';
 
   const codingEvents = timeline.events.filter(
     (e) =>
@@ -185,6 +270,9 @@ export function TicketPanel({
   const planApproved = timeline.events.some(
     (e) => e.event_type === 'plan_approved'
   );
+  // Nothing to code before a plan is approved.
+  const hasCoding = codingEvents > 0;
+  const activeTab: TabId = tab === 'coding' && !hasCoding ? 'overview' : tab;
 
   const update = useCallback(
     (data: UpdateIssue) =>
@@ -237,26 +325,13 @@ export function TicketPanel({
     () => board.issues.filter((i) => i.parent_issue_id === issue.id),
     [board.issues, issue.id]
   );
-  const parent = issue.parent_issue_id
-    ? board.issuesById[issue.parent_issue_id]
-    : undefined;
-  // A ticket cannot be parented under itself or one of its descendants.
-  const parentCandidates = useMemo(() => {
-    const descendants = new Set<string>([issue.id]);
-    let added = true;
-    while (added) {
-      added = false;
-      for (const i of board.issues) {
-        if (i.parent_issue_id && descendants.has(i.parent_issue_id)) {
-          if (!descendants.has(i.id)) {
-            descendants.add(i.id);
-            added = true;
-          }
-        }
-      }
-    }
-    return board.issues.filter((i) => !descendants.has(i.id));
-  }, [board.issues, issue.id]);
+  const shownChildren = showAllChildren
+    ? children
+    : children.slice(0, SUB_TICKETS_SHOWN);
+  const doneChildren = children.filter((c) => {
+    const status = board.statuses.find((s) => s.id === c.status_id);
+    return status?.kind === 'done';
+  }).length;
 
   const relationships = useMemo(
     () =>
@@ -265,7 +340,6 @@ export function TicketPanel({
       ),
     [board.relationships, issue.id]
   );
-  const selectedTagIds = board.tagIdsByIssue[issue.id] ?? [];
 
   const { data: workspaceData } = useJsonPatchWsStream<WorkspacesState>(
     '/api/workspaces/streams/ws?archived=false',
@@ -330,37 +404,13 @@ export function TicketPanel({
     }
   };
 
-  const toggleTag = (tagId: string) => {
-    const request = selectedTagIds.includes(tagId)
-      ? issuesApi.removeTag(issue.id, tagId)
-      : issuesApi.addTag(issue.id, tagId);
-    request.catch((err: unknown) =>
-      onError(errorMessage(err, 'Failed to update tags'))
-    );
-  };
-
-  const createTag = async () => {
-    const name = newTagName.trim();
-    if (!name) return;
-    try {
-      const hue = Math.floor(Math.random() * 360);
-      const tag = await projectsApi.createTag(project.id, {
-        name,
-        color: `${hue} 70% 50%`,
-      });
-      await issuesApi.addTag(issue.id, tag.id);
-      setNewTagName('');
-    } catch (err) {
-      onError(errorMessage(err, 'Failed to create tag'));
-    }
-  };
-
   const addRelationship = (relatedIssueId: string) => {
     issuesApi
       .createRelationship(issue.id, {
         related_issue_id: relatedIssueId,
         relationship_type: relationType,
       })
+      .then(() => setLinking(false))
       .catch((err: unknown) =>
         onError(errorMessage(err, 'Failed to link tickets'))
       );
@@ -376,25 +426,33 @@ export function TicketPanel({
   };
 
   const issueLabel = (i: Issue) => `${internalTicketId(i, project)} ${i.title}`;
+  const openWorkspace = (id: string) => appNavigation.goToWorkspace(id);
+  const runningWorkspaces = workspaces.filter((w) => w.is_running).length;
 
   return (
     <aside className="flex h-full w-full flex-col border-l bg-primary">
-      <header className="flex items-center justify-between gap-base border-b px-double py-base">
+      <header className="flex items-center justify-between gap-base border-b px-double py-half">
         <span className="truncate font-mono text-sm text-low">
           {ticketDisplayId(issue, project)}
         </span>
         <div className="flex items-center gap-half">
-          <Button size="sm" onClick={startWorkspace}>
+          <Button size="xs" variant="outline" onClick={startWorkspace}>
             <PlayIcon className="mr-half size-icon-xs" weight="fill" />
             Start workspace
           </Button>
           {confirmDelete ? (
-            <Button size="sm" variant="destructive" onClick={deleteIssue}>
+            <Button
+              size="xs"
+              variant="destructive"
+              onClick={deleteIssue}
+              onBlur={() => setConfirmDelete(false)}
+              autoFocus
+            >
               Confirm delete
             </Button>
           ) : (
             <Button
-              size="sm"
+              size="xs"
               variant="ghost"
               aria-label="Delete ticket"
               onClick={() => setConfirmDelete(true)}
@@ -403,7 +461,7 @@ export function TicketPanel({
             </Button>
           )}
           <Button
-            size="sm"
+            size="xs"
             variant="ghost"
             aria-label="Close ticket"
             onClick={onClose}
@@ -413,376 +471,332 @@ export function TicketPanel({
         </div>
       </header>
 
-      <div className="flex flex-1 flex-col gap-double overflow-y-auto px-double py-double [&>*]:shrink-0">
-        <AutoResizeTextarea
-          aria-label="Ticket title"
-          className="w-full resize-none bg-transparent text-xl font-semibold text-high outline-none"
-          value={title}
-          onChange={setTitle}
-          onBlur={() => {
-            if (title.trim() && title !== issue.title) void update({ title });
-            else setTitle(issue.title);
-          }}
-        />
-
-        <div className="flex flex-col gap-base">
-          <PropertyRow label="Status">
-            <Select
-              value={issue.status_id}
-              onValueChange={(status_id) => void update({ status_id })}
-            >
-              <SelectTrigger aria-label="Status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {board.statuses.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    <span className="flex items-center gap-half">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: `hsl(${s.color})` }}
-                      />
-                      {s.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-          <PropertyRow label="Priority">
-            <Select
-              value={issue.priority ?? NONE}
-              onValueChange={(v) =>
-                void update({
-                  priority: v === NONE ? null : (v as IssuePriority),
-                })
-              }
-            >
-              <SelectTrigger aria-label="Priority">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>No priority</SelectItem>
-                {PRIORITIES.map((p) => (
-                  <SelectItem key={p} value={p}>
-                    <span className="flex items-center gap-half capitalize">
-                      <PriorityIcon priority={p} />
-                      {p}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-          <PropertyRow label="Agent mode">
-            <Select
-              value={issue.mode}
-              onValueChange={(v) => void update({ mode: v as IssueMode })}
-            >
-              <SelectTrigger aria-label="Agent mode">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ask">Ask — agents ask questions</SelectItem>
-                <SelectItem value="yolo">
-                  Yolo — agents state assumptions
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </PropertyRow>
-          <PropertyRow label="External ID">
-            <Input
-              aria-label="External ID"
-              placeholder="e.g. PROJ-123"
-              value={externalId}
-              onChange={(e) => setExternalId(e.target.value)}
-              onBlur={() => {
-                if (externalId !== (issue.external_id ?? '')) {
-                  void update({ external_id: externalId.trim() || null });
-                }
-              }}
-            />
-          </PropertyRow>
-          <PropertyRow label="Budget (USD)">
-            <Input
-              aria-label="Budget in USD"
-              type="number"
-              min={0}
-              step={0.5}
-              placeholder="Project default"
-              value={budget}
-              onChange={(e) => setBudget(e.target.value)}
-              onBlur={() => {
-                const value = budget.trim() === '' ? null : Number(budget);
-                if (value !== null && (Number.isNaN(value) || value < 0)) {
-                  setBudget(issue.budget_usd?.toString() ?? '');
-                  return;
-                }
-                if (value !== issue.budget_usd) {
-                  void update({ budget_usd: value });
-                }
-              }}
-            />
-          </PropertyRow>
-          <PropertyRow label="Parent">
-            <Select
-              value={issue.parent_issue_id ?? NONE}
-              onValueChange={(v) =>
-                void update({ parent_issue_id: v === NONE ? null : v })
-              }
-            >
-              <SelectTrigger aria-label="Parent ticket">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE}>No parent</SelectItem>
-                {parentCandidates.map((i) => (
-                  <SelectItem key={i.id} value={i.id}>
-                    {issueLabel(i)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {parent && (
-              <button
-                type="button"
-                className="mt-half text-xs text-low hover:text-normal"
-                onClick={() => onSelectIssue(parent.id)}
-              >
-                Open {internalTicketId(parent, project)}
-              </button>
-            )}
-          </PropertyRow>
+      <div className="flex flex-1 flex-col overflow-y-auto">
+        <div className="flex flex-col gap-base px-double pt-double">
+          <AutoResizeTextarea
+            aria-label="Ticket title"
+            className="w-full resize-none bg-transparent text-xl font-semibold text-high outline-none"
+            value={title}
+            onChange={setTitle}
+            onBlur={() => {
+              if (title.trim() && title !== issue.title) void update({ title });
+              else setTitle(issue.title);
+            }}
+          />
+          <TicketProperties
+            project={project}
+            issue={issue}
+            board={board}
+            update={update}
+            onSelectIssue={onSelectIssue}
+            onError={onError}
+          />
         </div>
 
-        <Section title="Tags">
-          <div className="flex flex-wrap gap-half">
-            {board.tags.map((tag) => {
-              const active = selectedTagIds.includes(tag.id);
-              return (
+        <nav
+          role="tablist"
+          className="sticky top-0 z-10 mt-base flex border-b bg-primary px-base"
+        >
+          <TabButton
+            label="Overview"
+            active={activeTab === 'overview'}
+            onClick={() => setTab('overview')}
+          />
+          <TabButton
+            label="Plan"
+            active={activeTab === 'plan'}
+            attention={planWaiting || planToApprove}
+            onClick={() => setTab('plan')}
+          />
+          {hasCoding && (
+            <TabButton
+              label="Coding"
+              active={activeTab === 'coding'}
+              onClick={() => setTab('coding')}
+            />
+          )}
+          <TabButton
+            label="Activity"
+            active={activeTab === 'activity'}
+            attention={planWaiting}
+            onClick={() => setTab('activity')}
+          />
+        </nav>
+
+        {/* Inactive tabs stay mounted so unsaved plan edits and live
+            polling survive switching. */}
+        <div
+          role="tabpanel"
+          hidden={activeTab !== 'overview'}
+          className={tabPanelClass(activeTab === 'overview')}
+        >
+          <TicketDescription
+            title={issue.title}
+            value={description}
+            onChange={setDescription}
+            onPasteFiles={(files) => void handlePasteFiles(files)}
+          />
+
+          <Section
+            title={`Sub-tickets (${
+              children.length > 0
+                ? `${doneChildren}/${children.length} done`
+                : '0'
+            })`}
+          >
+            {children.length > 0 && (
+              <ul className="flex flex-col">
+                {shownChildren.map((child) => {
+                  const status = board.statuses.find(
+                    (s) => s.id === child.status_id
+                  );
+                  return (
+                    <li key={child.id}>
+                      <button
+                        type="button"
+                        onClick={() => onSelectIssue(child.id)}
+                        title={child.title}
+                        className="flex w-full items-center gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
+                      >
+                        <span
+                          className="h-2 w-2 shrink-0 rounded-full"
+                          style={{
+                            backgroundColor: `hsl(${status?.color ?? '0 0% 50%'})`,
+                          }}
+                          title={status?.name}
+                        />
+                        <span className="shrink-0 whitespace-nowrap font-mono text-xs text-low">
+                          {internalTicketId(child, project)}
+                        </span>
+                        <span className="min-w-0 truncate">{child.title}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {children.length > SUB_TICKETS_SHOWN && (
+              <button
+                type="button"
+                className="self-start px-half text-xs text-low hover:text-normal"
+                onClick={() => setShowAllChildren((s) => !s)}
+              >
+                {showAllChildren ? 'Show fewer' : `Show all ${children.length}`}
+              </button>
+            )}
+            <form
+              className="flex gap-half"
+              onSubmit={(e) => {
+                e.preventDefault();
+                void addSubTicket();
+              }}
+            >
+              <Input
+                aria-label="New sub-ticket title"
+                placeholder="New sub-ticket"
+                value={newSubTitle}
+                onChange={(e) => setNewSubTitle(e.target.value)}
+              />
+              <Button type="submit" size="sm" variant="outline">
+                <PlusIcon className="size-icon-xs" />
+              </Button>
+            </form>
+          </Section>
+
+          <Section
+            title={`Relationships (${relationships.length})`}
+            action={
+              !linking && (
                 <button
-                  key={tag.id}
                   type="button"
-                  aria-pressed={active}
-                  onClick={() => toggleTag(tag.id)}
-                  className={active ? '' : 'opacity-50 hover:opacity-100'}
+                  className="flex items-center gap-half text-xs text-low hover:text-normal"
+                  onClick={() => setLinking(true)}
                 >
-                  <KanbanBadge name={tag.name} color={tag.color} />
+                  <LinkIcon className="size-icon-xs" /> Link ticket
                 </button>
+              )
+            }
+          >
+            {relationships.map((r) => {
+              const outgoing = r.issue_id === issue.id;
+              const otherId = outgoing ? r.related_issue_id : r.issue_id;
+              const other = board.issuesById[otherId];
+              const label = outgoing
+                ? RELATIONSHIP_LABELS[r.relationship_type]
+                : r.relationship_type === 'blocking'
+                  ? 'Blocked by'
+                  : r.relationship_type === 'has_duplicate'
+                    ? 'Duplicates'
+                    : 'Related to';
+              return (
+                <div
+                  key={r.id}
+                  className="flex items-center justify-between gap-base text-sm"
+                >
+                  <button
+                    type="button"
+                    className="truncate text-left hover:underline"
+                    onClick={() => other && onSelectIssue(other.id)}
+                  >
+                    <span className="text-low">{label} </span>
+                    {other ? issueLabel(other) : 'Unknown ticket'}
+                  </button>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    aria-label="Remove relationship"
+                    onClick={() =>
+                      issuesApi
+                        .deleteRelationship(r.id)
+                        .catch((err: unknown) =>
+                          onError(errorMessage(err, 'Failed to unlink'))
+                        )
+                    }
+                  >
+                    <XIcon className="size-icon-xs" />
+                  </Button>
+                </div>
               );
             })}
-          </div>
-          <form
-            className="flex gap-half"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void createTag();
-            }}
-          >
-            <Input
-              aria-label="New tag"
-              placeholder="New tag"
-              value={newTagName}
-              onChange={(e) => setNewTagName(e.target.value)}
-            />
-            <Button type="submit" size="sm" variant="outline">
-              Add
-            </Button>
-          </form>
-        </Section>
-
-        <Section title="Description">
-          <div className="rounded-sm border bg-secondary p-base">
-            <WYSIWYGEditor
-              placeholder="Describe the work. Paste images or files to attach them."
-              value={description}
-              onChange={setDescription}
-              onPasteFiles={(files) => void handlePasteFiles(files)}
-              className="min-h-[160px]"
-            />
-          </div>
-        </Section>
-
-        <Section title={`Sub-tickets (${children.length})`}>
-          {children.map((child) => {
-            const status = board.statuses.find((s) => s.id === child.status_id);
-            return (
-              <button
-                key={child.id}
-                type="button"
-                onClick={() => onSelectIssue(child.id)}
-                className="flex items-center gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
-              >
-                <span
-                  className="h-2 w-2 shrink-0 rounded-full"
-                  style={{
-                    backgroundColor: `hsl(${status?.color ?? '0 0% 50%'})`,
-                  }}
-                  title={status?.name}
-                />
-                <span className="font-mono text-low">
-                  {internalTicketId(child, project)}
-                </span>
-                <span className="truncate">{child.title}</span>
-              </button>
-            );
-          })}
-          <form
-            className="flex gap-half"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void addSubTicket();
-            }}
-          >
-            <Input
-              aria-label="New sub-ticket title"
-              placeholder="New sub-ticket"
-              value={newSubTitle}
-              onChange={(e) => setNewSubTitle(e.target.value)}
-            />
-            <Button type="submit" size="sm" variant="outline">
-              <PlusIcon className="size-icon-xs" />
-            </Button>
-          </form>
-        </Section>
-
-        <Section title="Relationships">
-          {relationships.map((r) => {
-            const outgoing = r.issue_id === issue.id;
-            const otherId = outgoing ? r.related_issue_id : r.issue_id;
-            const other = board.issuesById[otherId];
-            const label = outgoing
-              ? RELATIONSHIP_LABELS[r.relationship_type]
-              : r.relationship_type === 'blocking'
-                ? 'Blocked by'
-                : r.relationship_type === 'has_duplicate'
-                  ? 'Duplicates'
-                  : 'Related to';
-            return (
-              <div
-                key={r.id}
-                className="flex items-center justify-between gap-base text-sm"
-              >
-                <button
-                  type="button"
-                  className="truncate text-left hover:underline"
-                  onClick={() => other && onSelectIssue(other.id)}
+            {relationships.length === 0 && !linking && (
+              <p className="text-sm text-low">No linked tickets.</p>
+            )}
+            {linking && (
+              <div className="grid grid-cols-[140px_1fr_auto] gap-half">
+                <Select
+                  value={relationType}
+                  onValueChange={(v) =>
+                    setRelationType(v as IssueRelationshipType)
+                  }
                 >
-                  <span className="text-low">{label} </span>
-                  {other ? issueLabel(other) : 'Unknown ticket'}
-                </button>
+                  <SelectTrigger aria-label="Relationship type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(RELATIONSHIP_LABELS).map(
+                      ([value, label]) => (
+                        <SelectItem key={value} value={value}>
+                          {label}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+                <Select value="" onValueChange={addRelationship}>
+                  <SelectTrigger aria-label="Related ticket">
+                    <SelectValue placeholder="Link a ticket…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {board.issues
+                      .filter((i) => i.id !== issue.id)
+                      .map((i) => (
+                        <SelectItem key={i.id} value={i.id}>
+                          {issueLabel(i)}
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm"
                   variant="ghost"
-                  aria-label="Remove relationship"
-                  onClick={() =>
-                    issuesApi
-                      .deleteRelationship(r.id)
-                      .catch((err: unknown) =>
-                        onError(errorMessage(err, 'Failed to unlink'))
-                      )
-                  }
+                  aria-label="Cancel linking"
+                  onClick={() => setLinking(false)}
                 >
                   <XIcon className="size-icon-xs" />
                 </Button>
               </div>
-            );
-          })}
-          <div className="grid grid-cols-[140px_1fr] gap-half">
-            <Select
-              value={relationType}
-              onValueChange={(v) => setRelationType(v as IssueRelationshipType)}
-            >
-              <SelectTrigger aria-label="Relationship type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {Object.entries(RELATIONSHIP_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value="" onValueChange={addRelationship}>
-              <SelectTrigger aria-label="Related ticket">
-                <SelectValue placeholder="Link a ticket…" />
-              </SelectTrigger>
-              <SelectContent>
-                {board.issues
-                  .filter((i) => i.id !== issue.id)
-                  .map((i) => (
-                    <SelectItem key={i.id} value={i.id}>
-                      {issueLabel(i)}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </Section>
+            )}
+          </Section>
 
-        <Section title={`Workspaces (${workspaces.length})`}>
-          {workspaces.length === 0 && (
-            <p className="text-sm text-low">
-              No workspaces yet. Start one to work on this ticket with an agent.
-            </p>
-          )}
-          {workspaces.map((w) => (
-            <button
-              key={w.id}
-              type="button"
-              onClick={() => appNavigation.goToWorkspace(w.id)}
-              className="flex items-center justify-between gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
-            >
-              <span className="truncate">{w.name ?? w.branch}</span>
-              <span className="shrink-0 text-xs text-low">
-                {w.is_running ? 'Running' : w.branch}
-              </span>
-            </button>
-          ))}
-        </Section>
+          <Section
+            title={`Workspaces (${workspaces.length}${
+              runningWorkspaces ? ` · ${runningWorkspaces} running` : ''
+            })`}
+            defaultOpen={workspaces.length <= 3}
+          >
+            {workspaces.length === 0 && (
+              <p className="text-sm text-low">
+                No workspaces yet. Start one to work on this ticket with an
+                agent.
+              </p>
+            )}
+            {workspaces.map((w) => (
+              <button
+                key={w.id}
+                type="button"
+                onClick={() => openWorkspace(w.id)}
+                title={`${w.name ?? w.branch}\n${w.branch}`}
+                className="flex items-center justify-between gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
+              >
+                <span className="truncate">{w.name ?? w.branch}</span>
+                {w.is_running && (
+                  <span className="shrink-0 text-xs text-brand">Running</span>
+                )}
+              </button>
+            ))}
+          </Section>
 
-        <TicketPlan
-          issueId={issue.id}
-          refreshKey={planningEvents}
-          onOpenWorkspace={(id) => appNavigation.goToWorkspace(id)}
-          onError={onError}
-        />
+          <TicketRelated
+            issueId={issue.id}
+            refreshKey={issue.updated_at}
+            onSelectIssue={onSelectIssue}
+          />
+        </div>
 
-        <TicketCoding
-          issueId={issue.id}
-          refreshKey={codingEvents}
-          planApproved={planApproved}
-          onOpenWorkspace={(id) => appNavigation.goToWorkspace(id)}
-          onError={onError}
-        />
+        <div
+          role="tabpanel"
+          hidden={activeTab !== 'plan'}
+          className={tabPanelClass(activeTab === 'plan')}
+        >
+          <TicketPlan
+            issueId={issue.id}
+            refreshKey={planningEvents}
+            onOpenWorkspace={openWorkspace}
+            onShowComments={() => setTab('activity')}
+            onError={onError}
+          />
+        </div>
 
-        <TicketRelated
-          issueId={issue.id}
-          refreshKey={issue.updated_at}
-          onSelectIssue={onSelectIssue}
-        />
+        <div
+          role="tabpanel"
+          hidden={activeTab !== 'coding'}
+          className={tabPanelClass(activeTab === 'coding')}
+        >
+          <TicketCoding
+            issueId={issue.id}
+            refreshKey={codingEvents}
+            planApproved={planApproved}
+            onOpenWorkspace={openWorkspace}
+            onError={onError}
+          />
+        </div>
 
-        <TicketHistory
-          issueId={issue.id}
-          refreshKey={historyEvents}
-          onError={onError}
-        />
+        <div
+          role="tabpanel"
+          hidden={activeTab !== 'activity'}
+          className={tabPanelClass(activeTab === 'activity')}
+        >
+          <TicketComments issueId={issue.id} onError={onError} />
 
-        <TicketAttachments
-          issueId={issue.id}
-          refreshKey={attachmentEvents}
-          onError={onError}
-        />
+          <TicketHistory
+            issueId={issue.id}
+            refreshKey={historyEvents}
+            onError={onError}
+          />
 
-        <TicketComments issueId={issue.id} onError={onError} />
+          <TicketAttachments
+            issueId={issue.id}
+            refreshKey={attachmentEvents}
+            onError={onError}
+          />
 
-        <TicketTimeline
-          issueId={issue.id}
-          createdAt={issue.created_at}
-          events={timeline.events}
-          isLoading={timeline.isLoading}
-        />
+          <TicketTimeline
+            issueId={issue.id}
+            createdAt={issue.created_at}
+            events={timeline.events}
+            isLoading={timeline.isLoading}
+          />
+        </div>
       </div>
     </aside>
   );

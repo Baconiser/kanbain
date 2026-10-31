@@ -113,6 +113,7 @@ check(
   (await page.getByLabel('Ticket title', { exact: true }).inputValue()).endsWith('(edited)'),
   'ticket created with the edited title'
 );
+await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 const timelineText = async () => (await timeline.textContent()) ?? '';

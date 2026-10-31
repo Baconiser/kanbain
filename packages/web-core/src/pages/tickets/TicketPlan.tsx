@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PlusIcon, TrashIcon } from '@phosphor-icons/react';
+import { CaretRightIcon, PlusIcon, TrashIcon } from '@phosphor-icons/react';
 import { Button } from '@kanbain/ui/components/Button';
 import { Input } from '@kanbain/ui/components/Input';
 import { Textarea } from '@kanbain/ui/components/Textarea';
@@ -17,6 +17,8 @@ interface TicketPlanProps {
   /** Changes when planning events arrive, to reload. */
   refreshKey: number;
   onOpenWorkspace: (workspaceId: string) => void;
+  /** Brings the comments, where the planner's questions are, into view. */
+  onShowComments: () => void;
   onError: (message: string) => void;
 }
 
@@ -94,12 +96,16 @@ function SubtaskEditor({
   subtask,
   index,
   readOnly,
+  open,
+  onToggle,
   onChange,
   onRemove,
 }: {
   subtask: PlanSubtask;
   index: number;
   readOnly: boolean;
+  open: boolean;
+  onToggle: () => void;
   onChange: (subtask: PlanSubtask) => void;
   onRemove: () => void;
 }) {
@@ -127,9 +133,21 @@ function SubtaskEditor({
       data-testid={`plan-subtask-${index}`}
     >
       <div className="flex items-center gap-half">
+        <button
+          type="button"
+          aria-label={open ? 'Fold subtask' : 'Unfold subtask'}
+          aria-expanded={open}
+          className="shrink-0 text-low hover:text-normal"
+          onClick={onToggle}
+        >
+          <CaretRightIcon
+            weight="bold"
+            className={`size-icon-xs transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+        </button>
         <Input
           aria-label="Subtask id"
-          className="w-14 shrink-0 font-mono text-xs"
+          className="h-8 w-12 shrink-0 px-half font-mono text-xs"
           value={subtask.id}
           readOnly={readOnly}
           onChange={(e) => onChange({ ...subtask, id: e.target.value })}
@@ -137,6 +155,8 @@ function SubtaskEditor({
         <Input
           aria-label="Subtask title"
           data-testid="plan-subtask-title"
+          className="h-8"
+          title={subtask.title}
           value={subtask.title}
           readOnly={readOnly}
           onChange={(e) => onChange({ ...subtask, title: e.target.value })}
@@ -152,41 +172,64 @@ function SubtaskEditor({
           </button>
         )}
       </div>
-      <Textarea
-        aria-label="Subtask description"
-        placeholder="What to do and why"
-        value={subtask.description}
-        readOnly={readOnly}
-        rows={2}
-        onChange={(e) => onChange({ ...subtask, description: e.target.value })}
-      />
-      <div className="grid grid-cols-[2fr_1fr] gap-half">
-        <label className="flex flex-col gap-half">
-          <FieldLabel>Likely files (one per line)</FieldLabel>
-          <Textarea
-            className="font-mono text-xs"
-            value={files}
-            readOnly={readOnly}
-            rows={Math.max(1, subtask.files.length)}
-            onChange={(e) => {
-              setFiles(e.target.value);
-              onChange({ ...subtask, files: fromLines(e.target.value) });
-            }}
-          />
-        </label>
-        <label className="flex flex-col gap-half">
-          <FieldLabel>Depends on</FieldLabel>
-          <Input
-            placeholder="e.g. 1, 2"
-            value={deps}
-            readOnly={readOnly}
-            onChange={(e) => {
-              setDeps(e.target.value);
-              onChange({ ...subtask, depends_on: fromIds(e.target.value) });
-            }}
-          />
-        </label>
-      </div>
+      {!open && (
+        <button
+          type="button"
+          className="flex flex-wrap gap-x-base pl-[1.25rem] text-left text-xs text-low hover:text-normal"
+          onClick={onToggle}
+        >
+          {subtask.description && (
+            <span className="w-full truncate">{subtask.description}</span>
+          )}
+          {subtask.depends_on.length > 0 && (
+            <span>after {subtask.depends_on.join(', ')}</span>
+          )}
+          <span>
+            {subtask.files.length} file{subtask.files.length === 1 ? '' : 's'}
+          </span>
+        </button>
+      )}
+      {open && (
+        <Textarea
+          aria-label="Subtask description"
+          placeholder="What to do and why"
+          value={subtask.description}
+          readOnly={readOnly}
+          rows={4}
+          onChange={(e) =>
+            onChange({ ...subtask, description: e.target.value })
+          }
+        />
+      )}
+      {open && (
+        <div className="grid grid-cols-[2fr_1fr] gap-half">
+          <label className="flex flex-col gap-half">
+            <FieldLabel>Likely files (one per line)</FieldLabel>
+            <Textarea
+              className="font-mono text-xs"
+              value={files}
+              readOnly={readOnly}
+              rows={Math.max(1, subtask.files.length)}
+              onChange={(e) => {
+                setFiles(e.target.value);
+                onChange({ ...subtask, files: fromLines(e.target.value) });
+              }}
+            />
+          </label>
+          <label className="flex flex-col gap-half">
+            <FieldLabel>Depends on</FieldLabel>
+            <Input
+              placeholder="e.g. 1, 2"
+              value={deps}
+              readOnly={readOnly}
+              onChange={(e) => {
+                setDeps(e.target.value);
+                onChange({ ...subtask, depends_on: fromIds(e.target.value) });
+              }}
+            />
+          </label>
+        </div>
+      )}
     </li>
   );
 }
@@ -253,6 +296,17 @@ function PlanForm({
   readOnly: boolean;
   onChange: (plan: PlanDocument) => void;
 }) {
+  // Subtasks start folded to one line each; positions, like the editors.
+  const [openSubtasks, setOpenSubtasks] = useState<Set<number>>(new Set());
+  const allOpen =
+    plan.subtasks.length > 0 && openSubtasks.size >= plan.subtasks.length;
+  const toggleSubtask = (i: number) =>
+    setOpenSubtasks((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i);
+      else next.add(i);
+      return next;
+    });
   const setSubtask = (i: number, subtask: PlanSubtask) =>
     onChange({
       ...plan,
@@ -268,29 +322,49 @@ function PlanForm({
       <div className="flex flex-col gap-half">
         <div className="flex items-center justify-between">
           <FieldLabel>Subtasks ({plan.subtasks.length})</FieldLabel>
-          {!readOnly && (
-            <button
-              type="button"
-              className="flex items-center gap-half text-xs text-brand hover:underline"
-              onClick={() =>
-                onChange({
-                  ...plan,
-                  subtasks: [
-                    ...plan.subtasks,
-                    {
-                      id: nextId(plan.subtasks),
-                      title: '',
-                      description: '',
-                      files: [],
-                      depends_on: [],
-                    },
-                  ],
-                })
-              }
-            >
-              <PlusIcon className="size-icon-xs" /> Add subtask
-            </button>
-          )}
+          <div className="flex items-center gap-base">
+            {plan.subtasks.length > 0 && (
+              <button
+                type="button"
+                className="text-xs text-low hover:text-normal"
+                onClick={() =>
+                  setOpenSubtasks(
+                    allOpen
+                      ? new Set()
+                      : new Set(plan.subtasks.map((_, i) => i))
+                  )
+                }
+              >
+                {allOpen ? 'Fold all' : 'Unfold all'}
+              </button>
+            )}
+            {!readOnly && (
+              <button
+                type="button"
+                className="flex items-center gap-half text-xs text-brand hover:underline"
+                onClick={() => {
+                  setOpenSubtasks((prev) =>
+                    new Set(prev).add(plan.subtasks.length)
+                  );
+                  onChange({
+                    ...plan,
+                    subtasks: [
+                      ...plan.subtasks,
+                      {
+                        id: nextId(plan.subtasks),
+                        title: '',
+                        description: '',
+                        files: [],
+                        depends_on: [],
+                      },
+                    ],
+                  });
+                }}
+              >
+                <PlusIcon className="size-icon-xs" /> Add subtask
+              </button>
+            )}
+          </div>
         </div>
         <ol className="flex flex-col gap-half">
           {plan.subtasks.map((s, i) => (
@@ -300,13 +374,24 @@ function PlanForm({
               index={i}
               subtask={s}
               readOnly={readOnly}
+              open={openSubtasks.has(i)}
+              onToggle={() => toggleSubtask(i)}
               onChange={(next) => setSubtask(i, next)}
-              onRemove={() =>
+              onRemove={() => {
+                // Folds shift up with the subtasks below the removed one.
+                setOpenSubtasks(
+                  (prev) =>
+                    new Set(
+                      [...prev]
+                        .filter((j) => j !== i)
+                        .map((j) => (j > i ? j - 1 : j))
+                    )
+                );
                 onChange({
                   ...plan,
                   subtasks: plan.subtasks.filter((_, j) => j !== i),
-                })
-              }
+                });
+              }}
             />
           ))}
         </ol>
@@ -392,6 +477,7 @@ export function TicketPlan({
   issueId,
   refreshKey,
   onOpenWorkspace,
+  onShowComments,
   onError,
 }: TicketPlanProps) {
   const [view, setView] = useState<PlanningView | null>(null);
@@ -501,8 +587,15 @@ export function TicketPlan({
           data-testid="planning-waiting"
         >
           <strong>Waiting for your answer.</strong> The planner asked questions
-          in the comments below; reply there and it continues in the same
-          session.
+          in the{' '}
+          <button
+            type="button"
+            className="text-brand hover:underline"
+            onClick={onShowComments}
+          >
+            comments
+          </button>
+          ; reply there and it continues in the same session.
         </div>
       )}
       {status === 'failed' && (

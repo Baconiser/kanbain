@@ -89,16 +89,20 @@ check(
 );
 
 // 3. Edit: tag, sub-ticket, comment, priority.
+await page.getByRole('button', { name: 'Edit tags' }).click();
 await page.getByLabel('New tag').fill('frontend');
 await page.getByLabel('New tag').press('Enter');
+await page.keyboard.press('Escape');
 await page.getByLabel('New sub-ticket title').fill('Validate email');
 await page.getByLabel('New sub-ticket title').press('Enter');
+await page.getByTestId('ticket-tab-activity').click();
 await page.getByLabel('New comment').fill('First comment');
 await page.getByRole('button', { name: 'Comment', exact: true }).click();
 await page.getByRole('combobox', { name: 'Priority' }).click();
 await page.getByRole('option', { name: 'high' }).click();
 await page.waitForTimeout(1_500);
-check(await page.getByText('First comment').isVisible(), 'comment appears');
+check(await page.getByText('First comment', { exact: true }).isVisible(), 'comment appears');
+await page.getByTestId('ticket-tab-overview').click();
 check(
   await page.getByText('Validate email').first().isVisible(),
   'sub-ticket appears'
@@ -122,9 +126,10 @@ await second
 
 // 5. Drag the card from Backlog to In progress in the main window.
 await page.getByRole('button', { name: 'Close ticket' }).click();
-const card = page.locator('[data-rfd-draggable-id]', {
-  hasText: 'Login page (renamed)',
-});
+// The sub-ticket's card names its parent too; the parent card comes first.
+const card = page
+  .locator('[data-rfd-draggable-id]', { hasText: 'Login page (renamed)' })
+  .first();
 const target = page.locator('[data-rfd-droppable-id]').nth(3);
 const from = await card.boundingBox();
 const to = await target.boundingBox();
@@ -151,8 +156,15 @@ check(
   ),
   'ticket still In progress after reload'
 );
-await page.getByText('Login page (renamed)').first().click();
-await page.getByText('First comment').waitFor({ timeout: 10_000 });
+// Open the parent from In progress, not its sub-ticket's card in Backlog.
+await page
+  .locator('[data-rfd-droppable-id]')
+  .nth(3)
+  .getByText('Login page (renamed)')
+  .first()
+  .click();
+await page.getByTestId('ticket-tab-activity').click();
+await page.getByText('First comment', { exact: true }).waitFor({ timeout: 10_000 });
 check(true, 'comment persisted after reload');
 await shot(page, 't04-after-reload');
 

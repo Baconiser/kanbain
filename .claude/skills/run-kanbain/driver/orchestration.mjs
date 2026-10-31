@@ -102,11 +102,13 @@ const openTicket = async () => {
   await page.getByRole('combobox', { name: 'Project' }).selectOption({ label: projectName });
   await page.waitForTimeout(1_000);
   await page.getByText('Order checkout').first().click();
+  await page.getByTestId('ticket-tab-plan').click();
   await page.getByTestId('ticket-plan').waitFor({ timeout: 15_000 });
 };
 await openTicket();
 await page.getByTestId('ticket-plan').scrollIntoViewIfNeeded();
 await page.getByTestId('plan-approve').click();
+await page.getByTestId('ticket-tab-coding').click();
 const coding = page.getByTestId('ticket-coding');
 await coding.waitFor({ timeout: 30_000 }).catch(failShot('o-fail-coding'));
 await coding.scrollIntoViewIfNeeded();
@@ -207,9 +209,11 @@ check(subIssues.length === 3 && subIssues.every((i) => i.status_id === statusOf(
 
 // 9. The UI after a reload, with the timeline.
 await openTicket();
+await page.getByTestId('ticket-tab-coding').click();
 await coding.scrollIntoViewIfNeeded();
 await page.getByTestId('coding-status').filter({ hasText: 'All subtasks merged' }).waitFor({ timeout: 15_000 }).catch(failShot('o-fail-done-ui'));
 await shot('o04-done');
+await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
 await timeline.scrollIntoViewIfNeeded();
 await page.waitForTimeout(800);

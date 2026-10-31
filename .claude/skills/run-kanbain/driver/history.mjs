@@ -76,6 +76,7 @@ await page.locator('#ticket-title').fill('Password reset mail never arrives');
 await page.locator('#ticket-external-id').fill('PROJEKTNAME-123');
 await page.getByRole('button', { name: 'Create ticket' }).click();
 await page.getByLabel('Ticket title', { exact: true }).waitFor({ timeout: 15_000 });
+await page.getByTestId('ticket-tab-activity').click();
 const permission = page.getByTestId('history-permission');
 await permission.waitFor({ timeout: 30_000 }).catch(async (e) => {
   await shot('h-fail-permission');

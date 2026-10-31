@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { CaretRightIcon } from '@phosphor-icons/react';
 import { Button } from '@kanbain/ui/components/Button';
 import type {
   OrchestrationStatus,
@@ -44,6 +45,26 @@ const SUBTASK_STATUS: Record<
 
 const usd = (n: number) => `$${n.toFixed(2)}`;
 
+type Filter = 'all' | 'open' | 'failed' | 'merged';
+const FILTERS: {
+  id: Filter;
+  label: string;
+  matches: (s: SubtaskStatus) => boolean;
+}[] = [
+  { id: 'all', label: 'All', matches: () => true },
+  {
+    id: 'open',
+    label: 'Open',
+    matches: (s) => s === 'pending' || s === 'running',
+  },
+  {
+    id: 'failed',
+    label: 'Failed',
+    matches: (s) => s === 'failed' || s === 'stopped',
+  },
+  { id: 'merged', label: 'Merged', matches: (s) => s === 'merged' },
+];
+
 function SubtaskRow({
   subtask,
   busy,
@@ -57,21 +78,35 @@ function SubtaskRow({
   onRetry: () => void;
   onOpenWorkspace: (workspaceId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   const status = SUBTASK_STATUS[subtask.status];
   const waiting = subtask.status === 'pending' && subtask.waits_for.length > 0;
   return (
     <li
-      className="flex flex-col gap-half rounded-sm border p-base"
+      className="flex flex-col gap-half rounded-sm border px-base py-half"
       data-testid={`coding-subtask-${subtask.plan_subtask_id}`}
       data-status={subtask.status}
     >
       <div className="flex items-center gap-half">
-        <span className="font-mono text-xs text-low">
-          {subtask.plan_subtask_id}.
-        </span>
-        <span className="min-w-0 flex-1 truncate text-sm text-normal">
-          {subtask.title}
-        </span>
+        <button
+          type="button"
+          aria-label={open ? 'Hide details' : 'Show details'}
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-half text-left"
+          title={subtask.title}
+          onClick={() => setOpen((o) => !o)}
+        >
+          <CaretRightIcon
+            weight="bold"
+            className={`size-icon-xs shrink-0 text-low transition-transform ${open ? 'rotate-90' : ''}`}
+          />
+          <span className="font-mono text-xs text-low">
+            {subtask.plan_subtask_id}.
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-normal">
+            {subtask.title}
+          </span>
+        </button>
         <span
           className={`text-xs ${status.className}`}
           data-testid="coding-subtask-status"
@@ -103,7 +138,7 @@ function SubtaskRow({
       </div>
       <div className="flex flex-wrap gap-x-base gap-y-half text-xs text-low">
         {subtask.sub_issue && <span>{subtask.sub_issue}</span>}
-        {subtask.branch && (
+        {open && subtask.branch && (
           <span className="font-mono" data-testid="coding-subtask-branch">
             {subtask.branch}
           </span>
@@ -125,10 +160,14 @@ function SubtaskRow({
           </button>
         )}
       </div>
-      {subtask.files.length > 0 && (
-        <p className="truncate font-mono text-xs text-low">
-          {subtask.files.join(', ')}
-        </p>
+      {open && subtask.files.length > 0 && (
+        <ul className="flex flex-col font-mono text-xs text-low">
+          {subtask.files.map((f) => (
+            <li key={f} className="truncate">
+              {f}
+            </li>
+          ))}
+        </ul>
       )}
       {subtask.conflict && subtask.status !== 'merged' && (
         <p
@@ -158,6 +197,7 @@ export function TicketCoding({
 }: TicketCodingProps) {
   const [view, setView] = useState<OrchestrationView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState<Filter>('all');
 
   const load = useCallback(
     () =>
@@ -200,6 +240,8 @@ export function TicketCoding({
   if (!orchestration && !planApproved) return null;
   const merged = view.subtasks.filter((s) => s.status === 'merged').length;
   const cost = view.subtasks.reduce((sum, s) => sum + s.cost_usd, 0);
+  const matches = FILTERS.find((f) => f.id === filter)!.matches;
+  const shown = view.subtasks.filter((s) => matches(s.status));
 
   return (
     <section className="flex flex-col gap-half" data-testid="ticket-coding">
@@ -295,8 +337,37 @@ export function TicketCoding({
       )}
 
       {view.subtasks.length > 0 && (
+        <div className="flex flex-wrap gap-half" role="group">
+          {FILTERS.map((f) => {
+            const count = view.subtasks.filter((s) =>
+              f.matches(s.status)
+            ).length;
+            if (f.id !== 'all' && count === 0) return null;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={filter === f.id}
+                className={`rounded-sm border px-base py-px text-xs ${
+                  filter === f.id
+                    ? 'border-brand text-normal'
+                    : 'text-low hover:text-normal'
+                }`}
+                onClick={() => setFilter(f.id)}
+              >
+                {f.label} {count}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {view.subtasks.length > 0 && (
         <ul className="flex flex-col gap-half">
-          {view.subtasks.map((subtask) => (
+          {shown.length === 0 && (
+            <li className="text-sm text-low">No subtasks here.</li>
+          )}
+          {shown.map((subtask) => (
             <SubtaskRow
               key={subtask.id}
               subtask={subtask}
