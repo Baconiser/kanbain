@@ -462,6 +462,9 @@
     "tokens": "權杖 輸入 → 輸出",
     "cache": "快取 讀取 / 寫入",
     "modelCalls": "模型呼叫",
+    "timeLimit": "時間限制",
+    "timeLeft": "{{time}} 停止(剩餘 {{count}} 分鐘)",
+    "extend": "+{{count}} 分鐘",
     "budgetStop": "已停止：預算已用完。",
     "blocked": "已封鎖的網路存取：{{hosts}}"
   },

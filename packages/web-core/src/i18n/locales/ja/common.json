@@ -462,6 +462,9 @@
     "tokens": "トークン 入力 → 出力",
     "cache": "キャッシュ 読み取り / 書き込み",
     "modelCalls": "モデル呼び出し",
+    "timeLimit": "時間制限",
+    "timeLeft": "{{time}} に停止(残り {{count}} 分)",
+    "extend": "+{{count}} 分",
     "budgetStop": "停止: 予算を使い切りました。",
     "blocked": "ブロックされたネットワークアクセス: {{hosts}}"
   },

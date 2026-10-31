@@ -385,6 +385,20 @@ impl LocalDeployment {
         self.container.sandbox()
     }
 
+    /// When a running, time-limited run will be stopped.
+    pub fn run_deadline(&self, exec_id: uuid::Uuid) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.container.run_deadline(exec_id)
+    }
+
+    /// Give a running run more minutes before its time limit.
+    pub async fn extend_run(
+        &self,
+        exec_id: uuid::Uuid,
+        minutes: u32,
+    ) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.container.extend_run(exec_id, minutes).await
+    }
+
     pub fn secrets(&self) -> &Arc<services::services::secrets::SecretStore> {
         &self.secrets
     }

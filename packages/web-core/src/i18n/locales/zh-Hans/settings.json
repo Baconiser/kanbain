@@ -611,6 +611,7 @@
         "ticketBudget": "每个工单的默认预算（美元）",
         "budgetHelper": "留空表示不限制。",
         "maxRunMinutes": "每次运行的时间限制（分钟）",
+        "maxRunMinutesHelper": "0 表示关闭限制。代理自己的时间限制优先。正在进行的运行可在其摘要中延长。",
         "maxConcurrent": "同时运行的代理数",
         "restartHelper": "重启后生效。",
         "cpus": "每个容器的 CPU",

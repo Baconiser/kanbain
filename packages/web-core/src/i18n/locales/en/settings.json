@@ -611,6 +611,7 @@
         "ticketBudget": "Default budget per ticket (USD)",
         "budgetHelper": "Leave empty for no limit.",
         "maxRunMinutes": "Time limit per run (minutes)",
+        "maxRunMinutesHelper": "0 turns the limit off. An agent's own time limit takes precedence. A running run can be extended from its summary.",
         "maxConcurrent": "Agent runs at the same time",
         "restartHelper": "Takes effect after a restart.",
         "cpus": "CPUs per container",

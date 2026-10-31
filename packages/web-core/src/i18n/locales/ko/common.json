@@ -462,6 +462,9 @@
     "tokens": "토큰 입력 → 출력",
     "cache": "캐시 읽기 / 쓰기",
     "modelCalls": "모델 호출",
+    "timeLimit": "시간 제한",
+    "timeLeft": "{{time}}에 중지 ({{count}}분 남음)",
+    "extend": "+{{count}}분",
     "budgetStop": "중지됨: 예산이 소진되었습니다.",
     "blocked": "차단된 네트워크 접근: {{hosts}}"
   },

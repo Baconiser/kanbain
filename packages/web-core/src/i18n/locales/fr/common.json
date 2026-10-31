@@ -462,6 +462,9 @@
     "tokens": "Jetons entrée → sortie",
     "cache": "Cache lecture / écriture",
     "modelCalls": "Appels au modèle",
+    "timeLimit": "Limite de temps",
+    "timeLeft": "s'arrête à {{time}} (encore {{count}} min)",
+    "extend": "+{{count}} min",
     "budgetStop": "Arrêté : budget épuisé.",
     "blocked": "Accès réseau bloqué : {{hosts}}"
   },

@@ -462,6 +462,9 @@
     "tokens": "Tokens entrada → salida",
     "cache": "Caché lectura / escritura",
     "modelCalls": "Llamadas al modelo",
+    "timeLimit": "Límite de tiempo",
+    "timeLeft": "se detiene a las {{time}} (quedan {{count}} min)",
+    "extend": "+{{count}} min",
     "budgetStop": "Detenido: presupuesto agotado.",
     "blocked": "Acceso de red bloqueado: {{hosts}}"
   },

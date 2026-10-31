@@ -462,6 +462,9 @@
     "tokens": "令牌 输入 → 输出",
     "cache": "缓存 读取 / 写入",
     "modelCalls": "模型调用",
+    "timeLimit": "时间限制",
+    "timeLeft": "{{time}} 停止(剩余 {{count}} 分钟)",
+    "extend": "+{{count}} 分钟",
     "budgetStop": "已停止：预算已用完。",
     "blocked": "已阻止的网络访问：{{hosts}}"
   },

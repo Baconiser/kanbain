@@ -1145,6 +1145,10 @@ base_url: string,
  */
 models: Array<string>, };
 
+export type RunTimeLimit = { deadline: string | null, };
+
+export type ExtendRun = { minutes: number, };
+
 export type ClaudeLoginState = { "state": "idle" } | { "state": "starting" } | { "state": "waiting_for_code", url: string, } | { "state": "exchanging" } | { "state": "connected" } | { "state": "failed", message: string, };
 
 export type GitBranch = { name: string, is_current: boolean, is_remote: boolean, last_commit_date: Date, };

@@ -19,6 +19,7 @@ import {
   SetModelCredential,
   ModelProviderInfo,
   SaveModelProvider,
+  RunTimeLimit,
   AgentDefinition,
   AgentLibraryMeta,
   AgentSummary,
@@ -688,6 +689,25 @@ export const executionProcessesApi = {
       `/api/execution-processes/${processId}/events`
     );
     return handleApiResponse<ExecutionProcessEvent[]>(response);
+  },
+
+  getTimeLimit: async (processId: string): Promise<RunTimeLimit> => {
+    const response = await makeRequest(
+      `/api/execution-processes/${processId}/time-limit`,
+      { cache: 'no-store' }
+    );
+    return handleApiResponse<RunTimeLimit>(response);
+  },
+
+  extendTimeLimit: async (
+    processId: string,
+    minutes: number
+  ): Promise<RunTimeLimit> => {
+    const response = await makeRequest(
+      `/api/execution-processes/${processId}/time-limit`,
+      { method: 'POST', body: JSON.stringify({ minutes }) }
+    );
+    return handleApiResponse<RunTimeLimit>(response);
   },
 
   stopExecutionProcess: async (processId: string): Promise<void> => {

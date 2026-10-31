@@ -11,7 +11,9 @@ use db::models::{
     execution_process::ExecutionProcess, execution_process_event::ExecutionProcessEvent,
 };
 use deployment::Deployment;
-use local_deployment::{claude_login::ClaudeLoginState, sandbox::SandboxStatus};
+use local_deployment::{
+    claude_login::ClaudeLoginState, container::MAX_RUN_EXTENSION_MINUTES, sandbox::SandboxStatus,
+};
 use serde::{Deserialize, Serialize};
 use services::services::{
     model_providers::{CustomModelProvider, api_key_secret},
@@ -215,6 +217,45 @@ async fn disconnect_claude_account(
     )))
 }
 
+/// A running run's time limit; `deadline` is `null` without one.
+#[derive(Debug, Serialize, TS)]
+pub struct RunTimeLimit {
+    pub deadline: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct ExtendRun {
+    pub minutes: u32,
+}
+
+async fn get_time_limit(
+    Extension(execution_process): Extension<ExecutionProcess>,
+    State(deployment): State<DeploymentImpl>,
+) -> ResponseJson<ApiResponse<RunTimeLimit>> {
+    ResponseJson(ApiResponse::success(RunTimeLimit {
+        deadline: deployment.run_deadline(execution_process.id),
+    }))
+}
+
+async fn extend_time_limit(
+    Extension(execution_process): Extension<ExecutionProcess>,
+    State(deployment): State<DeploymentImpl>,
+    ResponseJson(payload): ResponseJson<ExtendRun>,
+) -> Result<ResponseJson<ApiResponse<RunTimeLimit>>, ApiError> {
+    if payload.minutes == 0 || payload.minutes > MAX_RUN_EXTENSION_MINUTES {
+        return Err(ApiError::BadRequest(format!(
+            "Extend by 1 to {MAX_RUN_EXTENSION_MINUTES} minutes"
+        )));
+    }
+    let deadline = deployment
+        .extend_run(execution_process.id, payload.minutes)
+        .await
+        .ok_or_else(|| ApiError::BadRequest("This run has no time limit to extend".into()))?;
+    Ok(ResponseJson(ApiResponse::success(RunTimeLimit {
+        deadline: Some(deadline),
+    })))
+}
+
 async fn get_events(
     Extension(execution_process): Extension<ExecutionProcess>,
     State(deployment): State<DeploymentImpl>,
@@ -230,6 +271,10 @@ async fn get_events(
 pub(super) fn router(deployment: &DeploymentImpl) -> Router<DeploymentImpl> {
     let events = Router::new()
         .route("/execution-processes/{id}/events", get(get_events))
+        .route(
+            "/execution-processes/{id}/time-limit",
+            get(get_time_limit).post(extend_time_limit),
+        )
         .layer(from_fn_with_state(
             deployment.clone(),
             load_execution_process_middleware,

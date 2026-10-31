@@ -611,6 +611,7 @@
         "ticketBudget": "티켓당 기본 예산(USD)",
         "budgetHelper": "비워 두면 제한이 없습니다.",
         "maxRunMinutes": "실행당 시간 제한(분)",
+        "maxRunMinutesHelper": "0이면 제한이 꺼집니다. 에이전트 자체의 시간 제한이 우선합니다. 실행 중인 실행은 요약에서 연장할 수 있습니다.",
         "maxConcurrent": "동시 에이전트 실행 수",
         "restartHelper": "다시 시작한 후 적용됩니다.",
         "cpus": "컨테이너당 CPU",

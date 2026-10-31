@@ -8,6 +8,7 @@ use std::{
 
 use anyhow::anyhow;
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use command_group::AsyncGroupChild;
 use db::{
     DBService,
@@ -103,7 +104,14 @@ pub struct LocalContainerService {
     /// Set once the deployment is built; finished coder runs move the
     /// orchestrator on (Phase 5).
     orchestrator: Arc<std::sync::OnceLock<crate::orchestrator::OrchestratorService>>,
+    /// When each time-limited run gets stopped; extending moves it (D28).
+    run_deadlines: Arc<std::sync::Mutex<HashMap<Uuid, DateTime<Utc>>>>,
 }
+
+/// How long before the time limit the run log warns.
+const TIME_LIMIT_WARNING: Duration = Duration::from_secs(5 * 60);
+/// The longest one extension may add.
+pub const MAX_RUN_EXTENSION_MINUTES: u32 = 24 * 60;
 
 impl LocalContainerService {
     #[allow(clippy::too_many_arguments)]
@@ -147,6 +155,7 @@ impl LocalContainerService {
             history: Arc::default(),
             planning: Arc::default(),
             orchestrator: Arc::default(),
+            run_deadlines: Arc::default(),
         };
 
         container.spawn_workspace_cleanup();
@@ -1320,8 +1329,36 @@ impl LocalContainerService {
         Ok(())
     }
 
-    /// Start a follow-up execution from a queued message
-    /// Stop an agent run after the configured number of minutes (D28).
+    /// When a running, time-limited run will be stopped.
+    pub fn run_deadline(&self, exec_id: Uuid) -> Option<DateTime<Utc>> {
+        self.run_deadlines.lock().unwrap().get(&exec_id).copied()
+    }
+
+    /// Give a running run `minutes` more before its time limit. Returns the
+    /// new deadline, or `None` when the run has no time limit (anymore).
+    pub async fn extend_run(&self, exec_id: Uuid, minutes: u32) -> Option<DateTime<Utc>> {
+        let deadline = {
+            let mut deadlines = self.run_deadlines.lock().unwrap();
+            let deadline = deadlines.get_mut(&exec_id)?;
+            // Extending after the warning counts from now, not from a
+            // deadline that is about to pass.
+            let base = (*deadline).max(Utc::now());
+            *deadline = base + chrono::Duration::minutes(minutes as i64);
+            *deadline
+        };
+        let store = self.msg_stores.read().await.get(&exec_id).cloned();
+        Self::push_run_note(
+            store.as_ref(),
+            &format!(
+                "Time limit extended by {minutes} minutes; this run now stops at {} UTC.",
+                deadline.format("%H:%M")
+            ),
+        );
+        Some(deadline)
+    }
+
+    /// Stop an agent run after the configured number of minutes (D28),
+    /// unless it is extended meanwhile. The log warns shortly before.
     async fn spawn_run_time_limit(&self, exec_id: Uuid, agent_minutes: Option<u32>) {
         let minutes = match agent_minutes {
             Some(minutes) => minutes,
@@ -1330,9 +1367,52 @@ impl LocalContainerService {
         if minutes == 0 {
             return;
         }
+        self.run_deadlines.lock().unwrap().insert(
+            exec_id,
+            Utc::now() + chrono::Duration::minutes(minutes as i64),
+        );
         let container = self.clone();
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(minutes as u64 * 60)).await;
+            let mut warned_for = None;
+            loop {
+                let Some(deadline) = container.run_deadline(exec_id) else {
+                    return;
+                };
+                let left = (deadline - Utc::now()).to_std().unwrap_or_default();
+                if left.is_zero() {
+                    break;
+                }
+                if left <= TIME_LIMIT_WARNING && warned_for != Some(deadline) {
+                    warned_for = Some(deadline);
+                    let store = container.msg_stores.read().await.get(&exec_id).cloned();
+                    Self::push_run_note(
+                        store.as_ref(),
+                        &format!(
+                            "{} minutes left before the time limit; extend the run from its \
+                             summary to keep it going.",
+                            left.as_secs().div_ceil(60)
+                        ),
+                    );
+                }
+                // Wake for the warning, and at least every minute so an
+                // extension or the run's end is noticed.
+                let until_warning = left.saturating_sub(TIME_LIMIT_WARNING);
+                let nap = if until_warning.is_zero() {
+                    left
+                } else {
+                    until_warning
+                };
+                tokio::time::sleep(nap.min(Duration::from_secs(60))).await;
+                let finished = !matches!(
+                    ExecutionProcess::find_by_id(&container.db.pool, exec_id).await,
+                    Ok(Some(ref p)) if p.status == ExecutionProcessStatus::Running
+                );
+                if finished {
+                    container.run_deadlines.lock().unwrap().remove(&exec_id);
+                    return;
+                }
+            }
+            container.run_deadlines.lock().unwrap().remove(&exec_id);
             let Ok(Some(process)) = ExecutionProcess::find_by_id(&container.db.pool, exec_id).await
             else {
                 return;
@@ -1343,7 +1423,8 @@ impl LocalContainerService {
             let store = container.msg_stores.read().await.get(&exec_id).cloned();
             Self::push_run_note(
                 store.as_ref(),
-                &format!("Time limit of {minutes} minutes reached; stopping this run."),
+                "Time limit reached; stopping this run. Raise the limit in Settings → Sandbox \
+                 or on the agent, or extend a run while it's going.",
             );
             if let Err(e) = container
                 .stop_execution(&process, ExecutionProcessStatus::Killed)
@@ -1354,6 +1435,7 @@ impl LocalContainerService {
         });
     }
 
+    /// Start a follow-up execution from a queued message
     async fn start_queued_follow_up(
         &self,
         ctx: &ExecutionContext,

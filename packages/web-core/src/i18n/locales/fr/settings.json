@@ -611,6 +611,7 @@
         "ticketBudget": "Budget par défaut par ticket (USD)",
         "budgetHelper": "Laissez vide pour aucune limite.",
         "maxRunMinutes": "Durée maximale par exécution (minutes)",
+        "maxRunMinutesHelper": "0 désactive la limite. La limite propre d'un agent est prioritaire. Une exécution en cours peut être prolongée depuis son résumé.",
         "maxConcurrent": "Exécutions d'agents simultanées",
         "restartHelper": "Pris en compte après un redémarrage.",
         "cpus": "CPU par conteneur",

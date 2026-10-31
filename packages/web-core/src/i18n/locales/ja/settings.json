@@ -611,6 +611,7 @@
         "ticketBudget": "チケットあたりの既定の予算（USD）",
         "budgetHelper": "空欄にすると無制限になります。",
         "maxRunMinutes": "実行あたりの制限時間（分）",
+        "maxRunMinutesHelper": "0 で制限をオフにします。エージェント自身の時間制限が優先されます。実行中の実行はその概要から延長できます。",
         "maxConcurrent": "同時に実行できるエージェント数",
         "restartHelper": "再起動後に反映されます。",
         "cpus": "コンテナあたりの CPU",

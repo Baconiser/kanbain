@@ -264,6 +264,8 @@ fn generate_types_content() -> String {
         services::services::model_providers::CustomModelProvider::decl(),
         server::routes::sandbox::ModelProviderInfo::decl(),
         server::routes::sandbox::SaveModelProvider::decl(),
+        server::routes::sandbox::RunTimeLimit::decl(),
+        server::routes::sandbox::ExtendRun::decl(),
         local_deployment::claude_login::ClaudeLoginState::decl(),
         git::GitBranch::decl(),
         services::services::queued_message::QueuedMessage::decl(),

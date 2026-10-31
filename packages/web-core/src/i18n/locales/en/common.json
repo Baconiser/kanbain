@@ -462,6 +462,9 @@
     "tokens": "Tokens in → out",
     "cache": "Cache read / write",
     "modelCalls": "Model calls",
+    "timeLimit": "Time limit",
+    "timeLeft": "stops {{time}} ({{count}} min left)",
+    "extend": "+{{count}} min",
     "budgetStop": "Stopped: budget exhausted.",
     "blocked": "Blocked network access: {{hosts}}"
   },

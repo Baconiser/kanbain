@@ -289,7 +289,10 @@ export function SandboxSettingsSection() {
             }
           />
         </SettingsField>
-        <SettingsField label={t('settings.sandbox.limits.maxRunMinutes')}>
+        <SettingsField
+          label={t('settings.sandbox.limits.maxRunMinutes')}
+          description={t('settings.sandbox.limits.maxRunMinutesHelper')}
+        >
           <SettingsInput
             value={String(draft.max_run_minutes)}
             onChange={(value) => {
