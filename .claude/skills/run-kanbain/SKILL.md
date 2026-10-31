@@ -294,7 +294,43 @@ matches clients and takes Vite down with it. It must wait for
 Logs: the app's WARN/ERROR lines, also written to
 `dev_assets/logs/kanbain.log`.
 
-## 8f. Workspace sidebar
+## 8f. Tester and fix loop (Phase 6)
+
+Every checkpoint of the plan (plus a final one when none covers every
+subtask) gets a sandboxed `tester` run on `<ticket branch>--test-<n>` once
+its subtasks are merged. Its changes outside the project's test paths are
+dropped and the rest squashed into one `<ID>: Tests for checkpoint <n>`
+commit, merged into the ticket branch. Open issues from its `issues.json`
+go to a `coder` fix run on `--fix-<n>`, then the tester runs again.
+
+`mock-script-testing.json` scripts two yolo tickets in one project (prefix
+`TST`): TST-1's empty-cart bug is fixed in round 1; TST-2's discount bug
+survives 3 fix rounds. Tester steps use `Write` (the tester's bash only
+allows test commands) and re-tests fill `{open_issue_id}` from the
+`checkpoint.md` they read. Orchestrator notifications are logged as
+`Notification: <title>: <message>`, which the driver reads from the
+backend log.
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-testing.json /tmp/mock-tst.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as in section 5,
+# logging to /tmp/kanbain-backend.log
+node $D/testing.mjs http://localhost:$FRONTEND_PORT /tmp/shots $BACKEND_PORT \
+  $KANBAIN_LAUNCH_TOKEN /tmp/repos/tst-shop /tmp/mock-tst.log /tmp/kanbain-backend.log
+```
+
+It approves both plans, waits for TST-1's fix run (checking the stored
+issue, the dropped `src/cart_fixture.rs` and the Testing status), then for
+Review, the ticket branch's commits and the timeline. TST-2 must end in
+Blocked after 4 tester and 3 fix runs, with the notification in the log;
+the driver then marks the issue won't fix in the panel and retests, which
+passes. A run takes 15 to 25 minutes.
+
+`orchestration.mjs` (8e) still works: its mock script has a tester phase
+that reports no issues, so its ticket passes two checkpoints on the way to
+Review.
+
+## 8g. Workspace sidebar
 
 The workspace's right sidebar has Ticket / Git / Terminal tabs; the Ticket
 tab embeds the board's ticket panel for the workspace's linked ticket.

@@ -21,7 +21,8 @@ benchmark sees how much context each run sends.
 user prompt (not a tool result) wins; its steps count only tool results after
 that prompt. Step inputs may use {related_ticket}, {related_changed} and
 {related_file}, filled from the first ticket with a "Changed:" line, and a
-file, in earlier tool results (the planner's related.md).
+file, in earlier tool results (the planner's related.md), and
+{open_issue_id}, the first earlier issue a tester's checkpoint.md lists.
 Text answers (no tool call left) use the first `text_replies` entry whose
 `when` appears in the request's messages; headless intake and history jobs
 get their JSON or Markdown answers this way.
@@ -287,11 +288,14 @@ def fill_related(value, results):
     if found:
         changed = re.search(r"(.+)", found.group(4))
     path = re.search(r"- ([\w./-]+\.\w+):\d+-\d+", results)
+    # A tester's checkpoint.md lists earlier issues as "- [<id>] ...".
+    issue = re.search(r"- \[([0-9a-f]{8}-[0-9a-f-]{27})\]", results)
     fills = {
         # Typographic quotes: the fill often lands in JSON inside a JSON string.
         "{related_ticket}": f"{ticket.group(1)} (“{ticket.group(2)}”, {ticket.group(3)})"
         if ticket else "no related ticket",
         "{related_changed}": changed.group(1).strip() if changed else "nothing",
+        "{open_issue_id}": issue.group(1) if issue else "no-earlier-issue",
         "{related_file}": (path.group(1) if path else
                            (re.search(r"in ([\w./-]+\.\w+)", changed.group(1)).group(1)
                             if changed and re.search(r"in ([\w./-]+\.\w+)", changed.group(1))

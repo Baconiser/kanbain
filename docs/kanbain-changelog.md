@@ -1263,3 +1263,176 @@ Bugs the demo found and fixed on the way:
 - A newly approved plan replaces the old one's unfinished subtasks (their
   sub-tickets are deleted); merged work stays on the ticket branch.
 - Checkpoints in the plan are ignored until Phase 6.
+
+## Phase 6: Tester and fix loop (2026-10-31)
+
+**Goal:** coded work is tested against the ticket's requirements before it
+reaches Review. Problems go back to coders; what can't be fixed in three
+rounds stops in Blocked instead of reaching you as "done".
+
+### What changed
+
+- **Checkpoints (D23).** The plan's checkpoints are now carried out. When
+  no checkpoint covers every subtask (or the plan has none), KanbAIn adds a
+  final one ("The whole ticket: every requirement and acceptance
+  criterion, end to end"), so nothing reaches Review untested.
+  - A checkpoint is due once all its subtasks are merged. One checkpoint is
+    tested (and fixed) at a time, in plan order.
+  - While a due checkpoint hasn't passed, no new coder starts: later work
+    builds on a tested base, and fix runs don't race fresh subtasks for the
+    same lines. Coders already running carry on.
+  - The ticket sits in **Testing** while a checkpoint is tested or fixed,
+    and in In progress while only coders run.
+  - The rules live in the scheduler (`Schedule::step`), next to the
+    Phase 5 ones, with unit tests.
+- **Tester runs.** The `tester` agent runs in its own workspace on
+  `<ticket branch>--test-<n>`, branched from the ticket branch.
+  - It gets `checkpoint.md` (what to test, the merged subtasks it covers,
+    the acceptance criteria, the test strategy, the test paths, earlier
+    issues with their ids, accepted issues and the `issues.json` format)
+    and `plan.json`.
+  - Its task asks for black-box tests from the requirements, not from the
+    implementation, and a failing test for each real problem.
+  - It needs no `git commit` (its bash only runs test commands); the
+    sandbox commits what it leaves.
+- **The fence (D23).** After the run, on the host,
+  `GitService::squash_keeping` squashes the tester's branch into **one**
+  `<ID>: Tests for checkpoint <n>` commit with only the files under the
+  project's test paths. Every other change goes back to how it was at the
+  fork point; the dropped paths show on the checkpoint and in the
+  timeline. The prompt asks; this enforces.
+  - The commit is merged into the ticket branch (`<ID>: Merge tests for
+    checkpoint <n>`).
+  - **Test paths** are a project setting (Project settings → Test paths;
+    globs per repo). Empty means the defaults: `**/tests/**`, `**/test/**`,
+    `**/__tests__/**`, `**/spec/**`, `**/e2e/**`, `**/*.test.*`,
+    `**/*.spec.*`, `**/*_test.*`, `**/*_spec.*`, `**/test_*.py`,
+    `**/*Test.java`, `**/*Tests.java`, `**/*Test.kt`, `**/*Tests.cs`,
+    `**/*Test.php`. Matching uses `globset` with literal separators, so
+    `src/mytests/x.rs` is not a test path.
+- **Issues found.** `issues.json` is read leniently ("Edge case",
+  `edge-case` and `EDGE_CASE` are the same category; a list or
+  `{"issues": [...]}`) and stored in `issues_found` (ticket, run,
+  checkpoint, file, line, severity, category, description, status
+  `open|fixed|wontfix`, fixed round).
+  - A re-test repeats an issue that is still there by its id; one it no
+    longer reports is marked fixed in that round. Repeating a won't-fix
+    issue changes nothing.
+  - A missing or invalid `issues.json` fails the checkpoint with the
+    reason.
+- **Fix loop (D24).** Open issues go to a `coder` fix run on
+  `<ticket branch>--fix-<n>` with `issues.md` (the open issues) and a
+  `related.md` built from their text and files. It is merged (`<ID>: Merge
+  fixes for checkpoint <n> (fix round <r>)`), then the tester runs again.
+  - Every fix run is a fix round. The limit of 3 is per ticket and shared
+    with Phase 5's merge-conflict re-runs. Past it the checkpoint fails,
+    the ticket goes to **Blocked** and you get a "Ticket blocked"
+    notification with the reason.
+  - A tester or fix branch that conflicts with the ticket branch starts
+    over on it with `conflict.md`, like a subtask, and costs a round.
+  - A ticket over budget goes to Blocked too: the run is refused (or cut
+    off by the proxy), the checkpoint fails and the ticket is blocked.
+- **Won't fix and Retest.** In the panel you can mark an open issue won't
+  fix (or reopen it). Retest on a failed or stopped checkpoint starts a
+  fresh tester run, which is told which issues are accepted. Stop works
+  per checkpoint; Stop all and Retry on the ticket cover checkpoints too.
+  Retry resets the fix rounds, as in Phase 5.
+- **Restart.** A tester or fix run that a restart interrupted starts that
+  step again; a stopped ticket's counts as stopped.
+- **Search (E6).** Issues found are indexed per ticket as kind
+  `issue_found` (severity, category, status, file:line, description), in
+  `/api/search` and the agents' `search_knowledge` tool, so a later run
+  touching the same file sees what broke there before.
+- **Ticket panel.** Under the subtasks, the Coding section lists the
+  checkpoints: status, "after …", fix runs, open/found counts, cost, links
+  to the tester and fixer workspaces, dropped files, and each issue with
+  severity, category, file:line and status, with Won't fix / Reopen. The
+  status reads "Merged and tested" when done.
+- **Timeline.** Tester started, tests finished (new, still open, fixed,
+  dropped files), fix started, fix merged, checkpoint passed or failed, and
+  issue marked won't fix.
+- **API.** `GET /api/issues/{id}/coding` now carries `checkpoints` and
+  `issues_found`. New: `POST /api/checkpoints/{id}/{stop,retry}`, `PUT
+  /api/issues-found/{id}` (`{"status": "wontfix" | "open"}`).
+- Orchestrator notifications are also logged at INFO as `Notification:
+  <title>: <message>`, so they can be checked where no OS notification
+  shows (Linux, the demos).
+
+### Demo (Linux dev container)
+
+`testing.mjs` runs against the scripted mock (`mock-script-testing.json`),
+the real sandbox, Claude Code 2.1.119 and no embedder (keyword search).
+Result: 41/41 PASS, no console errors or failed API calls.
+
+- **A seeded bug, fixed in round 1.** TST-1 "Cart total" (yolo) got a
+  1-subtask plan with the checkpoint "Cart totals are right". The coder's
+  `total()` panics on an empty cart.
+  - The tester read the test paths in `checkpoint.md`, wrote
+    `tests/cart_total.rs` and also `src/cart_fixture.rs`, and reported
+    "total() panics on an empty cart" (high, edge case,
+    `tst-shop/src/cart.rs:1`).
+  - The fence dropped `tst-shop/src/cart_fixture.rs`; the panel showed it.
+    The ticket was in Testing, in fix round 1.
+  - The fix run read `issues.md` and fixed `total()`. The re-test saw the
+    earlier issue in `checkpoint.md` and reported nothing, so the issue
+    was marked fixed in round 1 and the checkpoint passed.
+  - The ticket moved to Review. Its branch has `TST-1: Tests for
+    checkpoint 1` (only `tests/cart_total.rs`), the merges of the tests and
+    of "fixes for checkpoint 1 (fix round 1)", the fixed `src/cart.rs`, and
+    no `src/cart_fixture.rs`. `main` is untouched. The timeline has all the
+    new entries.
+- **An unfixable issue, Blocked after round 3.** TST-2 "Discount codes"
+  had no checkpoint in its plan, so it got the final one.
+  - Its fix runs never fix the discount. After 4 tester runs and 3 fix
+    runs the checkpoint failed with "1 open issue after 3 fix rounds", the
+    ticket went to Blocked, and the log shows `Notification: Ticket
+    blocked: "Discount codes": Failed: checkpoint 1 (1 open issue after 3
+    fix rounds)`.
+  - The re-tests repeated the issue by its id, so it is stored once.
+- **Won't fix and Retest.** Marking that issue won't fix in the panel and
+  pressing Retest ran the tester once more. It was told the issue is
+  accepted, the checkpoint passed and TST-2 moved to Review ($0.24 on the
+  mock's usage, mostly the 7 tester and fix runs).
+- `/api/search` finds the issue as kind `issue_found`; the project's test
+  paths round-trip through `PUT /api/projects/{id}`.
+- Restart: a ticket left stuck by the first run's bug (below) resumed at
+  the next backend start: its interrupted re-test ran again and the ticket
+  finished.
+
+Bugs the demo found and fixed on the way:
+
+- **"database is locked" lost the end of a run.** `record_test_results`
+  read, then wrote, in a deferred transaction. When another connection
+  wrote meanwhile, SQLite refused to upgrade the lock at once (past the
+  busy timeout), the end-of-run handling failed, and the checkpoint stayed
+  in Testing forever. It now uses `BEGIN IMMEDIATE`. The orchestrator also
+  retries the end of a run up to 4 times on a database error, since
+  nothing else ever picks a finished run up again; that covers Phase 5's
+  subtasks too.
+- The driver opened a ticket by title, which its sub-ticket shares; it now
+  opens tickets by display id.
+
+### Not verified here
+
+- **A real model.** The mock writes fixed files. Whether a real tester
+  writes useful black-box tests, keeps to the test paths, reports issues
+  in the format and repeats ids on re-tests is unknown, and so are the
+  cost of a fix loop and how often three rounds are enough.
+- **OpenCode testers.** Not run in the sandbox. The tester's limited bash
+  is enforced the same way as before.
+- **Mid-plan checkpoints with parallel coders.** The scheduler rules are
+  unit-tested; the demo's plans have one subtask each.
+- **Windows:** worktrees, the squash and the notifications.
+
+### Known leftovers
+
+- The tester's raw sandbox commit is linked on the timeline (Phase 3b's
+  commit links) before the fence squashes it, so the timeline names a
+  commit that is no longer on any branch.
+- A retry after a database error during a tester's end can clear the
+  checkpoint's dropped-files list (the second squash finds nothing to
+  drop). The first attempt's list is lost only then.
+- Checkpoints hold new coders while they run, which costs parallelism in
+  plans with early checkpoints.
+- The board card of the parent ticket shows no testing marker; the panel
+  and the Testing column do.

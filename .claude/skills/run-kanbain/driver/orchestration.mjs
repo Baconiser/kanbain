@@ -7,7 +7,8 @@
 // conflicts and that subtask re-runs on the updated ticket branch. Subtask 3
 // is stopped and retried in the UI, then the backend is restarted under it;
 // the orchestrator resumes it and the ticket ends in Review with all three
-// merges on the ticket branch.
+// merges on the ticket branch, once its two checkpoints (the plan's and
+// the final one, Phase 6) passed.
 // Usage: node orchestration.mjs <frontendUrl> <outDir> <backendPort> <token> <repoDir> <mockLog> <restartCmd>
 import { exec, execSync } from 'node:child_process';
 import { mkdirSync, readFileSync } from 'node:fs';
@@ -216,11 +217,13 @@ check(subIssues.length === 3 && subIssues.every((i) => i.status_id === statusOf(
 await openTicket();
 await page.getByTestId('ticket-tab-coding').click();
 await coding.scrollIntoViewIfNeeded();
-await page.getByTestId('coding-status').filter({ hasText: 'All subtasks merged' }).waitFor({ timeout: 15_000 }).catch(failShot('o-fail-done-ui'));
+await page.getByTestId('coding-status').filter({ hasText: 'Merged and tested' }).waitFor({ timeout: 15_000 }).catch(failShot('o-fail-done-ui'));
 await shot('o04-done');
 await page.getByTestId('ticket-tab-activity').click();
 const timeline = page.getByTestId('ticket-timeline');
 await unfold('ticket-timeline');
+// The tester's entries push the early ones past the fold.
+await page.getByRole('button', { name: /Show \d+ earlier event/ }).click().catch(() => {});
 await timeline.scrollIntoViewIfNeeded();
 await page.waitForTimeout(800);
 const timelineText = await timeline.textContent();
@@ -232,7 +235,9 @@ for (const line of [
   'Subtask 3 stopped',
   'Coding retried',
   'Coding resumed after a restart',
-  'All subtasks merged; ready for review',
+  'Checkpoint 1 passed: Orders are stored and mailed',
+  'Checkpoint 2 passed:',
+  'All subtasks merged and tested; ready for review',
 ]) {
   check(timelineText.includes(line), `timeline: ${line}`);
 }

@@ -1,0 +1,207 @@
+{
+ "output_tokens": 300,
+ "markers": [
+  "Test checkpoint",
+  "Issues from the last test run",
+  "Fix the issues the tester found",
+  "Test paths",
+  "**/tests/**",
+  "Accepted as they are",
+  "# Open issues at checkpoint"
+ ],
+ "phases": [
+  {
+   "when": "Plan the ticket TST-1",
+   "steps": [
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Cart total\",\n      \"description\": \"Add total() over the cart's item prices.\",\n      \"files\": [\n        \"src/cart.rs\"\n      ],\n      \"depends_on\": []\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"total() of an empty cart is 0.\",\n    \"total() sums every item price.\"\n  ],\n  \"assumptions\": [\n    \"Decided without asking: prices are whole cents.\"\n  ],\n  \"test_strategy\": \"Black-box unit tests of total(), including the empty cart.\",\n  \"checkpoints\": [\n    {\n      \"after_subtasks\": [\n        \"1\"\n      ],\n      \"what\": \"Cart totals are right\"\n    }\n  ]\n}"
+     }
+    }
+   ],
+   "text": "Plan written."
+  },
+  {
+   "when": "Plan the ticket TST-2",
+   "steps": [
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/plan.json",
+      "content": "{\n  \"subtasks\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Discount codes\",\n      \"description\": \"Apply discount codes to a total.\",\n      \"files\": [\n        \"src/discount.rs\"\n      ],\n      \"depends_on\": []\n    }\n  ],\n  \"acceptance_criteria\": [\n    \"SAVE10 takes 10% off the total.\"\n  ],\n  \"assumptions\": [\n    \"Decided without asking: one code per order.\"\n  ],\n  \"test_strategy\": \"Black-box unit tests of apply().\",\n  \"checkpoints\": []\n}"
+     }
+    }
+   ],
+   "text": "Plan written."
+  },
+  {
+   "when": "Implement subtask 1 of ticket TST-1",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf 'pub fn total(items: &[u32]) -> u32 {\\n    items[0] + items[1..].iter().sum::<u32>()\\n}\\n' > src/cart.rs && printf 'pub mod cart;\\n' >> src/lib.rs && git add -A && git commit -qm 'TST-1: Add the cart total' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Cart total committed."
+  },
+  {
+   "when": "Implement subtask 1 of ticket TST-2",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf 'pub fn apply(_code: &str, total: u32) -> u32 {\\n    total\\n}\\n' > src/discount.rs && printf 'pub mod discount;\\n' >> src/lib.rs && git add -A && git commit -qm 'TST-2: Add discount codes' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Discount codes committed."
+  },
+  {
+   "when": "Test checkpoint 1 of ticket TST-1",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/checkpoint.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/workspace/tst-shop/tests/cart_total.rs",
+      "content": "use tst_shop::cart::total;\n\n#[test]\nfn empty_cart_totals_zero() {\n    assert_eq!(total(&[]), 0);\n}\n\n#[test]\nfn sums_every_item() {\n    assert_eq!(total(&[1, 2, 3]), 6);\n}\n"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/workspace/tst-shop/src/cart_fixture.rs",
+      "content": "// A fixture the tester should have put under tests/.\npub const ITEMS: [u32; 3] = [1, 2, 3];\n"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/issues.json",
+      "content": "[\n  {\n    \"file\": \"tst-shop/src/cart.rs\",\n    \"line\": 1,\n    \"severity\": \"high\",\n    \"category\": \"edge case\",\n    \"description\": \"total() panics on an empty cart; tests/cart_total.rs empty_cart_totals_zero fails.\"\n  }\n]"
+     }
+    }
+   ],
+   "text": "Wrote tests; one issue."
+  },
+  {
+   "when": "Test checkpoint 1 of ticket TST-2",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/checkpoint.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/workspace/tst-shop/tests/discount.rs",
+      "content": "use tst_shop::discount::apply;\n\n#[test]\nfn save10_takes_ten_percent() {\n    assert_eq!(apply(\"SAVE10\", 100), 90);\n}\n"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/issues.json",
+      "content": "[\n  {\n    \"file\": \"tst-shop/src/discount.rs\",\n    \"line\": 1,\n    \"severity\": \"medium\",\n    \"category\": \"requirements\",\n    \"description\": \"SAVE10 takes nothing off; tests/discount.rs save10_takes_ten_percent fails.\"\n  }\n]"
+     }
+    }
+   ],
+   "text": "Wrote tests; one issue."
+  },
+  {
+   "when": "Cart totals are right\". This is a re-test",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/checkpoint.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/issues.json",
+      "content": "[]"
+     }
+    }
+   ],
+   "text": "All fixed."
+  },
+  {
+   "when": "end to end.\". This is a re-test",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/checkpoint.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/issues.json",
+      "content": "[\n  {\n    \"file\": \"tst-shop/src/discount.rs\",\n    \"line\": 1,\n    \"severity\": \"medium\",\n    \"category\": \"requirements\",\n    \"description\": \"SAVE10 takes nothing off; tests/discount.rs save10_takes_ten_percent fails.\",\n    \"id\": \"{open_issue_id}\"\n  }\n]"
+     }
+    }
+   ],
+   "text": "Still broken."
+  },
+  {
+   "when": "Fix the issues the tester found at checkpoint 1 of ticket TST-1",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/issues.md; ls /kanbain/context",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && cat src/cart.rs && printf 'pub fn total(items: &[u32]) -> u32 {\\n    items.iter().sum()\\n}\\n' > src/cart.rs && git add -A && git commit -qm 'TST-1: Total an empty cart as 0' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Fixed the empty cart."
+  },
+  {
+   "when": "Fix the issues the tester found at checkpoint 1 of ticket TST-2",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/issues.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cd \"$(find /workspace -maxdepth 2 -name .git -printf '%h\\n' | head -1)\" && printf '// tried again\\n' >> src/discount.rs && git add -A && git commit -qm 'TST-2: Try the discount again' && git log --oneline -1",
+      "description": "scripted step"
+     }
+    }
+   ],
+   "text": "Tried."
+  }
+ ]
+}

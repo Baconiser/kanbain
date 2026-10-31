@@ -24,6 +24,26 @@
    "text": "Plan written to /kanbain/out/plan.json."
   },
   {
+   "when": "Test checkpoint",
+   "steps": [
+    {
+     "tool": "Bash",
+     "input": {
+      "command": "cat /kanbain/context/checkpoint.md",
+      "description": "scripted step"
+     }
+    },
+    {
+     "tool": "Write",
+     "input": {
+      "file_path": "/kanbain/out/issues.json",
+      "content": "[]"
+     }
+    }
+   ],
+   "text": "Everything works."
+  },
+  {
    "when": "Implement subtask 1 of ticket",
    "steps": [
     {
