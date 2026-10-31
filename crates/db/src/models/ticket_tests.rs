@@ -758,3 +758,173 @@ async fn orchestration_claims_conflicts_and_restart_requeue() {
         2
     );
 }
+
+#[tokio::test]
+async fn checkpoints_and_issues_found_track_the_fix_loop() {
+    use super::{
+        issue_found::{IssueCategory, IssueFound, IssueFoundStatus, IssueSeverity, ReportedIssue},
+        orchestration::{
+            CheckpointStatus, OrchestrationCheckpoint, OrchestrationStatus, TicketOrchestration,
+        },
+        plan::{Plan, PlanDocument, PlanSource},
+        workspace::{CreateWorkspace, Workspace},
+    };
+
+    let pool = pool().await;
+    let project = project(&pool, None).await;
+    let issue = Issue::create(&pool, project.id, &new_issue("Test me"))
+        .await
+        .unwrap();
+    let doc = PlanDocument::from_value(serde_json::json!({
+        "subtasks": [{"id": "1", "title": "A"}]
+    }))
+    .unwrap();
+    let plan = Plan::create(&pool, issue.id, &doc, PlanSource::Planner, None)
+        .await
+        .unwrap();
+    let workspace = Workspace::create(
+        &pool,
+        &CreateWorkspace {
+            branch: "kanbain/KAN-1-test-me".into(),
+            name: None,
+            issue_id: Some(issue.id),
+        },
+        uuid::Uuid::new_v4(),
+    )
+    .await
+    .unwrap();
+    TicketOrchestration::upsert(&pool, issue.id, plan.id, workspace.id)
+        .await
+        .unwrap();
+    let cp = OrchestrationCheckpoint::create(&pool, issue.id, 0, "All of it", &["1".into()])
+        .await
+        .unwrap();
+    assert_eq!(cp.status, CheckpointStatus::Pending);
+    assert_eq!(cp.after_subtasks.0, ["1"]);
+    assert!(OrchestrationCheckpoint::claim(&pool, cp.id).await.unwrap());
+    assert!(!OrchestrationCheckpoint::claim(&pool, cp.id).await.unwrap());
+    OrchestrationCheckpoint::set_workspace(&pool, cp.id, false, workspace.id)
+        .await
+        .unwrap();
+    assert_eq!(
+        OrchestrationCheckpoint::find_by_workspace(&pool, workspace.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .id,
+        cp.id
+    );
+
+    let reported = |description: &str, id: Option<uuid::Uuid>| ReportedIssue {
+        id,
+        file: Some("shop/src/cart.rs".into()),
+        line: Some(3),
+        severity: IssueSeverity::High,
+        category: IssueCategory::EdgeCase,
+        description: description.into(),
+    };
+    // The first test run finds two problems.
+    let results = IssueFound::record_test_results(
+        &pool,
+        issue.id,
+        None,
+        0,
+        0,
+        &[
+            reported("Empty cart panics", None),
+            reported("Negative totals", None),
+        ],
+    )
+    .await
+    .unwrap();
+    assert_eq!((results.new, results.still_open, results.fixed), (2, 0, 0));
+    let open = IssueFound::open_at(&pool, issue.id, 0).await.unwrap();
+    assert_eq!(open.len(), 2);
+
+    // You accept one as it is; the re-test repeats the other by id and
+    // adds a new one. Repeating the won't-fix one changes nothing.
+    IssueFound::set_status(&pool, open[1].id, IssueFoundStatus::Wontfix)
+        .await
+        .unwrap();
+    let results = IssueFound::record_test_results(
+        &pool,
+        issue.id,
+        None,
+        0,
+        1,
+        &[
+            reported("Still panics", Some(open[0].id)),
+            reported("Again", Some(open[1].id)),
+            reported("Rounding", None),
+        ],
+    )
+    .await
+    .unwrap();
+    assert_eq!((results.new, results.still_open, results.fixed), (1, 1, 0));
+
+    // The next re-test reports nothing: both open ones are fixed in round 2.
+    let results = IssueFound::record_test_results(&pool, issue.id, None, 0, 2, &[])
+        .await
+        .unwrap();
+    assert_eq!((results.new, results.still_open, results.fixed), (0, 0, 2));
+    let all = IssueFound::find_by_issue(&pool, issue.id).await.unwrap();
+    assert_eq!(
+        all.iter().map(|i| i.status).collect::<Vec<_>>(),
+        [
+            IssueFoundStatus::Fixed,
+            IssueFoundStatus::Wontfix,
+            IssueFoundStatus::Fixed
+        ]
+    );
+    assert_eq!(all[0].fixed_round, Some(2));
+    assert!(
+        IssueFound::open_at(&pool, issue.id, 0)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
+    // Fix, then a restart while the re-test runs: the step starts again.
+    OrchestrationCheckpoint::next_run(&pool, cp.id, CheckpointStatus::Fixing, 1)
+        .await
+        .unwrap();
+    let cp = OrchestrationCheckpoint::find_by_id(&pool, cp.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((cp.status, cp.round), (CheckpointStatus::Fixing, 1));
+    assert_eq!(
+        OrchestrationCheckpoint::requeue_interrupted(&pool)
+            .await
+            .unwrap(),
+        1
+    );
+    TicketOrchestration::set_status(&pool, issue.id, OrchestrationStatus::Stopped, None)
+        .await
+        .unwrap();
+    OrchestrationCheckpoint::requeue_interrupted(&pool)
+        .await
+        .unwrap();
+    let cp = OrchestrationCheckpoint::find_by_id(&pool, cp.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(cp.status, CheckpointStatus::Stopped);
+    assert!(
+        OrchestrationCheckpoint::requeue(&pool, cp.id)
+            .await
+            .unwrap()
+    );
+
+    // A new plan drops both.
+    assert_eq!(
+        IssueFound::delete_by_issue(&pool, issue.id).await.unwrap(),
+        3
+    );
+    assert_eq!(
+        OrchestrationCheckpoint::delete_by_issue(&pool, issue.id)
+            .await
+            .unwrap(),
+        1
+    );
+}

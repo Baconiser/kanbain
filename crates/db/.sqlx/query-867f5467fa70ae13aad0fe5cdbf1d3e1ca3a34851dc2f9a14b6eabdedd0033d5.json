@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues_found SET status = 'fixed', fixed_round = $2,\n                           updated_at = datetime('now', 'subsec')\n                       WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "867f5467fa70ae13aad0fe5cdbf1d3e1ca3a34851dc2f9a14b6eabdedd0033d5"
+}

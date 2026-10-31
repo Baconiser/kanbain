@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE issues_found SET status = $2,\n                   fixed_round = CASE WHEN $2 = 'fixed' THEN fixed_round ELSE NULL END,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "6791ced4ba4ca86ad09e7ef09cdab1af6a420b9947f60e4e1a7019e5de15f237"
+}

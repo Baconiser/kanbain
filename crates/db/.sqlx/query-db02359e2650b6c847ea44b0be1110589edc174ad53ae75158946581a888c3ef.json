@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_checkpoints SET fixer_workspace_id = $2,\n                       updated_at = datetime('now', 'subsec')\n                   WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "db02359e2650b6c847ea44b0be1110589edc174ad53ae75158946581a888c3ef"
+}

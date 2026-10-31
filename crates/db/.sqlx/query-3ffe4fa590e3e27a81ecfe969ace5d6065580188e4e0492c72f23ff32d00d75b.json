@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_checkpoints SET execution_process_id = NULL,\n                   updated_at = datetime('now', 'subsec')\n               WHERE status IN ('testing', 'fixing')\n                 AND issue_id IN (SELECT issue_id FROM ticket_orchestrations\n                                  WHERE status = 'running')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "3ffe4fa590e3e27a81ecfe969ace5d6065580188e4e0492c72f23ff32d00d75b"
+}

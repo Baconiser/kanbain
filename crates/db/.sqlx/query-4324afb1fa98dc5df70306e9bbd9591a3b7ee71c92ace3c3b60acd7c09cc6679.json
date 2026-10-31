@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_checkpoints SET status = $2, error = $3,\n                   finished_at = CASE WHEN $4 THEN datetime('now', 'subsec') ELSE finished_at END,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "4324afb1fa98dc5df70306e9bbd9591a3b7ee71c92ace3c3b60acd7c09cc6679"
+}

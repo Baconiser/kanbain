@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_checkpoints SET conflict = $2, execution_process_id = NULL,\n                   updated_at = datetime('now', 'subsec')\n               WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "a4580903d3c1557b233b5ddf65cf8b97d7ea038c014ebf3490a63c5b45137397"
+}

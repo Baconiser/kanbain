@@ -1,5 +1,6 @@
-//! The orchestrator's state (Phase 5, D22): a ticket's coding run and one
-//! row per plan subtask. Everything the scheduler needs lives here, so a
+//! The orchestrator's state (Phase 5, D22): a ticket's coding run, one row
+//! per plan subtask and, from Phase 6 (D23, D24), one per checkpoint with its
+//! tester and fix runs. Everything the scheduler needs lives here, so a
 //! restart picks up where the last launch stopped.
 
 use std::collections::BTreeMap;
@@ -40,6 +41,26 @@ pub enum SubtaskStatus {
     Running,
     /// Its branch is merged into the ticket branch.
     Merged,
+    Failed,
+    Stopped,
+}
+
+#[derive(
+    Debug, Clone, Copy, Type, Serialize, Deserialize, PartialEq, Eq, TS, EnumString, Display,
+)]
+#[sqlx(type_name = "text", rename_all = "lowercase")]
+#[serde(rename_all = "lowercase")]
+#[strum(serialize_all = "lowercase")]
+pub enum CheckpointStatus {
+    /// Its subtasks aren't all merged yet, or another checkpoint goes first.
+    Pending,
+    /// A tester run is testing the ticket branch.
+    Testing,
+    /// A coder fix run works on the open issues.
+    Fixing,
+    /// The last tester run reported no open issues.
+    Passed,
+    /// Out of fix rounds, or a tester or fix run failed.
     Failed,
     Stopped,
 }
@@ -436,6 +457,339 @@ impl OrchestrationSubtask {
                    error = 'Interrupted by an app restart',
                    updated_at = datetime('now', 'subsec')
                WHERE status = 'running'"#
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+}
+
+/// A checkpoint of the approved plan (Phase 6): tested once its subtasks are
+/// merged, then fixed and re-tested until no issue is open (D23, D24).
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
+pub struct OrchestrationCheckpoint {
+    pub id: Uuid,
+    pub issue_id: Uuid,
+    #[ts(type = "number")]
+    pub position: i64,
+    pub what: String,
+    /// Plan ids of the subtasks it waits for.
+    #[ts(type = "Array<string>")]
+    pub after_subtasks: Json<Vec<String>>,
+    pub status: CheckpointStatus,
+    /// Fix runs done for this checkpoint.
+    #[ts(type = "number")]
+    pub round: i64,
+    pub tester_workspace_id: Option<Uuid>,
+    pub fixer_workspace_id: Option<Uuid>,
+    pub execution_process_id: Option<Uuid>,
+    #[ts(type = "SubtaskConflict | null")]
+    pub conflict: Option<Json<SubtaskConflict>>,
+    /// `repo/path` of files the last tester run changed outside the test
+    /// paths; they were dropped from its commit.
+    #[ts(type = "Array<string> | null")]
+    pub rejected_files: Option<Json<Vec<String>>>,
+    pub error: Option<String>,
+    pub started_at: Option<DateTime<Utc>>,
+    pub finished_at: Option<DateTime<Utc>>,
+    pub updated_at: DateTime<Utc>,
+}
+
+impl OrchestrationCheckpoint {
+    pub async fn find_by_issue(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            OrchestrationCheckpoint,
+            r#"SELECT id as "id!: Uuid",
+                      issue_id as "issue_id!: Uuid",
+                      position,
+                      what,
+                      after_subtasks as "after_subtasks!: Json<Vec<String>>",
+                      status as "status!: CheckpointStatus",
+                      round,
+                      tester_workspace_id as "tester_workspace_id: Uuid",
+                      fixer_workspace_id as "fixer_workspace_id: Uuid",
+                      execution_process_id as "execution_process_id: Uuid",
+                      conflict as "conflict: Json<SubtaskConflict>",
+                      rejected_files as "rejected_files: Json<Vec<String>>",
+                      error,
+                      started_at as "started_at: DateTime<Utc>",
+                      finished_at as "finished_at: DateTime<Utc>",
+                      updated_at as "updated_at!: DateTime<Utc>"
+               FROM orchestration_checkpoints
+               WHERE issue_id = $1
+               ORDER BY position"#,
+            issue_id
+        )
+        .fetch_all(pool)
+        .await
+    }
+
+    pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
+        sqlx::query_as!(
+            OrchestrationCheckpoint,
+            r#"SELECT id as "id!: Uuid",
+                      issue_id as "issue_id!: Uuid",
+                      position,
+                      what,
+                      after_subtasks as "after_subtasks!: Json<Vec<String>>",
+                      status as "status!: CheckpointStatus",
+                      round,
+                      tester_workspace_id as "tester_workspace_id: Uuid",
+                      fixer_workspace_id as "fixer_workspace_id: Uuid",
+                      execution_process_id as "execution_process_id: Uuid",
+                      conflict as "conflict: Json<SubtaskConflict>",
+                      rejected_files as "rejected_files: Json<Vec<String>>",
+                      error,
+                      started_at as "started_at: DateTime<Utc>",
+                      finished_at as "finished_at: DateTime<Utc>",
+                      updated_at as "updated_at!: DateTime<Utc>"
+               FROM orchestration_checkpoints
+               WHERE id = $1"#,
+            id
+        )
+        .fetch_optional(pool)
+        .await
+    }
+
+    /// The checkpoint whose tester or fix run works in a workspace.
+    pub async fn find_by_workspace(
+        pool: &SqlitePool,
+        workspace_id: Uuid,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let id = sqlx::query_scalar!(
+            r#"SELECT id as "id!: Uuid" FROM orchestration_checkpoints
+               WHERE tester_workspace_id = $1 OR fixer_workspace_id = $1"#,
+            workspace_id
+        )
+        .fetch_optional(pool)
+        .await?;
+        match id {
+            Some(id) => Self::find_by_id(pool, id).await,
+            None => Ok(None),
+        }
+    }
+
+    pub async fn create(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+        position: i64,
+        what: &str,
+        after_subtasks: &[String],
+    ) -> Result<Self, sqlx::Error> {
+        let id = Uuid::new_v4();
+        let after = Json(after_subtasks);
+        sqlx::query!(
+            r#"INSERT INTO orchestration_checkpoints (id, issue_id, position, what,
+                                                      after_subtasks)
+               VALUES ($1, $2, $3, $4, $5)"#,
+            id,
+            issue_id,
+            position,
+            what,
+            after
+        )
+        .execute(pool)
+        .await?;
+        Self::find_by_id(pool, id)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+
+    pub async fn delete_by_issue(pool: &SqlitePool, issue_id: Uuid) -> Result<u64, sqlx::Error> {
+        Ok(sqlx::query!(
+            "DELETE FROM orchestration_checkpoints WHERE issue_id = $1",
+            issue_id
+        )
+        .execute(pool)
+        .await?
+        .rows_affected())
+    }
+
+    /// Claims a pending checkpoint for its first (or retried) tester run.
+    /// False when it isn't pending any more.
+    pub async fn claim(pool: &SqlitePool, id: Uuid) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET status = 'testing', error = NULL,
+                   execution_process_id = NULL, started_at = datetime('now', 'subsec'),
+                   finished_at = NULL, updated_at = datetime('now', 'subsec')
+               WHERE id = $1 AND status = 'pending'"#,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Moves a running checkpoint to its next run (a fix after a test, a
+    /// re-test after a fix) and forgets the finished run.
+    pub async fn next_run(
+        pool: &SqlitePool,
+        id: Uuid,
+        status: CheckpointStatus,
+        round: i64,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET status = $2, round = $3,
+                   execution_process_id = NULL, conflict = NULL, error = NULL,
+                   updated_at = datetime('now', 'subsec')
+               WHERE id = $1"#,
+            id,
+            status,
+            round
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_workspace(
+        pool: &SqlitePool,
+        id: Uuid,
+        fixer: bool,
+        workspace_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        if fixer {
+            sqlx::query!(
+                r#"UPDATE orchestration_checkpoints SET fixer_workspace_id = $2,
+                       updated_at = datetime('now', 'subsec')
+                   WHERE id = $1"#,
+                id,
+                workspace_id
+            )
+            .execute(pool)
+            .await?;
+        } else {
+            sqlx::query!(
+                r#"UPDATE orchestration_checkpoints SET tester_workspace_id = $2,
+                       updated_at = datetime('now', 'subsec')
+                   WHERE id = $1"#,
+                id,
+                workspace_id
+            )
+            .execute(pool)
+            .await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_run(
+        pool: &SqlitePool,
+        id: Uuid,
+        execution_process_id: Uuid,
+    ) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET execution_process_id = $2,
+                   updated_at = datetime('now', 'subsec')
+               WHERE id = $1"#,
+            id,
+            execution_process_id
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_rejected_files(
+        pool: &SqlitePool,
+        id: Uuid,
+        files: &[String],
+    ) -> Result<(), sqlx::Error> {
+        let files = Json(files);
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET rejected_files = $2,
+                   updated_at = datetime('now', 'subsec')
+               WHERE id = $1"#,
+            id,
+            files
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Records a merge conflict of the tester or fix branch; the same run
+    /// kind goes again on the updated ticket branch.
+    pub async fn set_conflict(
+        pool: &SqlitePool,
+        id: Uuid,
+        conflict: &SubtaskConflict,
+    ) -> Result<(), sqlx::Error> {
+        let conflict = Json(conflict);
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET conflict = $2, execution_process_id = NULL,
+                   updated_at = datetime('now', 'subsec')
+               WHERE id = $1"#,
+            id,
+            conflict
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Sets a final status (passed, failed, stopped) or pending.
+    pub async fn set_status(
+        pool: &SqlitePool,
+        id: Uuid,
+        status: CheckpointStatus,
+        error: Option<&str>,
+    ) -> Result<(), sqlx::Error> {
+        let finished = matches!(
+            status,
+            CheckpointStatus::Passed | CheckpointStatus::Failed | CheckpointStatus::Stopped
+        );
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET status = $2, error = $3,
+                   finished_at = CASE WHEN $4 THEN datetime('now', 'subsec') ELSE finished_at END,
+                   updated_at = datetime('now', 'subsec')
+               WHERE id = $1"#,
+            id,
+            status,
+            error,
+            finished
+        )
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Back to pending for Retry: the tester runs again. Keeps the round.
+    pub async fn requeue(pool: &SqlitePool, id: Uuid) -> Result<bool, sqlx::Error> {
+        let result = sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET status = 'pending', error = NULL,
+                   conflict = NULL, updated_at = datetime('now', 'subsec')
+               WHERE id = $1 AND status IN ('failed', 'stopped')"#,
+            id
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    /// Like [`OrchestrationSubtask::requeue_interrupted`]: a tester or fix
+    /// run of a previous launch can never finish. A running ticket's
+    /// checkpoint starts its current step again (`execution_process_id`
+    /// cleared, status kept); a stopped ticket's counts as stopped.
+    pub async fn requeue_interrupted(pool: &SqlitePool) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET execution_process_id = NULL,
+                   updated_at = datetime('now', 'subsec')
+               WHERE status IN ('testing', 'fixing')
+                 AND issue_id IN (SELECT issue_id FROM ticket_orchestrations
+                                  WHERE status = 'running')"#
+        )
+        .execute(pool)
+        .await?;
+        sqlx::query!(
+            r#"UPDATE orchestration_checkpoints SET status = 'stopped',
+                   error = 'Interrupted by an app restart',
+                   updated_at = datetime('now', 'subsec')
+               WHERE status IN ('testing', 'fixing')
+                 AND issue_id NOT IN (SELECT issue_id FROM ticket_orchestrations
+                                      WHERE status = 'running')"#
         )
         .execute(pool)
         .await?;

@@ -61,6 +61,24 @@ pub enum IssueEventType {
     SubtaskStopped,
     /// The orchestrator finished: `status` done, blocked or stopped.
     CodingFinished,
+    /// A tester run started on a checkpoint (`checkpoint`, `what`, `round`).
+    TesterStarted,
+    /// A tester run ended (`checkpoint`, `round`, `new`, `still_open`,
+    /// `fixed`, `rejected` files outside the test paths, `commits`).
+    TestsFinished,
+    /// A coder fix run started on open issues (`checkpoint`, `round`,
+    /// `issues`).
+    FixStarted,
+    /// A fix run was merged into the ticket branch (`checkpoint`, `round`).
+    FixMerged,
+    /// A checkpoint has no open issues left (`checkpoint`, `round`).
+    CheckpointPassed,
+    /// A checkpoint failed: out of fix rounds or a run failed (`error`), or
+    /// you stopped it (`stopped`).
+    CheckpointFailed,
+    /// You marked an issue found won't fix, or opened it again (`status`,
+    /// `description`).
+    IssueFoundUpdated,
     RunStarted,
     RunFinished,
 }

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO orchestration_checkpoints (id, issue_id, position, what,\n                                                      after_subtasks)\n               VALUES ($1, $2, $3, $4, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "0bdfec26a1ed52f3f4fdbaaa4f37b2c7663babca64ec2391941cec8f7209c9c2"
+}

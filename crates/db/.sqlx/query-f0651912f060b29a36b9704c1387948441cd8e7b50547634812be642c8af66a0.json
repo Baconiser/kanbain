@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\",\n                      issue_id as \"issue_id!: Uuid\",\n                      position,\n                      what,\n                      after_subtasks as \"after_subtasks!: Json<Vec<String>>\",\n                      status as \"status!: CheckpointStatus\",\n                      round,\n                      tester_workspace_id as \"tester_workspace_id: Uuid\",\n                      fixer_workspace_id as \"fixer_workspace_id: Uuid\",\n                      execution_process_id as \"execution_process_id: Uuid\",\n                      conflict as \"conflict: Json<SubtaskConflict>\",\n                      rejected_files as \"rejected_files: Json<Vec<String>>\",\n                      error,\n                      started_at as \"started_at: DateTime<Utc>\",\n                      finished_at as \"finished_at: DateTime<Utc>\",\n                      updated_at as \"updated_at!: DateTime<Utc>\"\n               FROM orchestration_checkpoints\n               WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "issue_id!: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "position",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "what",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "after_subtasks!: Json<Vec<String>>",
+        "ordinal": 4,
+        "type_info": "Text"
+      },
+      {
+        "name": "status!: CheckpointStatus",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "round",
+        "ordinal": 6,
+        "type_info": "Integer"
+      },
+      {
+        "name": "tester_workspace_id: Uuid",
+        "ordinal": 7,
+        "type_info": "Blob"
+      },
+      {
+        "name": "fixer_workspace_id: Uuid",
+        "ordinal": 8,
+        "type_info": "Blob"
+      },
+      {
+        "name": "execution_process_id: Uuid",
+        "ordinal": 9,
+        "type_info": "Blob"
+      },
+      {
+        "name": "conflict: Json<SubtaskConflict>",
+        "ordinal": 10,
+        "type_info": "Text"
+      },
+      {
+        "name": "rejected_files: Json<Vec<String>>",
+        "ordinal": 11,
+        "type_info": "Text"
+      },
+      {
+        "name": "error",
+        "ordinal": 12,
+        "type_info": "Text"
+      },
+      {
+        "name": "started_at: DateTime<Utc>",
+        "ordinal": 13,
+        "type_info": "Text"
+      },
+      {
+        "name": "finished_at: DateTime<Utc>",
+        "ordinal": 14,
+        "type_info": "Text"
+      },
+      {
+        "name": "updated_at!: DateTime<Utc>",
+        "ordinal": 15,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "f0651912f060b29a36b9704c1387948441cd8e7b50547634812be642c8af66a0"
+}

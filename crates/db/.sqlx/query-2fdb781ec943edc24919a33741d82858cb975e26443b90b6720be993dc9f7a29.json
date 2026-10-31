@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\", status as \"status!: IssueFoundStatus\"\n               FROM issues_found WHERE issue_id = $1 AND checkpoint = $2",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "status!: IssueFoundStatus",
+        "ordinal": 1,
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false
+    ]
+  },
+  "hash": "2fdb781ec943edc24919a33741d82858cb975e26443b90b6720be993dc9f7a29"
+}

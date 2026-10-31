@@ -1,0 +1,20 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT id as \"id!: Uuid\" FROM orchestration_checkpoints\n               WHERE tester_workspace_id = $1 OR fixer_workspace_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "6a1453cbd1cd2f90378f91e06f8de7a751722c452504e261e81906965a2cdde2"
+}

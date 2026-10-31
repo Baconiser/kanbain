@@ -499,3 +499,78 @@ fn merge_branch_no_ff_merges_skips_and_aborts_on_conflict() {
         "from a\n"
     );
 }
+
+#[test]
+fn squash_keeping_drops_changes_outside_the_kept_paths() {
+    let td = TempDir::new().unwrap();
+    let repo_path = init_repo_main(&td);
+    let s = GitService::new();
+    let cli = GitCli::new();
+    write_file(&repo_path, "src/lib.rs", "fn a() {}\n");
+    write_file(&repo_path, "tests/old.rs", "old\n");
+    add_path(&repo_path, ".");
+    cli.git(&repo_path, ["commit", "-q", "-m", "base"]).unwrap();
+
+    // The tester's branch: two commits, tests plus a sneaky source edit.
+    cli.git(&repo_path, ["checkout", "-q", "-b", "tester"])
+        .unwrap();
+    write_file(&repo_path, "src/lib.rs", "fn a() { hacked() }\n");
+    write_file(&repo_path, "tests/new.rs", "new\n");
+    write_file(&repo_path, "evil.rs", "x\n");
+    add_path(&repo_path, ".");
+    cli.git(&repo_path, ["commit", "-q", "-m", "t1"]).unwrap();
+    cli.git(&repo_path, ["rm", "-q", "tests/old.rs"]).unwrap();
+    cli.git(&repo_path, ["commit", "-q", "-m", "t2"]).unwrap();
+
+    let squashed = s
+        .squash_keeping(
+            &repo_path,
+            "main",
+            |p| p.starts_with("tests/"),
+            "PROJ-1: Tests",
+        )
+        .unwrap();
+    assert_eq!(squashed.kept, ["tests/new.rs", "tests/old.rs"]);
+    assert_eq!(squashed.dropped, ["evil.rs", "src/lib.rs"]);
+    let head = squashed.head.expect("a test commit");
+    // One commit on top of main, with only the test changes.
+    assert_eq!(
+        cli.git(&repo_path, ["rev-list", "--count", "main..HEAD"])
+            .unwrap()
+            .trim(),
+        "1"
+    );
+    let files = cli
+        .git(&repo_path, ["show", "--name-status", "--format=%s", &head])
+        .unwrap();
+    assert!(files.starts_with("PROJ-1: Tests"), "{files}");
+    assert!(files.contains("A\ttests/new.rs") && files.contains("D\ttests/old.rs"));
+    assert!(!files.contains("src/lib.rs") && !files.contains("evil.rs"));
+    // The worktree matches: the source edit and the extra file are gone.
+    assert_eq!(
+        fs::read_to_string(repo_path.join("src/lib.rs")).unwrap(),
+        "fn a() {}\n"
+    );
+    assert!(!repo_path.join("evil.rs").exists());
+    assert!(
+        cli.git(&repo_path, ["status", "--porcelain"])
+            .unwrap()
+            .is_empty()
+    );
+
+    // Only rejected changes: the branch goes back to the fork point.
+    cli.git(&repo_path, ["reset", "-q", "--hard", "main"])
+        .unwrap();
+    write_file(&repo_path, "src/lib.rs", "again\n");
+    add_path(&repo_path, ".");
+    cli.git(&repo_path, ["commit", "-q", "-m", "t3"]).unwrap();
+    let squashed = s
+        .squash_keeping(&repo_path, "main", |p| p.starts_with("tests/"), "x")
+        .unwrap();
+    assert_eq!(squashed.dropped, ["src/lib.rs"]);
+    assert!(squashed.kept.is_empty() && squashed.head.is_none());
+    assert_eq!(
+        cli.git(&repo_path, ["rev-parse", "HEAD"]).unwrap(),
+        cli.git(&repo_path, ["rev-parse", "main"]).unwrap()
+    );
+}

@@ -31,6 +31,47 @@ pub struct ProjectSettings {
     /// Globs of files the code index skips, e.g. generated code (E14).
     #[serde(default)]
     pub search_exclude_globs: Vec<String>,
+    /// Globs (relative to each repo) of the files the tester may add or
+    /// change (D23). Empty means [`DEFAULT_TEST_PATHS`].
+    #[serde(default)]
+    pub test_paths: Vec<String>,
+}
+
+/// Where tests live in the common languages: test directories, then the
+/// usual test file names.
+pub const DEFAULT_TEST_PATHS: &[&str] = &[
+    "**/tests/**",
+    "**/test/**",
+    "**/__tests__/**",
+    "**/spec/**",
+    "**/e2e/**",
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/*_test.*",
+    "**/*_spec.*",
+    "**/test_*.py",
+    "**/*Test.java",
+    "**/*Tests.java",
+    "**/*Test.kt",
+    "**/*Tests.cs",
+    "**/*Test.php",
+];
+
+impl ProjectSettings {
+    /// The tester's test paths: the project's, or the defaults.
+    pub fn effective_test_paths(&self) -> Vec<String> {
+        let own: Vec<String> = self
+            .test_paths
+            .iter()
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect();
+        if own.is_empty() {
+            DEFAULT_TEST_PATHS.iter().map(|p| p.to_string()).collect()
+        } else {
+            own
+        }
+    }
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]

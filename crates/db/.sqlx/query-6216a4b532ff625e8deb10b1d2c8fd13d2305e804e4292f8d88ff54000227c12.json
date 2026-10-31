@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE orchestration_checkpoints SET status = 'stopped',\n                   error = 'Interrupted by an app restart',\n                   updated_at = datetime('now', 'subsec')\n               WHERE status IN ('testing', 'fixing')\n                 AND issue_id NOT IN (SELECT issue_id FROM ticket_orchestrations\n                                      WHERE status = 'running')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": []
+  },
+  "hash": "6216a4b532ff625e8deb10b1d2c8fd13d2305e804e4292f8d88ff54000227c12"
+}

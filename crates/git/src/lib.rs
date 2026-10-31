@@ -88,6 +88,14 @@ pub struct GitRemote {
     pub url: String,
 }
 
+/// What [`GitService::squash_keeping`] did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Squashed {
+    pub kept: Vec<String>,
+    pub dropped: Vec<String>,
+    pub head: Option<String>,
+}
+
 #[derive(Debug, Clone)]
 pub struct HeadInfo {
     pub branch: String,
@@ -1035,6 +1043,76 @@ impl GitService {
     ) -> Result<(), GitServiceError> {
         GitCli::new().git(worktree_path, ["reset", "-q", "--hard", commit])?;
         Ok(())
+    }
+
+    /// Squash what the branch checked out at `worktree_path` committed since
+    /// it forked from `base` into one commit that keeps only the paths
+    /// `keep` accepts; every other change goes back to how it is at the
+    /// fork point (the tester's test-path fence, D23). Returns the kept and
+    /// the dropped paths, and the new head (`None` when nothing is kept, and
+    /// the branch is then back at the fork point).
+    pub fn squash_keeping(
+        &self,
+        worktree_path: &Path,
+        base: &str,
+        keep: impl Fn(&str) -> bool,
+        message: &str,
+    ) -> Result<Squashed, GitServiceError> {
+        let cli = GitCli::new();
+        let fork = cli
+            .git(worktree_path, ["merge-base", base, "HEAD"])?
+            .trim()
+            .to_string();
+        let changed = cli.git(
+            worktree_path,
+            ["diff", "--name-only", "--no-renames", "-z", &fork, "HEAD"],
+        )?;
+        let (kept, dropped): (Vec<String>, Vec<String>) = changed
+            .split('\0')
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .partition(|p| keep(p));
+        if kept.is_empty() && dropped.is_empty() {
+            return Ok(Squashed {
+                kept,
+                dropped,
+                head: None,
+            });
+        }
+        cli.git(worktree_path, ["reset", "-q", "--soft", &fork])?;
+        if !dropped.is_empty() {
+            let source = format!("--source={fork}");
+            let mut args = vec![
+                "restore".to_string(),
+                source,
+                "--staged".into(),
+                "--worktree".into(),
+                "--".into(),
+            ];
+            args.extend(dropped.iter().map(|p| format!(":(literal){p}")));
+            cli.git(worktree_path, args)?;
+        }
+        if kept.is_empty() {
+            return Ok(Squashed {
+                kept,
+                dropped,
+                head: None,
+            });
+        }
+        self.ensure_cli_commit_identity(worktree_path)?;
+        cli.git(
+            worktree_path,
+            ["commit", "-q", "--no-verify", "-m", message],
+        )?;
+        let head = cli
+            .git(worktree_path, ["rev-parse", "HEAD"])?
+            .trim()
+            .to_string();
+        Ok(Squashed {
+            kept,
+            dropped,
+            head: Some(head),
+        })
     }
 
     /// The textual diff of a revision range (`a..b`, or `a...b` for what `b`
