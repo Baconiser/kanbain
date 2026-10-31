@@ -3445,6 +3445,7 @@ dependencies = [
  "executors",
  "futures",
  "git",
+ "globset",
  "globwalk",
  "json-patch 2.0.0",
  "model-proxy",

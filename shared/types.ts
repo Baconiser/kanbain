@@ -31,7 +31,12 @@ allow_remote_code_embedding: boolean,
 /**
  * Globs of files the code index skips, e.g. generated code (E14).
  */
-search_exclude_globs: Array<string>, };
+search_exclude_globs: Array<string>, 
+/**
+ * Globs (relative to each repo) of the files the tester may add or
+ * change (D23). Empty means [`DEFAULT_TEST_PATHS`].
+ */
+test_paths: Array<string>, };
 
 export type CreateProject = { name: string, id_prefix: string | null, repo_ids: Array<string>, };
 
@@ -101,7 +106,7 @@ actor: string, payload: Record<string, unknown>,
  */
 occurred_at: string, created_at: string, };
 
-export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", coding_started = "coding_started", subtask_started = "subtask_started", subtask_merged = "subtask_merged", merge_conflict = "merge_conflict", subtask_failed = "subtask_failed", subtask_stopped = "subtask_stopped", coding_finished = "coding_finished", run_started = "run_started", run_finished = "run_finished" }
+export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", coding_started = "coding_started", subtask_started = "subtask_started", subtask_merged = "subtask_merged", merge_conflict = "merge_conflict", subtask_failed = "subtask_failed", subtask_stopped = "subtask_stopped", coding_finished = "coding_finished", tester_started = "tester_started", tests_finished = "tests_finished", fix_started = "fix_started", fix_merged = "fix_merged", checkpoint_passed = "checkpoint_passed", checkpoint_failed = "checkpoint_failed", issue_found_updated = "issue_found_updated", run_started = "run_started", run_finished = "run_finished" }
 
 export type AgentJob = { id: string, project_id: string | null, issue_id: string | null, kind: string, agent_def_id: string | null, model: string | null, status: AgentJobStatus, container_id: string | null, output: string | null, error: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, cost_usd: number, model_calls: number, budget_usd: number | null, started_at: string | null, completed_at: string | null, created_at: string, };
 
@@ -206,6 +211,31 @@ files: Array<string>,
  */
 previous_diff: string, };
 
+export type CheckpointStatus = "pending" | "testing" | "fixing" | "passed" | "failed" | "stopped";
+
+export type OrchestrationCheckpoint = { id: string, issue_id: string, position: number, what: string, 
+/**
+ * Plan ids of the subtasks it waits for.
+ */
+after_subtasks: Array<string>, status: CheckpointStatus, 
+/**
+ * Fix runs done for this checkpoint.
+ */
+round: number, tester_workspace_id: string | null, fixer_workspace_id: string | null, execution_process_id: string | null, conflict: SubtaskConflict | null, 
+/**
+ * `repo/path` of files the last tester run changed outside the test
+ * paths; they were dropped from its commit.
+ */
+rejected_files: Array<string> | null, error: string | null, started_at: string | null, finished_at: string | null, updated_at: string, };
+
+export type IssueSeverity = "low" | "medium" | "high";
+
+export type IssueCategory = "edge_case" | "integration" | "logic" | "error_handling" | "state_timing" | "requirements";
+
+export type IssueFoundStatus = "open" | "fixed" | "wontfix";
+
+export type IssueFound = { id: string, issue_id: string, run_id: string | null, checkpoint: number | null, file: string | null, line: number | null, severity: IssueSeverity, category: IssueCategory, description: string, status: IssueFoundStatus, fixed_round: number | null, created_at: string, updated_at: string, };
+
 export type TicketOrchestration = { issue_id: string, plan_id: string, 
 /**
  * The workspace holding the ticket branch.
@@ -237,11 +267,48 @@ cost_usd: number, id: string, issue_id: string, plan_subtask_id: string, positio
  */
 merge_commits: Record<string, string> | null, error: string | null, started_at: string | null, finished_at: string | null, updated_at: string, };
 
+export type CheckpointView = { 
+/**
+ * Titles of the subtasks it tests.
+ */
+after_titles: Array<string>, is_final: boolean, tester_branch: string | null, fixer_branch: string | null, 
+/**
+ * Model cost of its tester and fix runs.
+ */
+cost_usd: number, id: string, issue_id: string, position: number, what: string, 
+/**
+ * Plan ids of the subtasks it waits for.
+ */
+after_subtasks: Array<string>, status: CheckpointStatus, 
+/**
+ * Fix runs done for this checkpoint.
+ */
+round: number, tester_workspace_id: string | null, fixer_workspace_id: string | null, execution_process_id: string | null, conflict: SubtaskConflict | null, 
+/**
+ * `repo/path` of files the last tester run changed outside the test
+ * paths; they were dropped from its commit.
+ */
+rejected_files: Array<string> | null, error: string | null, started_at: string | null, finished_at: string | null, updated_at: string, };
+
+export type UpdateIssueFound = { 
+/**
+ * `wontfix`, or `open` to undo it.
+ */
+status: IssueFoundStatus, };
+
 export type OrchestrationView = { orchestration: TicketOrchestration | null, 
 /**
  * The ticket branch subtasks merge into.
  */
-ticket_branch: string | null, subtasks: Array<SubtaskView>, };
+ticket_branch: string | null, subtasks: Array<SubtaskView>, 
+/**
+ * The checkpoints and their tester and fix runs (Phase 6).
+ */
+checkpoints: Array<CheckpointView>, 
+/**
+ * What the tester found, oldest first.
+ */
+issues_found: Array<IssueFound>, };
 
 export type AppLogEntry = { 
 /**

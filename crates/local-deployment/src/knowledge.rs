@@ -93,10 +93,11 @@ impl RunTools for KnowledgeTools {
     fn definitions(&self) -> Vec<Value> {
         vec![json!({
             "name": SEARCH_TOOL,
-            "description": "Search this project's code, tickets, comments, prior work and earlier \
-                agent runs by meaning and keywords. Returns locations (repo/path:lines and symbol \
-                for code; ticket ids for tickets) with short excerpts, best first. Use it before \
-                exploring with Grep, Glob or Read, then read only the ranges you need.",
+            "description": "Search this project's code, tickets, comments, prior work, earlier \
+                agent runs and issues testers found, by meaning and keywords. Returns locations \
+                (repo/path:lines and symbol for code; ticket ids for tickets) with short \
+                excerpts, best first. Use it before exploring with Grep, Glob or Read, then read \
+                only the ranges you need.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -108,7 +109,7 @@ impl RunTools for KnowledgeTools {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["code", "ticket", "comment", "attachment", "prior_work", "run", "plan"]
+                            "enum": ["code", "ticket", "comment", "attachment", "prior_work", "run", "plan", "issue_found"]
                         },
                         "description": "Limit the results to these kinds."
                     },

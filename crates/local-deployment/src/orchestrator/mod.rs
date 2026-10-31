@@ -8,6 +8,8 @@
 //! merges finished subtask branches into the ticket branch on the host, and
 //! turns a merge conflict into a re-run of that subtask on top of the
 //! updated ticket branch. All state is in SQLite, so a restart resumes.
+//! From Phase 6 the plan's checkpoints are tested and fixed along the way
+//! (see [`checkpoints`]); a ticket reaches Review only once they all pass.
 //!
 //! Locking: one async mutex per ticket guards its rows and the ticket
 //! worktree (merges are serialized). It is never held across
@@ -31,9 +33,10 @@ use db::{
         execution_process_event::{ExecutionProcessEvent, ExecutionProcessEventType},
         issue::{CreateIssue, Issue},
         issue_event::{IssueEvent, IssueEventType},
+        issue_found::{IssueFound, IssueFoundStatus},
         orchestration::{
-            OrchestrationStatus, OrchestrationSubtask, SubtaskConflict, SubtaskStatus,
-            TicketOrchestration,
+            CheckpointStatus, OrchestrationCheckpoint, OrchestrationStatus, OrchestrationSubtask,
+            SubtaskConflict, SubtaskStatus, TicketOrchestration,
         },
         plan::{Plan, PlanDocument, PlanStatus, PlanSubtask},
         project::Project,
@@ -77,7 +80,11 @@ use crate::{
     planning::{PlanningService, move_to_kind, render_related},
 };
 
-/// Merge-conflict re-runs per ticket before it goes to Blocked (D24).
+mod checkpoints;
+pub use checkpoints::{CheckpointView, test_path_matcher};
+
+/// Fix rounds per ticket before it goes to Blocked (D24): merge-conflict
+/// re-runs and fix runs for the tester's issues count alike.
 pub const MAX_FIX_ROUNDS: i64 = 3;
 /// Cap on the earlier attempt's diff a conflict re-run gets.
 const PREVIOUS_DIFF_MAX_BYTES: usize = 64 * 1024;
@@ -92,6 +99,15 @@ pub enum OrchestratorError {
     NotFound,
     #[error("{0}")]
     Invalid(String),
+}
+
+/// How merging a run's branch into the ticket branch went, over all repos.
+pub(crate) enum MergeOutcome {
+    /// Merge commit per repo (none for repos without new commits).
+    Merged(BTreeMap<String, String>),
+    /// Conflicted files per repo; every merge was aborted.
+    Conflicts(Vec<(String, Vec<String>)>),
+    Failed(String),
 }
 
 impl From<crate::planning::PlanningError> for OrchestratorError {
@@ -129,6 +145,10 @@ pub struct OrchestrationView {
     /// The ticket branch subtasks merge into.
     pub ticket_branch: Option<String>,
     pub subtasks: Vec<SubtaskView>,
+    /// The checkpoints and their tester and fix runs (Phase 6).
+    pub checkpoints: Vec<CheckpointView>,
+    /// What the tester found, oldest first.
+    pub issues_found: Vec<IssueFound>,
 }
 
 /// The first message of a coder run.
@@ -321,6 +341,9 @@ impl OrchestratorService {
     }
 
     async fn notify(&self, issue_id: Uuid, title: &str, message: &str) {
+        // Logged too: on Linux (and in the demos) the OS notification is
+        // invisible, and "did it fire?" is the question you have later.
+        tracing::info!(%issue_id, "Notification: {title}: {message}");
         let workspace = TicketOrchestration::find(&self.db.pool, issue_id)
             .await
             .ok()
@@ -350,6 +373,8 @@ impl OrchestratorService {
                 orchestration,
                 ticket_branch: None,
                 subtasks: vec![],
+                checkpoints: vec![],
+                issues_found: vec![],
             });
         };
         let ticket_branch = match o.workspace_id {
@@ -413,10 +438,14 @@ impl OrchestratorService {
                 cost_usd,
             });
         }
+        let checkpoints = self.checkpoint_views(issue_id, &plan.plan.0).await?;
+        let issues_found = IssueFound::find_by_issue(pool, issue_id).await?;
         Ok(OrchestrationView {
             orchestration,
             ticket_branch,
             subtasks,
+            checkpoints,
+            issues_found,
         })
     }
 
@@ -439,10 +468,12 @@ impl OrchestratorService {
                 "Coders run in the sandbox; turn it on in Settings → Sandbox".into(),
             ));
         }
-        self.jobs
-            .agent_name_for(AgentRole::Coder)
-            .await
-            .map_err(OrchestratorError::Invalid)?;
+        for role in [AgentRole::Coder, AgentRole::Tester] {
+            self.jobs
+                .agent_name_for(role)
+                .await
+                .map_err(OrchestratorError::Invalid)?;
+        }
 
         if let Some(existing) = TicketOrchestration::find(pool, issue_id).await?
             && existing.plan_id == plan.id
@@ -468,6 +499,10 @@ impl OrchestratorService {
                 }
             }
             OrchestrationSubtask::delete_by_issue(pool, issue_id).await?;
+            // The old plan's checkpoints and what they found go too; the
+            // scheduling step creates the new plan's checkpoints.
+            OrchestrationCheckpoint::delete_by_issue(pool, issue_id).await?;
+            IssueFound::delete_by_issue(pool, issue_id).await?;
         }
 
         let workspace = self.planning.ticket_workspace(&issue).await?;
@@ -545,6 +580,25 @@ impl OrchestratorService {
             if let Err(e) = self.tick(issue_id).await {
                 tracing::warn!("Resuming the orchestration of {issue_id} failed: {e}");
             }
+            // A tester or fix run the restart interrupted starts that step
+            // again; pending checkpoints are the scheduling step's job.
+            let checkpoints = match OrchestrationCheckpoint::find_by_issue(pool, issue_id).await {
+                Ok(rows) => rows,
+                Err(e) => {
+                    tracing::warn!("Listing the checkpoints of {issue_id} failed: {e}");
+                    continue;
+                }
+            };
+            for row in checkpoints {
+                if matches!(
+                    row.status,
+                    CheckpointStatus::Testing | CheckpointStatus::Fixing
+                ) && row.execution_process_id.is_none()
+                {
+                    let service = self.clone();
+                    tokio::spawn(async move { service.launch_check(row.id).await });
+                }
+            }
         }
     }
 
@@ -590,8 +644,11 @@ impl OrchestratorService {
         };
         let mut statuses: Vec<SubtaskStatus> = ordered.iter().map(|r| r.status).collect();
         let schedule = Schedule::new(doc);
+        let check_rows = self.ensure_checkpoints(issue_id, doc, &schedule).await?;
+        let mut checks: Vec<CheckpointStatus> = check_rows.iter().map(|r| r.status).collect();
+        let step = schedule.step(&statuses, &checks);
 
-        for i in schedule.ready(&statuses) {
+        for i in step.subtasks {
             let row = ordered[i];
             if !OrchestrationSubtask::claim(pool, row.id).await? {
                 continue;
@@ -611,12 +668,41 @@ impl OrchestratorService {
             let subtask_id = row.id;
             tokio::spawn(async move { service.launch(subtask_id).await });
         }
+        if let Some(k) = step.checkpoint
+            && let Some(row) = check_rows.get(k)
+            && OrchestrationCheckpoint::claim(pool, row.id).await?
+        {
+            checks[k] = CheckpointStatus::Testing;
+            self.event(
+                issue_id,
+                IssueEventType::TesterStarted,
+                "system",
+                json!({"checkpoint": row.position + 1, "what": row.what, "round": row.round}),
+            )
+            .await;
+            let service = self.clone();
+            let checkpoint_id = row.id;
+            tokio::spawn(async move { service.launch_check(checkpoint_id).await });
+        }
 
-        let (status, error, event_status) = match schedule.outcome(&statuses) {
-            Outcome::Continue => return Ok(()),
+        let (status, error, event_status) = match schedule.step(&statuses, &checks).outcome {
+            Outcome::Continue => {
+                // The ticket sits in Testing while a checkpoint is tested or
+                // fixed, in In progress while only coders run.
+                let testing = checks
+                    .iter()
+                    .any(|c| matches!(c, CheckpointStatus::Testing | CheckpointStatus::Fixing));
+                let kind = if testing {
+                    ProjectStatusKind::Testing
+                } else {
+                    ProjectStatusKind::InProgress
+                };
+                self.move_issue(Some(issue_id), kind).await;
+                return Ok(());
+            }
             Outcome::Done => (OrchestrationStatus::Done, None, "done"),
             Outcome::Blocked => {
-                let failed: Vec<String> = ordered
+                let mut failed: Vec<String> = ordered
                     .iter()
                     .zip(&doc.subtasks)
                     .filter(|(r, _)| r.status == SubtaskStatus::Failed)
@@ -625,6 +711,15 @@ impl OrchestratorService {
                         None => s.title.clone(),
                     })
                     .collect();
+                // The rows as they are now: a failure sets the error.
+                for r in OrchestrationCheckpoint::find_by_issue(pool, issue_id).await? {
+                    if r.status == CheckpointStatus::Failed {
+                        failed.push(match &r.error {
+                            Some(e) => format!("checkpoint {} ({e})", r.position + 1),
+                            None => format!("checkpoint {}", r.position + 1),
+                        });
+                    }
+                }
                 (
                     OrchestrationStatus::Blocked,
                     Some(format!("Failed: {}", failed.join("; "))),
@@ -646,12 +741,11 @@ impl OrchestratorService {
         };
         match status {
             OrchestrationStatus::Done => {
-                // Phase 6 puts the tester between coding and review.
                 move_to_kind(pool, &issue, ProjectStatusKind::Review).await;
                 self.notify(
                     issue_id,
                     "Ready for review",
-                    &format!("All subtasks of \"{}\" are merged.", issue.title),
+                    &format!("All subtasks of \"{}\" are merged and tested.", issue.title),
                 )
                 .await;
             }
@@ -922,6 +1016,9 @@ impl OrchestratorService {
         workspace_id: Uuid,
     ) -> Result<Vec<(String, String)>, OrchestratorError> {
         let pool = &self.db.pool;
+        if let Some(check) = OrchestrationCheckpoint::find_by_workspace(pool, workspace_id).await? {
+            return self.check_context_files(&check, workspace_id).await;
+        }
         let Some(row) = OrchestrationSubtask::find_by_workspace(pool, workspace_id).await? else {
             return Ok(Vec::new());
         };
@@ -1039,8 +1136,24 @@ impl OrchestratorService {
     /// branch is merged into the ticket branch (or re-run on a conflict) and
     /// the next subtasks start.
     pub async fn on_run_finished(&self, execution_id: Uuid) {
-        if let Err(e) = self.finish_run(execution_id).await {
-            tracing::warn!("Handling the end of coder run {execution_id} failed: {e}");
+        // Nothing else ever looks at a finished run again, so a lost end
+        // leaves its subtask or checkpoint stuck. A busy database is worth
+        // a few more tries; the handling is safe to repeat (a merged branch
+        // merges as nothing, a squashed one squashes to itself).
+        for attempt in 1..=4 {
+            match self.finish_run(execution_id).await {
+                Ok(()) => return,
+                Err(OrchestratorError::Database(e)) if attempt < 4 => {
+                    tracing::warn!(
+                        "Handling the end of run {execution_id} failed (try {attempt}): {e}"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(500 * attempt)).await;
+                }
+                Err(e) => {
+                    tracing::warn!("Handling the end of run {execution_id} failed: {e}");
+                    return;
+                }
+            }
         }
     }
 
@@ -1060,6 +1173,26 @@ impl OrchestratorService {
         let Some(session) = Session::find_by_id(pool, process.session_id).await? else {
             return Ok(());
         };
+        // A checkpoint's tester or fix run.
+        if let Some(check) =
+            OrchestrationCheckpoint::find_by_workspace(pool, session.workspace_id).await?
+        {
+            let lock = self.lock_for(check.issue_id);
+            let _guard = lock.lock().await;
+            let check = OrchestrationCheckpoint::find_by_id(pool, check.id)
+                .await?
+                .ok_or(OrchestratorError::NotFound)?;
+            // A manual follow-up in the checkpoint's workspace is not its run.
+            if check
+                .execution_process_id
+                .is_some_and(|id| id != execution_id)
+            {
+                return Ok(());
+            }
+            return self
+                .finish_check_locked(&check, &process, session.workspace_id)
+                .await;
+        }
         // By workspace, not by run id: a quick run can end before its id is
         // recorded on the subtask.
         let Some(row) = OrchestrationSubtask::find_by_workspace(pool, session.workspace_id).await?
@@ -1171,34 +1304,17 @@ impl OrchestratorService {
             None => None,
         }
         .ok_or(OrchestratorError::NotFound)?;
-        let ticket_root = PathBuf::from(ticket_ws.container_ref.clone().unwrap_or_default());
         let sub_root = PathBuf::from(sub_ws.container_ref.clone().unwrap_or_default());
         let id = self.display_id(&issue).await;
         let message = format!("{id}: Merge subtask {}: {title}", row.plan_subtask_id);
 
         let repos = WorkspaceRepo::find_repos_for_workspace(pool, ticket_ws.id).await?;
-        let mut commits = BTreeMap::new();
-        let mut conflicts: Vec<(String, Vec<String>)> = Vec::new();
-        for repo in &repos {
-            let worktree = ticket_root.join(&repo.name);
-            match self
-                .git
-                .merge_branch_no_ff(&worktree, &sub_ws.branch, &message)
-            {
-                Ok(Some(head)) => {
-                    commits.insert(repo.name.clone(), head);
-                }
-                Ok(None) => {}
-                Err(GitServiceError::MergeConflicts {
-                    conflicted_files, ..
-                }) => conflicts.push((repo.name.clone(), conflicted_files)),
-                Err(e) => {
-                    return self
-                        .fail_locked(row, &format!("Merging into {}: {e}", repo.name))
-                        .await;
-                }
-            }
-        }
+        let (commits, conflicts) = match self.merge_into_ticket(&ticket_ws, &sub_ws, &message).await
+        {
+            MergeOutcome::Merged(commits) => (commits, vec![]),
+            MergeOutcome::Conflicts(conflicts) => (BTreeMap::new(), conflicts),
+            MergeOutcome::Failed(e) => return self.fail_locked(row, &e).await,
+        };
 
         if conflicts.is_empty() {
             OrchestrationSubtask::set_merged(pool, row.id, &commits).await?;
@@ -1238,23 +1354,7 @@ impl OrchestratorService {
                 )
                 .await;
         }
-        // The earlier attempt's own changes, from where it forked off the
-        // ticket branch, for the repos that conflicted.
-        let mut previous_diff = String::new();
-        for (repo, _) in &conflicts {
-            let range = format!("{}...{}", ticket_ws.branch, sub_ws.branch);
-            match self.git.diff_text(
-                &sub_root.join(repo),
-                &range,
-                PREVIOUS_DIFF_MAX_BYTES.saturating_sub(previous_diff.len()),
-            ) {
-                Ok(diff) if conflicts.len() > 1 => {
-                    previous_diff.push_str(&format!("# Repository: {repo}\n{diff}"))
-                }
-                Ok(diff) => previous_diff.push_str(&diff),
-                Err(e) => tracing::warn!("Diff of the earlier attempt in {repo} failed: {e}"),
-            }
-        }
+        let previous_diff = self.previous_diff(&ticket_ws, &sub_ws, &conflicts);
         // Start over from the ticket branch in every repo; repos that merged
         // cleanly already have the work there.
         for repo in &repos {
@@ -1290,6 +1390,74 @@ impl OrchestratorService {
         )
         .await;
         Ok(())
+    }
+
+    /// Merges `run_ws`'s branch into the ticket branch in every repo of the
+    /// ticket's workspace. Conflicted merges are aborted; a repo that merged
+    /// before another conflicted keeps its merge (the re-run then has
+    /// nothing new for it).
+    pub(crate) async fn merge_into_ticket(
+        &self,
+        ticket_ws: &Workspace,
+        run_ws: &Workspace,
+        message: &str,
+    ) -> MergeOutcome {
+        let repos = match WorkspaceRepo::find_repos_for_workspace(&self.db.pool, ticket_ws.id).await
+        {
+            Ok(repos) => repos,
+            Err(e) => return MergeOutcome::Failed(e.to_string()),
+        };
+        let ticket_root = PathBuf::from(ticket_ws.container_ref.clone().unwrap_or_default());
+        let mut commits = BTreeMap::new();
+        let mut conflicts: Vec<(String, Vec<String>)> = Vec::new();
+        for repo in &repos {
+            let worktree = ticket_root.join(&repo.name);
+            match self
+                .git
+                .merge_branch_no_ff(&worktree, &run_ws.branch, message)
+            {
+                Ok(Some(head)) => {
+                    commits.insert(repo.name.clone(), head);
+                }
+                Ok(None) => {}
+                Err(GitServiceError::MergeConflicts {
+                    conflicted_files, ..
+                }) => conflicts.push((repo.name.clone(), conflicted_files)),
+                Err(e) => return MergeOutcome::Failed(format!("Merging into {}: {e}", repo.name)),
+            }
+        }
+        if conflicts.is_empty() {
+            MergeOutcome::Merged(commits)
+        } else {
+            MergeOutcome::Conflicts(conflicts)
+        }
+    }
+
+    /// The earlier attempt's own changes, from where it forked off the
+    /// ticket branch, for the repos that conflicted (capped).
+    pub(crate) fn previous_diff(
+        &self,
+        ticket_ws: &Workspace,
+        run_ws: &Workspace,
+        conflicts: &[(String, Vec<String>)],
+    ) -> String {
+        let run_root = PathBuf::from(run_ws.container_ref.clone().unwrap_or_default());
+        let mut previous_diff = String::new();
+        for (repo, _) in conflicts {
+            let range = format!("{}...{}", ticket_ws.branch, run_ws.branch);
+            match self.git.diff_text(
+                &run_root.join(repo),
+                &range,
+                PREVIOUS_DIFF_MAX_BYTES.saturating_sub(previous_diff.len()),
+            ) {
+                Ok(diff) if conflicts.len() > 1 => {
+                    previous_diff.push_str(&format!("# Repository: {repo}\n{diff}"))
+                }
+                Ok(diff) => previous_diff.push_str(&diff),
+                Err(e) => tracing::warn!("Diff of the earlier attempt in {repo} failed: {e}"),
+            }
+        }
+        previous_diff
     }
 
     // ---- Stop and Retry ----------------------------------------------------
@@ -1374,6 +1542,21 @@ impl OrchestratorService {
                 if row.status == SubtaskStatus::Running {
                     OrchestrationSubtask::set_status(pool, row.id, SubtaskStatus::Stopped, None)
                         .await?;
+                    runs.extend(row.execution_process_id);
+                }
+            }
+            for row in OrchestrationCheckpoint::find_by_issue(pool, issue_id).await? {
+                if matches!(
+                    row.status,
+                    CheckpointStatus::Testing | CheckpointStatus::Fixing
+                ) {
+                    OrchestrationCheckpoint::set_status(
+                        pool,
+                        row.id,
+                        CheckpointStatus::Stopped,
+                        None,
+                    )
+                    .await?;
                     runs.extend(row.execution_process_id);
                 }
             }
@@ -1464,10 +1647,109 @@ impl OrchestratorService {
                     .await;
             }
         }
+        for row in OrchestrationCheckpoint::find_by_issue(pool, issue_id).await? {
+            OrchestrationCheckpoint::requeue(pool, row.id).await?;
+        }
         self.reopen_locked(issue_id).await?;
         self.tick_locked(issue_id).await?;
         drop(guard);
         self.view(issue_id).await
+    }
+
+    pub async fn stop_checkpoint(
+        &self,
+        checkpoint_id: Uuid,
+    ) -> Result<OrchestrationView, OrchestratorError> {
+        let pool = &self.db.pool;
+        let row = OrchestrationCheckpoint::find_by_id(pool, checkpoint_id)
+            .await?
+            .ok_or(OrchestratorError::NotFound)?;
+        let run = {
+            let lock = self.lock_for(row.issue_id);
+            let _guard = lock.lock().await;
+            let row = OrchestrationCheckpoint::find_by_id(pool, checkpoint_id)
+                .await?
+                .ok_or(OrchestratorError::NotFound)?;
+            if !matches!(
+                row.status,
+                CheckpointStatus::Pending | CheckpointStatus::Testing | CheckpointStatus::Fixing
+            ) {
+                return Err(OrchestratorError::Invalid(format!(
+                    "Checkpoint {} is already {}",
+                    row.position + 1,
+                    row.status
+                )));
+            }
+            OrchestrationCheckpoint::set_status(pool, row.id, CheckpointStatus::Stopped, None)
+                .await?;
+            self.event(
+                row.issue_id,
+                IssueEventType::CheckpointFailed,
+                "user",
+                json!({"checkpoint": row.position + 1, "what": row.what, "stopped": true}),
+            )
+            .await;
+            self.tick_locked(row.issue_id).await?;
+            row.execution_process_id
+        };
+        if let Some(run) = run {
+            self.stop_run(run).await;
+        }
+        self.view(row.issue_id).await
+    }
+
+    /// Tests a failed or stopped checkpoint again, from a fresh tester run.
+    pub async fn retry_checkpoint(
+        &self,
+        checkpoint_id: Uuid,
+    ) -> Result<OrchestrationView, OrchestratorError> {
+        let pool = &self.db.pool;
+        let row = OrchestrationCheckpoint::find_by_id(pool, checkpoint_id)
+            .await?
+            .ok_or(OrchestratorError::NotFound)?;
+        let lock = self.lock_for(row.issue_id);
+        let guard = lock.lock().await;
+        if !OrchestrationCheckpoint::requeue(pool, checkpoint_id).await? {
+            return Err(OrchestratorError::Invalid(
+                "Only failed or stopped checkpoints can be retried".into(),
+            ));
+        }
+        let o = TicketOrchestration::find(pool, row.issue_id)
+            .await?
+            .ok_or(OrchestratorError::NotFound)?;
+        if o.status != OrchestrationStatus::Running {
+            self.reopen_locked(row.issue_id).await?;
+        }
+        self.tick_locked(row.issue_id).await?;
+        drop(guard);
+        self.view(row.issue_id).await
+    }
+
+    /// Marks an issue found as won't fix (or opens it again). A won't-fix
+    /// issue goes to no fix run and the tester is told to leave it.
+    pub async fn set_issue_found_status(
+        &self,
+        id: Uuid,
+        status: IssueFoundStatus,
+    ) -> Result<OrchestrationView, OrchestratorError> {
+        let pool = &self.db.pool;
+        let found = IssueFound::find_by_id(pool, id)
+            .await?
+            .ok_or(OrchestratorError::NotFound)?;
+        if status == IssueFoundStatus::Fixed {
+            return Err(OrchestratorError::Invalid(
+                "Issues are marked fixed by a re-test".into(),
+            ));
+        }
+        IssueFound::set_status(pool, id, status).await?;
+        self.event(
+            found.issue_id,
+            IssueEventType::IssueFoundUpdated,
+            "user",
+            json!({"issue_found": id, "status": status, "description": found.description}),
+        )
+        .await;
+        self.view(found.issue_id).await
     }
 }
 

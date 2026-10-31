@@ -1,13 +1,17 @@
 //! The orchestrator (Phase 5, D22): coding an approved plan, with Stop and
-//! Retry per subtask and per ticket.
+//! Retry per subtask and per ticket; from Phase 6 also per checkpoint, and
+//! the issues the tester found (D23, D24).
 
 use axum::{
-    Router,
+    Json, Router,
     extract::{Path, State},
     response::Json as ResponseJson,
-    routing::{get, post},
+    routing::{get, post, put},
 };
+use db::models::issue_found::IssueFoundStatus;
 use local_deployment::orchestrator::{OrchestrationView, OrchestratorError};
+use serde::Deserialize;
+use ts_rs::TS;
 use utils::response::ApiResponse;
 use uuid::Uuid;
 
@@ -74,6 +78,46 @@ async fn retry_subtask(
     Ok(ResponseJson(ApiResponse::success(view)))
 }
 
+async fn stop_checkpoint(
+    Path(checkpoint_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> ViewResponse {
+    let view = deployment
+        .orchestrator()
+        .stop_checkpoint(checkpoint_id)
+        .await?;
+    Ok(ResponseJson(ApiResponse::success(view)))
+}
+
+async fn retry_checkpoint(
+    Path(checkpoint_id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+) -> ViewResponse {
+    let view = deployment
+        .orchestrator()
+        .retry_checkpoint(checkpoint_id)
+        .await?;
+    Ok(ResponseJson(ApiResponse::success(view)))
+}
+
+#[derive(Debug, Deserialize, TS)]
+pub struct UpdateIssueFound {
+    /// `wontfix`, or `open` to undo it.
+    pub status: IssueFoundStatus,
+}
+
+async fn update_issue_found(
+    Path(id): Path<Uuid>,
+    State(deployment): State<DeploymentImpl>,
+    Json(body): Json<UpdateIssueFound>,
+) -> ViewResponse {
+    let view = deployment
+        .orchestrator()
+        .set_issue_found_status(id, body.status)
+        .await?;
+    Ok(ResponseJson(ApiResponse::success(view)))
+}
+
 pub fn router() -> Router<DeploymentImpl> {
     Router::new()
         .route("/issues/{issue_id}/coding", get(get_orchestration))
@@ -82,4 +126,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/issues/{issue_id}/coding/retry", post(retry_orchestration))
         .route("/subtasks/{subtask_id}/stop", post(stop_subtask))
         .route("/subtasks/{subtask_id}/retry", post(retry_subtask))
+        .route("/checkpoints/{checkpoint_id}/stop", post(stop_checkpoint))
+        .route("/checkpoints/{checkpoint_id}/retry", post(retry_checkpoint))
+        .route("/issues-found/{id}", put(update_issue_found))
 }

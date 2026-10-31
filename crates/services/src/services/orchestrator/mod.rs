@@ -11,10 +11,26 @@
 //!   parallel; the sandbox's slot limit caps how many actually run at once.
 //! - A subtask without a file list overlaps everything: we can't tell what
 //!   it touches, so it runs alone rather than gambling on a conflict.
+//!
+//! Checkpoints (Phase 6, D23):
+//! - The plan's checkpoints, plus a final one over every subtask when none
+//!   covers them all, so nothing reaches Review untested.
+//! - A checkpoint is due once all its subtasks are merged. One checkpoint
+//!   is tested (and fixed) at a time, in plan order.
+//! - While a due checkpoint hasn't passed, no new coder starts: later work
+//!   builds on a tested base, and fix runs don't race fresh subtasks for
+//!   the same lines. Coders already running carry on.
 
 use std::collections::BTreeSet;
 
-use db::models::{orchestration::SubtaskStatus, plan::PlanDocument};
+use db::models::{
+    orchestration::{CheckpointStatus, SubtaskStatus},
+    plan::PlanDocument,
+};
+
+/// What the final checkpoint tests when the plan has none over everything.
+pub const FINAL_CHECKPOINT: &str =
+    "The whole ticket: every requirement and acceptance criterion, end to end.";
 
 /// What the ticket as a whole is doing after a scheduling step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,13 +45,35 @@ pub enum Outcome {
     Stopped,
 }
 
-/// The plan's subtasks as a DAG, by index into `plan.subtasks`.
+/// A checkpoint as the scheduler sees it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Checkpoint {
+    /// Subtasks (by index) that must be merged before it is tested.
+    pub after: BTreeSet<usize>,
+    pub what: String,
+    /// Added by KanbAIn, not in the plan.
+    pub is_final: bool,
+}
+
+/// What one scheduling step decides.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Step {
+    /// Subtasks to start now.
+    pub subtasks: Vec<usize>,
+    /// The checkpoint whose tester starts now.
+    pub checkpoint: Option<usize>,
+    pub outcome: Outcome,
+}
+
+/// The plan's subtasks as a DAG, by index into `plan.subtasks`, and its
+/// checkpoints.
 #[derive(Debug, Clone)]
 pub struct Schedule {
     /// `before[i]`: subtasks that must be merged before `i` starts.
     before: Vec<BTreeSet<usize>>,
     /// A topological order (plan order breaks ties).
     order: Vec<usize>,
+    checkpoints: Vec<Checkpoint>,
 }
 
 /// `./src/a.rs` and `src/a.rs/` are the same path.
@@ -135,7 +173,39 @@ impl Schedule {
         for (j, deps) in before.iter_mut().enumerate() {
             deps.retain(|&i| rank[i] < rank[j]);
         }
-        Self { before, order }
+
+        // A checkpoint without (known) subtasks covers them all.
+        let all: BTreeSet<usize> = (0..n).collect();
+        let mut checkpoints: Vec<Checkpoint> = plan
+            .checkpoints
+            .iter()
+            .map(|c| {
+                let after: BTreeSet<usize> =
+                    c.after_subtasks.iter().filter_map(|d| index(d)).collect();
+                Checkpoint {
+                    after: if after.is_empty() { all.clone() } else { after },
+                    what: c.what.trim().to_string(),
+                    is_final: false,
+                }
+            })
+            .collect();
+        if n > 0 && !checkpoints.iter().any(|c| c.after == all) {
+            checkpoints.push(Checkpoint {
+                after: all,
+                what: FINAL_CHECKPOINT.to_string(),
+                is_final: true,
+            });
+        }
+        Self {
+            before,
+            order,
+            checkpoints,
+        }
+    }
+
+    /// The plan's checkpoints, then the final one if it was added.
+    pub fn checkpoints(&self) -> &[Checkpoint] {
+        &self.checkpoints
     }
 
     /// Subtasks that must be merged before subtask `i` starts.
@@ -157,18 +227,48 @@ impl Schedule {
             .collect()
     }
 
-    /// Where the ticket stands once [`Self::ready`] subtasks are started.
-    pub fn outcome(&self, status: &[SubtaskStatus]) -> Outcome {
-        if status.iter().all(|s| *s == SubtaskStatus::Merged) {
-            return Outcome::Done;
-        }
-        if status.contains(&SubtaskStatus::Running) || !self.ready(status).is_empty() {
-            return Outcome::Continue;
-        }
-        if status.contains(&SubtaskStatus::Failed) {
+    fn due(&self, k: usize, status: &[SubtaskStatus]) -> bool {
+        self.checkpoints[k]
+            .after
+            .iter()
+            .all(|&i| status[i] == SubtaskStatus::Merged)
+    }
+
+    /// One scheduling step over the subtasks' and the checkpoints' states
+    /// (`checks[k]` for `checkpoints()[k]`).
+    pub fn step(&self, status: &[SubtaskStatus], checks: &[CheckpointStatus]) -> Step {
+        use CheckpointStatus as C;
+        let k = self.checkpoints.len().min(checks.len());
+        let active = checks[..k]
+            .iter()
+            .any(|c| matches!(c, C::Testing | C::Fixing));
+        let checkpoint = if active {
+            None
+        } else {
+            (0..k).find(|&c| checks[c] == C::Pending && self.due(c, status))
+        };
+        let hold = (0..k).any(|c| checks[c] != C::Passed && self.due(c, status));
+        let subtasks = if hold { Vec::new() } else { self.ready(status) };
+
+        let outcome = if status.iter().all(|s| *s == SubtaskStatus::Merged)
+            && checks[..k].iter().all(|c| *c == C::Passed)
+        {
+            Outcome::Done
+        } else if status.contains(&SubtaskStatus::Running)
+            || !subtasks.is_empty()
+            || active
+            || checkpoint.is_some()
+        {
+            Outcome::Continue
+        } else if status.contains(&SubtaskStatus::Failed) || checks[..k].contains(&C::Failed) {
             Outcome::Blocked
         } else {
             Outcome::Stopped
+        };
+        Step {
+            subtasks,
+            checkpoint,
+            outcome,
         }
     }
 }
@@ -184,6 +284,12 @@ mod tests {
     }
 
     use SubtaskStatus::{Failed, Merged, Pending, Running, Stopped};
+
+    /// Where the ticket stands with every checkpoint passed.
+    fn outcome(s: &Schedule, status: &[SubtaskStatus]) -> Outcome {
+        let passed = vec![CheckpointStatus::Passed; s.checkpoints().len()];
+        s.step(status, &passed).outcome
+    }
 
     #[test]
     fn overlap_rules() {
@@ -211,8 +317,8 @@ mod tests {
         assert_eq!(s.ready(&[Pending, Pending, Pending]), [0, 1]);
         assert_eq!(s.ready(&[Merged, Running, Pending]), Vec::<usize>::new());
         assert_eq!(s.ready(&[Merged, Merged, Pending]), [2]);
-        assert_eq!(s.outcome(&[Merged, Running, Pending]), Outcome::Continue);
-        assert_eq!(s.outcome(&[Merged, Merged, Merged]), Outcome::Done);
+        assert_eq!(outcome(&s, &[Merged, Running, Pending]), Outcome::Continue);
+        assert_eq!(outcome(&s, &[Merged, Merged, Merged]), Outcome::Done);
     }
 
     #[test]
@@ -259,9 +365,99 @@ mod tests {
             {"id": "3", "title": "C", "files": ["c.rs"]}
         ])));
         // The independent subtask keeps going while another failed.
-        assert_eq!(s.outcome(&[Failed, Pending, Running]), Outcome::Continue);
-        assert_eq!(s.outcome(&[Failed, Pending, Merged]), Outcome::Blocked);
-        assert_eq!(s.outcome(&[Stopped, Pending, Merged]), Outcome::Stopped);
-        assert_eq!(s.outcome(&[Merged, Pending, Stopped]), Outcome::Continue);
+        assert_eq!(outcome(&s, &[Failed, Pending, Running]), Outcome::Continue);
+        assert_eq!(outcome(&s, &[Failed, Pending, Merged]), Outcome::Blocked);
+        assert_eq!(outcome(&s, &[Stopped, Pending, Merged]), Outcome::Stopped);
+        assert_eq!(outcome(&s, &[Merged, Pending, Stopped]), Outcome::Continue);
+    }
+
+    #[test]
+    fn a_final_checkpoint_is_added_unless_one_covers_everything() {
+        let s = Schedule::new(&plan(json!([
+            {"id": "1", "title": "A", "files": ["a.rs"]},
+            {"id": "2", "title": "B", "files": ["b.rs"]}
+        ])));
+        assert_eq!(s.checkpoints().len(), 1);
+        assert!(s.checkpoints()[0].is_final);
+        assert_eq!(s.checkpoints()[0].after, BTreeSet::from([0, 1]));
+
+        let doc = PlanDocument::from_value(json!({
+            "subtasks": [
+                {"id": "1", "title": "A", "files": ["a.rs"]},
+                {"id": "2", "title": "B", "files": ["b.rs"]}
+            ],
+            "checkpoints": [
+                {"after_subtasks": ["1"], "what": " A works "},
+                {"after_subtasks": [], "what": "All of it"}
+            ]
+        }))
+        .unwrap();
+        let s = Schedule::new(&doc);
+        assert_eq!(
+            s.checkpoints(),
+            [
+                Checkpoint {
+                    after: BTreeSet::from([0]),
+                    what: "A works".into(),
+                    is_final: false
+                },
+                Checkpoint {
+                    after: BTreeSet::from([0, 1]),
+                    what: "All of it".into(),
+                    is_final: false
+                }
+            ]
+        );
+    }
+
+    /// The Phase 6 flow: a mid-plan checkpoint holds new coders until it
+    /// passes; the final one stands between the last merge and Review.
+    #[test]
+    fn checkpoints_hold_new_coders_and_gate_done() {
+        use CheckpointStatus as C;
+        let doc = PlanDocument::from_value(json!({
+            "subtasks": [
+                {"id": "1", "title": "A", "files": ["a.rs"]},
+                {"id": "2", "title": "B", "files": ["b.rs"]},
+                {"id": "3", "title": "C", "files": ["c.rs"], "depends_on": ["1"]}
+            ],
+            "checkpoints": [{"after_subtasks": ["1"], "what": "A works"}]
+        }))
+        .unwrap();
+        let s = Schedule::new(&doc);
+        assert_eq!(s.checkpoints().len(), 2);
+
+        // Nothing due: coders start, no tester.
+        let step = s.step(&[Pending, Pending, Pending], &[C::Pending, C::Pending]);
+        assert_eq!((step.subtasks, step.checkpoint), (vec![0, 1], None));
+
+        // 1 merged while 2 runs: the checkpoint starts, 3 waits for it.
+        let step = s.step(&[Merged, Running, Pending], &[C::Pending, C::Pending]);
+        assert_eq!(step.checkpoint, Some(0));
+        assert!(step.subtasks.is_empty());
+        let step = s.step(&[Merged, Running, Pending], &[C::Fixing, C::Pending]);
+        assert_eq!((step.subtasks.len(), step.checkpoint), (0, None));
+        assert_eq!(step.outcome, Outcome::Continue);
+
+        // Passed: 3 may go.
+        let step = s.step(&[Merged, Running, Pending], &[C::Passed, C::Pending]);
+        assert_eq!(step.subtasks, [2]);
+
+        // Everything merged: the final checkpoint, then done.
+        let step = s.step(&[Merged, Merged, Merged], &[C::Passed, C::Pending]);
+        assert_eq!(
+            (step.checkpoint, step.outcome),
+            (Some(1), Outcome::Continue)
+        );
+        let step = s.step(&[Merged, Merged, Merged], &[C::Passed, C::Testing]);
+        assert_eq!(step.outcome, Outcome::Continue);
+        let step = s.step(&[Merged, Merged, Merged], &[C::Passed, C::Passed]);
+        assert_eq!(step.outcome, Outcome::Done);
+
+        // Out of fix rounds blocks; a stopped checkpoint stops.
+        let step = s.step(&[Merged, Merged, Merged], &[C::Passed, C::Failed]);
+        assert_eq!(step.outcome, Outcome::Blocked);
+        let step = s.step(&[Merged, Merged, Pending], &[C::Stopped, C::Pending]);
+        assert_eq!(step.outcome, Outcome::Stopped);
     }
 }

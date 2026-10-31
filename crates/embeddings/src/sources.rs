@@ -1,6 +1,7 @@
 //! Text sources of a ticket (E15, D44): the ticket, its dropped original,
 //! comments, attachments' extracted text, the prior-work summary, the
-//! newest plan (E6, Phase 4) and summaries of finished runs. Every chunk header names the ticket.
+//! newest plan (E6, Phase 4), summaries of finished runs and the issues the
+//! tester found (E6, Phase 6). Every chunk header names the ticket.
 
 use std::collections::HashSet;
 
@@ -8,7 +9,7 @@ use db::models::{
     attachment_text::AttachmentText, coding_agent_turn::CodingAgentTurn,
     execution_process::ExecutionProcess, execution_process_repo_state::ExecutionProcessRepoState,
     file::File, issue::Issue, issue_comment::IssueComment, issue_description::IssueDescription,
-    issue_history::IssueHistory, plan::Plan, project::Project, repo::Repo,
+    issue_found::IssueFound, issue_history::IssueHistory, plan::Plan, project::Project, repo::Repo,
 };
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -21,6 +22,7 @@ pub const KIND_ATTACHMENT: &str = "attachment";
 pub const KIND_PRIOR_WORK: &str = "prior_work";
 pub const KIND_RUN: &str = "run";
 pub const KIND_PLAN: &str = "plan";
+pub const KIND_ISSUE_FOUND: &str = "issue_found";
 
 /// Text kinds this phase indexes; E21 lists more for later phases.
 pub const TEXT_KINDS: &[&str] = &[
@@ -30,6 +32,7 @@ pub const TEXT_KINDS: &[&str] = &[
     KIND_PRIOR_WORK,
     KIND_RUN,
     KIND_PLAN,
+    KIND_ISSUE_FOUND,
 ];
 
 /// One source to store.
@@ -229,6 +232,28 @@ pub async fn ticket_sources(
                 plan.version,
                 plan.status,
                 plan.plan.0.to_markdown()
+            ),
+        ));
+    }
+
+    // Every issue the tester found, fixed ones too: a later run touching
+    // the same file sees what broke there before.
+    for found in IssueFound::find_by_issue(pool, issue.id).await? {
+        let at = match (&found.file, found.line) {
+            (Some(f), Some(l)) => format!(" in {f}:{l}"),
+            (Some(f), None) => format!(" in {f}"),
+            _ => String::new(),
+        };
+        sources.extend(source(
+            KIND_ISSUE_FOUND,
+            found.id.to_string(),
+            &header,
+            &format!(
+                "Issue found by the tester ({} severity, {}, {}){at}:\n\n{}",
+                found.severity,
+                found.category.to_string().replace('_', " "),
+                found.status,
+                found.description
             ),
         ));
     }

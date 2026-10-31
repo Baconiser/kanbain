@@ -490,16 +490,19 @@ impl LocalContainerService {
         };
         // Planner runs get `related.md` and the current plan (Phase 4);
         // a subtask's coder gets its subtask, the plan and its code hits
-        // (Phase 5).
+        // (Phase 5); a checkpoint's tester or fix run gets the checkpoint
+        // or its open issues (Phase 6).
         let extra_context = match (&issue, agent_role) {
             (Some(issue), Some(AgentRole::Planner)) if agent_run => match self.planning.get() {
                 Some(planning) => planning.context_files(issue).await,
                 None => Vec::new(),
             },
-            (Some(_), Some(AgentRole::Coder)) if agent_run => match self.orchestrator.get() {
-                Some(orchestrator) => orchestrator.context_files(workspace.id).await,
-                None => Vec::new(),
-            },
+            (Some(_), Some(AgentRole::Coder | AgentRole::Tester)) if agent_run => {
+                match self.orchestrator.get() {
+                    Some(orchestrator) => orchestrator.context_files(workspace.id).await,
+                    None => Vec::new(),
+                }
+            }
             _ => Vec::new(),
         };
         let target = self

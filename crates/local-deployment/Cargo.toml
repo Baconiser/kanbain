@@ -25,6 +25,7 @@ command-group = { version = "5.0", features = ["with-tokio"] }
 futures = "0.3"
 tokio = { workspace = true }
 globwalk = "0.9"
+globset = "0.4"
 portable-pty = "0.8"
 strip-ansi-escapes = "0.2.1"
 sandbox = { path = "../sandbox" , version = "0.1.45" }

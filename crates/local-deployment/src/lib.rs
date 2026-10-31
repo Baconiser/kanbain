@@ -208,6 +208,11 @@ impl Deployment for LocalDeployment {
         {
             tracing::warn!("Requeueing interrupted coder runs failed: {e}");
         }
+        if let Err(e) =
+            db::models::orchestration::OrchestrationCheckpoint::requeue_interrupted(&db.pool).await
+        {
+            tracing::warn!("Requeueing interrupted tester and fix runs failed: {e}");
+        }
         if let Err(e) = sqlx::query(
             "UPDATE ticket_intakes SET status = 'failed', \
              error = 'Interrupted by an app restart' WHERE status = 'enhancing'",
