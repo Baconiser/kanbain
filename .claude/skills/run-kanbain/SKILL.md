@@ -294,6 +294,21 @@ matches clients and takes Vite down with it. It must wait for
 Logs: the app's WARN/ERROR lines, also written to
 `dev_assets/logs/kanbain.log`.
 
+## 8f. Workspace sidebar
+
+The workspace's right sidebar has Ticket / Git / Terminal tabs; the Ticket
+tab embeds the board's ticket panel for the workspace's linked ticket.
+`workspace-ticket.mjs <frontendUrl> <shotsDir> <workspaceId>` opens a
+ticket-linked workspace (any planner or coder workspace from 8d/8e), checks
+the three tabs, the "This workspace" mark and "Open on board". For a coder
+workspace add its sub-ticket's and parent's titles (e.g. `"Order model"
+"Order checkout"`): the sidebar must open on the sub-ticket, go up to the
+parent and back, and the board's sub-ticket must list the coder workspace.
+Coder workspaces stay linked to the parent in the DB (budget, commit
+prefix); the sub-ticket comes from `GET /api/issues/{parent}/coding`. Stale demo
+workspaces log git-status 404s and a terminal 400 once their repo in
+`/tmp` is gone; that's the data, not the sidebar.
+
 ## 9. Stop
 
 ```bash

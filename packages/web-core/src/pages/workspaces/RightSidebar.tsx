@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileTreeContainer } from './FileTreeContainer';
 import { ProcessListContainer } from './ProcessListContainer';
@@ -6,8 +6,10 @@ import { PreviewControlsContainer } from './PreviewControlsContainer';
 import { GitPanelContainer } from './GitPanelContainer';
 import { TerminalPanelContainer } from '@/shared/components/TerminalPanelContainer';
 import { WorkspaceNotesContainer } from './WorkspaceNotesContainer';
+import { WorkspaceTicketPanel } from './WorkspaceTicketPanel';
 import { useDiffs } from '@/shared/stores/useWorkspaceDiffStore';
 import { ArrowsOutSimpleIcon } from '@phosphor-icons/react';
+import { Button } from '@kanbain/ui/components/Button';
 import { useLogsPanel } from '@/shared/hooks/useLogsPanel';
 import type { RepoWithTargetBranch, Workspace } from 'shared/types';
 import {
@@ -22,6 +24,48 @@ import {
   CollapsibleSectionHeader,
   type SectionAction,
 } from '@kanbain/ui/components/CollapsibleSectionHeader';
+
+type SidebarTab = 'ticket' | 'git' | 'terminal';
+const TAB_STORAGE_KEY = 'kanbain.workspaceSidebar.tab';
+
+function readStoredTab(): SidebarTab {
+  try {
+    const stored = window.localStorage.getItem(TAB_STORAGE_KEY);
+    if (stored === 'ticket' || stored === 'git' || stored === 'terminal') {
+      return stored;
+    }
+  } catch {
+    // No storage, no memory. Ticket first, that's what you came for.
+  }
+  return 'ticket';
+}
+
+function SidebarTabButton({
+  active,
+  onClick,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      data-testid={`workspace-sidebar-tab-${label.toLowerCase()}`}
+      onClick={onClick}
+      className={`border-b-2 px-base py-base text-sm ${
+        active
+          ? 'border-brand text-high'
+          : 'border-transparent text-low hover:text-normal'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
 
 type SectionDef = {
   title: string;
@@ -64,10 +108,32 @@ export const RightSidebar = memo(function RightSidebar({
     PERSIST_KEYS.gitPanelRepositories,
     true
   );
-  const [terminalExpanded] = usePersistedExpanded(
-    PERSIST_KEYS.terminalSection,
-    false
-  );
+  const [storedTab, setStoredTab] = useState<SidebarTab>(readStoredTab);
+  const issueId = selectedWorkspace?.issue_id ?? null;
+  const hasTerminal = isTerminalVisible;
+  // A tab that can't exist here (no linked ticket, terminal switched off)
+  // falls back to Git without forgetting the choice for the next workspace.
+  const tab: SidebarTab =
+    (storedTab === 'ticket' && !issueId) ||
+    (storedTab === 'terminal' && !hasTerminal)
+      ? 'git'
+      : storedTab;
+
+  const setTab = (next: SidebarTab) => {
+    setStoredTab(next);
+    try {
+      window.localStorage.setItem(TAB_STORAGE_KEY, next);
+    } catch {
+      // Fine, we'll forget.
+    }
+  };
+
+  // Mounting the terminal spawns a shell, so it waits for the first visit
+  // and then stays mounted to keep its scrollback.
+  const [terminalMounted, setTerminalMounted] = useState(tab === 'terminal');
+  useEffect(() => {
+    if (tab === 'terminal') setTerminalMounted(true);
+  }, [tab]);
   const [notesExpanded] = usePersistedExpanded(
     PERSIST_KEYS.notesSection,
     false
@@ -102,14 +168,6 @@ export const RightSidebar = memo(function RightSidebar({
           />
         ),
         actions: [],
-      },
-      {
-        title: 'Terminal',
-        persistKey: PERSIST_KEYS.terminalSection,
-        visible: isTerminalVisible && !isTerminalExpanded,
-        expanded: terminalExpanded,
-        content: <TerminalPanelContainer />,
-        actions: [{ icon: ArrowsOutSimpleIcon, onClick: expandTerminal }],
       },
       {
         title: t('common:sections.notes'),
@@ -179,41 +237,110 @@ export const RightSidebar = memo(function RightSidebar({
     repos,
     diffs,
     gitExpanded,
-    terminalExpanded,
     notesExpanded,
     changesExpanded,
     processesExpanded,
     devServerExpanded,
-    isTerminalVisible,
-    isTerminalExpanded,
     hasUpperContent,
     upperExpanded,
-    expandTerminal,
     t,
   ]);
 
   return (
-    <div className="h-full border-l bg-secondary overflow-y-auto">
-      <div className="divide-y border-b">
-        {sections
-          .filter((section) => section.visible)
-          .map((section) => (
-            <div
-              key={section.persistKey}
-              className="max-h-[max(50vh,400px)] flex flex-col overflow-hidden"
-            >
-              <CollapsibleSectionHeader
-                title={section.title}
-                persistKey={section.persistKey}
-                defaultExpanded={section.expanded}
-                actions={section.actions}
-              >
-                <div className="flex flex-1 border-t min-h-[200px] w-full overflow-auto">
-                  {section.content}
-                </div>
-              </CollapsibleSectionHeader>
+    <div className="flex h-full flex-col border-l bg-secondary">
+      <nav role="tablist" className="flex shrink-0 border-b bg-primary px-base">
+        {issueId && (
+          <SidebarTabButton
+            label="Ticket"
+            active={tab === 'ticket'}
+            onClick={() => setTab('ticket')}
+          />
+        )}
+        <SidebarTabButton
+          label="Git"
+          active={tab === 'git'}
+          onClick={() => setTab('git')}
+        />
+        {hasTerminal && (
+          <SidebarTabButton
+            label="Terminal"
+            active={tab === 'terminal'}
+            onClick={() => setTab('terminal')}
+          />
+        )}
+        {tab === 'terminal' && !isTerminalExpanded && (
+          <Button
+            size="xs"
+            variant="ghost"
+            className="ml-auto self-center"
+            aria-label="Expand terminal"
+            title="Expand terminal"
+            onClick={expandTerminal}
+          >
+            <ArrowsOutSimpleIcon className="size-icon-sm" />
+          </Button>
+        )}
+      </nav>
+
+      {/* Inactive tabs stay mounted (hidden): unsaved ticket edits, plan
+          drafts and the live terminal all survive a tab switch. */}
+      {issueId && selectedWorkspace && (
+        <div
+          role="tabpanel"
+          className={tab === 'ticket' ? 'min-h-0 flex-1' : 'hidden'}
+        >
+          <WorkspaceTicketPanel
+            key={issueId}
+            issueId={issueId}
+            workspaceId={selectedWorkspace.id}
+          />
+        </div>
+      )}
+
+      {hasTerminal && terminalMounted && (
+        <div
+          role="tabpanel"
+          className={
+            tab === 'terminal' ? 'flex min-h-0 flex-1 flex-col' : 'hidden'
+          }
+        >
+          {isTerminalExpanded ? (
+            <p className="p-double text-sm text-low">
+              The terminal is expanded in the main panel.
+            </p>
+          ) : (
+            <div className="flex min-h-0 flex-1">
+              <TerminalPanelContainer />
             </div>
-          ))}
+          )}
+        </div>
+      )}
+
+      <div
+        role="tabpanel"
+        className={tab === 'git' ? 'min-h-0 flex-1 overflow-y-auto' : 'hidden'}
+      >
+        <div className="divide-y border-b">
+          {sections
+            .filter((section) => section.visible)
+            .map((section) => (
+              <div
+                key={section.persistKey}
+                className="max-h-[max(50vh,400px)] flex flex-col overflow-hidden"
+              >
+                <CollapsibleSectionHeader
+                  title={section.title}
+                  persistKey={section.persistKey}
+                  defaultExpanded={section.expanded}
+                  actions={section.actions}
+                >
+                  <div className="flex flex-1 border-t min-h-[200px] w-full overflow-auto">
+                    {section.content}
+                  </div>
+                </CollapsibleSectionHeader>
+              </div>
+            ))}
+        </div>
       </div>
     </div>
   );

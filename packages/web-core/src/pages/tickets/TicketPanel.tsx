@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   LinkIcon,
   PlayIcon,
@@ -28,7 +35,7 @@ import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { resolveDefaultTargetBranch } from '@/shared/hooks/useProjectRepoDefaults';
 import type { ProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { attachmentsApi } from '@/shared/lib/api';
-import { issuesApi, projectsApi } from '@/shared/lib/ticketsApi';
+import { codingApi, issuesApi, projectsApi } from '@/shared/lib/ticketsApi';
 import { buildWorkspaceCreateInitialState } from '@/shared/lib/workspaceCreateState';
 import { setCreateModeSeedState } from '@/features/create-mode/model/createModeSeedStore';
 import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
@@ -76,9 +83,16 @@ interface TicketPanelProps {
   project: Project;
   issue: Issue;
   board: ProjectBoard;
-  onClose: () => void;
+  /** Without it there is no close button (the panel lives in a sidebar). */
+  onClose?: () => void;
   onSelectIssue: (issueId: string) => void;
   onError: (message: string) => void;
+  /** Extra header buttons, left of delete. */
+  headerActions?: ReactNode;
+  /** The workspace showing this panel; marked in the workspace list. */
+  currentWorkspaceId?: string;
+  /** Inside another panel: no left border of its own. */
+  embedded?: boolean;
 }
 
 function errorMessage(err: unknown, fallback: string): string {
@@ -149,6 +163,9 @@ export function TicketPanel({
   onClose,
   onSelectIssue,
   onError,
+  headerActions,
+  currentWorkspaceId,
+  embedded = false,
 }: TicketPanelProps) {
   const appNavigation = useAppNavigation();
   const [title, setTitle] = useState(issue.title);
@@ -309,12 +326,50 @@ export function TicketPanel({
     true,
     initialWorkspaces
   );
+  // Coder workspaces are linked to the parent ticket on purpose: its budget
+  // caps them and their commits carry its id. Which one is chewing on this
+  // sub-ticket is only written down in the parent's orchestration.
+  const parentId = issue.parent_issue_id;
+  const parentWorkspaceCount = useMemo(
+    () =>
+      parentId
+        ? Object.values(workspaceData?.workspaces ?? {}).filter(
+            (w) => w.issue_id === parentId
+          ).length
+        : 0,
+    [workspaceData, parentId]
+  );
+  const [subtaskWorkspaceIds, setSubtaskWorkspaceIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (!parentId) return;
+    let cancelled = false;
+    codingApi
+      .get(parentId)
+      .then((view) => {
+        if (cancelled) return;
+        setSubtaskWorkspaceIds(
+          view.subtasks.flatMap((s) =>
+            s.sub_issue_id === issue.id && s.workspace_id
+              ? [s.workspace_id]
+              : []
+          )
+        );
+      })
+      .catch(() => {
+        // Parent never got coded; nothing to find.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // A new coder workspace on the parent may be this sub-ticket's.
+  }, [parentId, issue.id, parentWorkspaceCount]);
+
   const workspaces = useMemo(
     () =>
       Object.values(workspaceData?.workspaces ?? {}).filter(
-        (w) => w.issue_id === issue.id
+        (w) => w.issue_id === issue.id || subtaskWorkspaceIds.includes(w.id)
       ),
-    [workspaceData, issue.id]
+    [workspaceData, issue.id, subtaskWorkspaceIds]
   );
 
   const startWorkspace = async () => {
@@ -382,7 +437,7 @@ export function TicketPanel({
   const deleteIssue = async () => {
     try {
       await issuesApi.delete(issue.id);
-      onClose();
+      onClose?.();
     } catch (err) {
       onError(errorMessage(err, 'Failed to delete ticket'));
     }
@@ -393,16 +448,21 @@ export function TicketPanel({
   const runningWorkspaces = workspaces.filter((w) => w.is_running).length;
 
   return (
-    <aside className="flex h-full w-full flex-col border-l bg-primary">
+    <aside
+      className={`flex h-full w-full flex-col bg-primary ${
+        embedded ? '' : 'border-l'
+      }`}
+    >
       <header className="flex items-center justify-between gap-base border-b px-double py-half">
-        <span className="truncate font-mono text-sm text-low">
+        <span className="min-w-0 truncate font-mono text-sm text-low">
           {ticketDisplayId(issue, project)}
         </span>
-        <div className="flex items-center gap-half">
+        <div className="flex shrink-0 items-center gap-half">
           <Button size="xs" variant="outline" onClick={startWorkspace}>
             <PlayIcon className="mr-half size-icon-xs" weight="fill" />
             Start workspace
           </Button>
+          {headerActions}
           {confirmDelete ? (
             <Button
               size="xs"
@@ -423,14 +483,16 @@ export function TicketPanel({
               <TrashIcon className="size-icon-sm" />
             </Button>
           )}
-          <Button
-            size="xs"
-            variant="ghost"
-            aria-label="Close ticket"
-            onClick={onClose}
-          >
-            <XIcon className="size-icon-sm" />
-          </Button>
+          {onClose && (
+            <Button
+              size="xs"
+              variant="ghost"
+              aria-label="Close ticket"
+              onClick={onClose}
+            >
+              <XIcon className="size-icon-sm" />
+            </Button>
+          )}
         </div>
       </header>
 
@@ -693,9 +755,12 @@ export function TicketPanel({
                 className="flex items-center justify-between gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
               >
                 <span className="truncate">{w.name ?? w.branch}</span>
-                {w.is_running && (
-                  <span className="shrink-0 text-xs text-brand">Running</span>
-                )}
+                <span className="flex shrink-0 items-center gap-half text-xs">
+                  {w.id === currentWorkspaceId && (
+                    <span className="text-low">This workspace</span>
+                  )}
+                  {w.is_running && <span className="text-brand">Running</span>}
+                </span>
               </button>
             ))}
           </CollapsibleSection>
