@@ -78,8 +78,7 @@
           "integrations/github-integration",
           "integrations/azure-repos-integration",
           "integrations/vscode-extension",
-          "integrations/mcp-server-configuration",
-          "integrations/kanbain-mcp-server"
+          "integrations/mcp-server-configuration"
         ]
       },
       {

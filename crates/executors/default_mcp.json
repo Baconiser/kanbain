@@ -1,12 +1,4 @@
 {
-  "kanbain": {
-    "command": "npx",
-    "args": [
-      "-y",
-      "kanbain@latest",
-      "--mcp"
-    ]
-  },
   "context7": {
     "type": "http",
     "url": "https://mcp.context7.com/mcp",
@@ -83,4 +75,3 @@
     }
   }
 }
-

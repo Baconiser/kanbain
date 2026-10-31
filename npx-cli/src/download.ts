@@ -266,10 +266,3 @@ export async function ensureDesktopBundle(
     type: platformInfo.type,
   };
 }
-
-export async function getLatestVersion(): Promise<string | undefined> {
-  const manifest = await fetchJson<BinaryManifest>(
-    `${R2_BASE_URL}/binaries/manifest.json`
-  );
-  return manifest.latest;
-}
