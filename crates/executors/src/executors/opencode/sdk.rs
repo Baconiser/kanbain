@@ -64,7 +64,7 @@ impl LogWriter {
             .await
     }
 
-    async fn log_raw(&self, raw: &str) -> Result<(), ExecutorError> {
+    pub(super) async fn log_raw(&self, raw: &str) -> Result<(), ExecutorError> {
         let mut guard = self.writer.lock().await;
         guard
             .write_all(raw.as_bytes())
@@ -269,17 +269,28 @@ async fn run_session_inner(
         res = wait_for_health(&client, &config.base_url) => res?,
     }
 
-    let session_id = match config.resume_session_id.as_deref() {
-        Some(existing) => {
+    let forked = match config.resume_session_id.as_deref() {
+        Some(existing) => tokio::select! {
+            _ = cancel.cancelled() => return Ok(()),
+            res = fork_session(&client, &config.base_url, &config.directory, existing) => res?,
+        },
+        None => None,
+    };
+    let mut prompt_text = config.prompt.clone();
+    let session_id = match forked {
+        Some(id) => id,
+        None => {
+            if config.resume_session_id.is_some() {
+                // A sandboxed run's container, and OpenCode's session store
+                // in it, goes when the run ends; a follow-up starts afresh.
+                log_writer.log_raw(SESSION_GONE_NOTICE).await?;
+                prompt_text = format!("{SESSION_GONE_PROMPT}\n\n{prompt_text}");
+            }
             tokio::select! {
                 _ = cancel.cancelled() => return Ok(()),
-                res = fork_session(&client, &config.base_url, &config.directory, existing) => res?,
+                res = create_session(&client, &config.base_url, &config.directory) => res?,
             }
         }
-        None => tokio::select! {
-            _ = cancel.cancelled() => return Ok(()),
-            res = create_session(&client, &config.base_url, &config.directory) => res?,
-        },
     };
 
     log_writer
@@ -319,7 +330,7 @@ async fn run_session_inner(
         &config.base_url,
         &config.directory,
         &session_id,
-        &config.prompt,
+        &prompt_text,
         model.clone(),
         config.model_variant.clone(),
         config.agent.clone(),
@@ -583,12 +594,20 @@ pub(super) async fn create_session(
     Ok(session.id)
 }
 
+/// The earlier session is gone (the follow-up runs in a new container).
+const SESSION_GONE_NOTICE: &str = "The earlier OpenCode session is gone, so this follow-up starts a new session. \
+     The earlier work is on this branch.";
+const SESSION_GONE_PROMPT: &str = "This continues an earlier run whose conversation is no \
+     longer available. Its work is committed on the current branch: check `git log` and \
+     `git diff` against the base branch before you continue.";
+
+/// Fork `session_id` for a follow-up; `None` when OpenCode doesn't know it.
 pub(super) async fn fork_session(
     client: &reqwest::Client,
     base_url: &str,
     directory: &str,
     session_id: &str,
-) -> Result<String, ExecutorError> {
+) -> Result<Option<String>, ExecutorError> {
     let resp = client
         .post(format!("{base_url}/session/{session_id}/fork"))
         .query(&[("directory", directory)])
@@ -598,6 +617,9 @@ pub(super) async fn fork_session(
         .map_err(|err| ExecutorError::Io(io::Error::other(err)))?;
 
     let status = resp.status();
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
     if !status.is_success() {
         let body = resp.text().await.unwrap_or_default();
         return Err(ExecutorError::Io(io::Error::other(format!(
@@ -610,7 +632,7 @@ pub(super) async fn fork_session(
         .json::<SessionResponse>()
         .await
         .map_err(|err| ExecutorError::Io(io::Error::other(err)))?;
-    Ok(session.id)
+    Ok(Some(session.id))
 }
 
 #[allow(clippy::too_many_arguments)]
