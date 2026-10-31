@@ -164,6 +164,22 @@ export function TicketBoard({
     [columns, board.issuesById, project.id, onError]
   );
 
+  // Sub-ticket progress per parent; Done counts as finished (for orchestrated
+  // subtasks: merged into the ticket branch).
+  const subIssuesByParent = useMemo(() => {
+    const doneStatuses = new Set(
+      board.statuses.filter((s) => s.kind === 'done').map((s) => s.id)
+    );
+    const progress: Record<string, { done: number; total: number }> = {};
+    for (const issue of board.issues) {
+      if (!issue.parent_issue_id) continue;
+      const entry = (progress[issue.parent_issue_id] ??= { done: 0, total: 0 });
+      entry.total += 1;
+      if (doneStatuses.has(issue.status_id)) entry.done += 1;
+    }
+    return progress;
+  }, [board.issues, board.statuses]);
+
   if (visibleStatuses.length === 0) {
     return (
       <div className="flex h-full items-center justify-center text-low">
@@ -206,13 +222,20 @@ export function TicketBoard({
                   const tags = (board.tagIdsByIssue[issue.id] ?? [])
                     .map((tagId) => board.tagsById[tagId])
                     .filter((tag) => !!tag);
+                  const parent = issue.parent_issue_id
+                    ? board.issuesById[issue.parent_issue_id]
+                    : undefined;
                   return (
                     <KanbanCard
                       key={issue.id}
                       id={issue.id}
                       name={issue.title}
                       index={index}
-                      className="group"
+                      className={
+                        issue.parent_issue_id
+                          ? 'group border-l-2 border-l-brand/60'
+                          : 'group'
+                      }
                       onClick={() => onSelectIssue(issue.id)}
                       isOpen={selectedIssueId === issue.id}
                     >
@@ -224,6 +247,13 @@ export function TicketBoard({
                         tags={tags}
                         assignees={[]}
                         isSubIssue={!!issue.parent_issue_id}
+                        parent={
+                          parent && {
+                            displayId: ticketDisplayId(parent, project),
+                            title: parent.title,
+                          }
+                        }
+                        subIssues={subIssuesByParent[issue.id]}
                       />
                       <PlanningMarker
                         status={board.planningByIssue[issue.id]?.status}

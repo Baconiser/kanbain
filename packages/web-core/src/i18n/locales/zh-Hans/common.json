@@ -367,6 +367,8 @@
     "markIndependentIssue": "标记为独立问题",
     "parentIssue": "父级",
     "subIssueIndicator": "↳",
+    "subtaskOf": "{{id}} 的子任务",
+    "subtaskProgress": "子任务已完成 {{done}}/{{total}}",
     "viewTabs": {
       "active": "活动",
       "all": "全部"

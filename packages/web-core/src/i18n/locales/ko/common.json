@@ -367,6 +367,8 @@
     "markIndependentIssue": "독립 이슈로 표시",
     "parentIssue": "상위",
     "subIssueIndicator": "↳",
+    "subtaskOf": "{{id}}의 하위 작업",
+    "subtaskProgress": "하위 작업 {{done}}/{{total}} 완료",
     "viewTabs": {
       "active": "활성",
       "all": "전체"

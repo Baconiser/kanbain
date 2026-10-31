@@ -371,6 +371,8 @@
     "markIndependentIssue": "Mark as independent issue",
     "parentIssue": "Parent",
     "subIssueIndicator": "↳",
+    "subtaskOf": "Subtask of {{id}}",
+    "subtaskProgress": "{{done}}/{{total}} subtasks done",
     "viewTabs": {
       "active": "Active",
       "all": "All"

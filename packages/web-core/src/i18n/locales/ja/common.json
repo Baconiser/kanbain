@@ -367,6 +367,8 @@
     "markIndependentIssue": "独立した課題としてマーク",
     "parentIssue": "親",
     "subIssueIndicator": "↳",
+    "subtaskOf": "{{id}} のサブタスク",
+    "subtaskProgress": "サブタスク {{done}}/{{total}} 完了",
     "viewTabs": {
       "active": "アクティブ",
       "all": "すべて"
