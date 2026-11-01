@@ -1,6 +1,6 @@
 # KanbAIn Implementation Plan
 
-This plan comes from the brief in `PLAN.md` and a full Q&A session on 2026-10-26. It was extended on 2026-10-28 with the retrieval work from `EMBEDDING-IMPLEMENTATION-PLAN.md` (D42–D47, Phase 3a–3e). Together with that file it is self-contained: a new session should be able to implement from the two files alone. Where this file and `PLAN.md` or the embedding plan disagree, **this file wins**.
+This plan comes from the brief in `PLAN.md` and a full Q&A session on 2026-10-26. It was extended on 2026-10-28 with the retrieval work from `EMBEDDING-IMPLEMENTATION-PLAN.md` (D42–D47, Phase 3a–3e), and on 2026-10-31 with the MCP over-orchestrator and LAN/VPN remote control (D48–D55, Phases 9–10). Together with that file it is self-contained: a new session should be able to implement from the two files alone. Where this file and `PLAN.md` or the embedding plan disagree, **this file wins**.
 
 KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a **local Tauri desktop app** for Windows. In it you drop in Jira tickets, an LLM enhances them, and sandboxed AI agents plan, code, test and document the work until it is ready for your review. Nothing reaches `main` without your approval.
 
@@ -11,7 +11,7 @@ KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a *
 ### Product and platform
 - **D1.** Target: a local **Tauri desktop app** on **Windows**. Linux and macOS may come later. Only the user tests on Windows.
 - **D2.** "No server" means no separately installed or hosted server. The Rust axum backend keeps running **inside the Tauri process** on `127.0.0.1`, as it already does (`crates/tauri-app/src/main.rs:206`, `server::startup::start()`). The frontend is not rewritten as Tauri IPC.
-- **D3.** Single user, **no login**. The local API requires a **random token generated on each launch**, which only the Tauri webview knows. All other callers are rejected: other local programs, browser pages, sandbox containers.
+- **D3.** Single user, **no login**. The local API requires a **random token generated on each launch**, which only the Tauri webview knows. All other callers are rejected: other local programs, browser pages, sandbox containers. Besides the webview, only registered API clients are accepted: the host MCP server (D49) and paired remote devices (D53).
 - **D4.** `pnpm run dev` (backend plus Vite in a browser) stays, **for development and agent testing only**. Users run the Tauri app.
 - **D5.** This is a **hard fork** (the user's repo `Baconiser/kanbain`). No upstream syncing and no PR workflow for the fork itself.
 - **D6.** **Full rename** from Vibe Kanban to **KanbAIn**:
@@ -146,6 +146,32 @@ KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a *
 - **D46.** **Savings are measured, not assumed.** The model proxy's per-run tokens and cost (D40) are the yardstick: a benchmark runs the same tickets with search on and off and compares tokens, cost and outcome. Retrieval defaults are tuned on that benchmark plus recall@10/MRR.
 - **D47.** Search is **per project** by default, with an opt-in "all projects". No user pin/hide feedback on results for now.
 
+### Control surfaces: MCP and remote
+- **D48.** **MCP over-orchestrator.** `kanbain-mcp` is how an **AI on the host** (Claude Code, Claude Desktop) controls KanbAIn across all projects. It:
+  - creates tickets (directly or through intake), reads overviews, and moves tickets;
+  - resolves problems: answers planner questions, stops or retries runs and subtasks, unblocks tickets, comments.
+  It acts **as the user**, through the same REST routes the UI uses. The deterministic orchestrator (D22) still owns pipeline transitions; the MCP triggers them and never bypasses them. Sandboxed agents get no new ticket powers: they still only hand in files through `/kanbain/out` (D10).
+- **D49.** **API clients and actors.** A new `api_clients` table: `id, kind (mcp|device), name, token_hash, created_at, last_seen_at, last_ip, revoked_at`.
+  - The launch-token middleware also accepts these tokens. Every request carries an **actor**: `user` (webview), `mcp:<name>` or `device:<name>`.
+  - The actor shows on the timeline (D19) and as the comment author.
+  - The MCP token is **persistent** and can be regenerated. It is not the per-launch token, so restarting the app does not break connected clients.
+- **D50.** **Gates stay human by default.** Approving or sending back a plan (D21) and merging (D26) through MCP are **off by default**. A setting "MCP may approve plans and merge" turns them on. The backend enforces this from the actor, not the MCP binary. Credentials, sandbox settings and remote-access settings are never reachable over MCP.
+- **D51.** **MCP transport and discovery.**
+  - **stdio** (`kanbain-mcp`), bundled with the Tauri app as a sidecar; `npx kanbain mcp` stays for dev.
+  - The backend writes `<data>/connection.json` (`url`, `pid`) on every start, under Tauri too. The binary re-reads it after a connection error. It reads its token from `<data>/mcp-token` or `KANBAIN_MCP_TOKEN`.
+  - Settings → MCP shows ready-to-paste configs for Claude Code (`claude mcp add …`) and Claude Desktop, plus "Test connection".
+- **D52.** **Remote control is LAN/VPN only, off by default.**
+  - A **second listener** on an address you pick, on a fixed port. The picker lists the detected interfaces and marks Tailscale (`100.x`) and WireGuard ones. The webview keeps its localhost listener.
+  - Requests are accepted only from a **CIDR allowlist** (default: the chosen interface's subnet) and only with a matching `Host` header (against DNS rebinding).
+  - No relay, no tunnel, no cloud; D7 stands.
+- **D53.** **Pairing.**
+  - The desktop shows a **QR code** and link with a **one-time pairing code** (valid 5 minutes, single use).
+  - Opening it on the device creates an `api_clients` row of kind `device` and sets a long-lived `HttpOnly` cookie (`Secure` under HTTPS).
+  - Settings → Remote access lists the devices (name, last seen, IP) with Revoke.
+  - Remote access can't be turned on or widened, and no devices can be paired, from a remote device.
+- **D54.** **What a paired device can do:** the full app, except credentials (API keys, Claude login), remote-access settings and the D50 toggle. Terminals work. The live **preview stays desktop-only** for now: `crates/preview-proxy` routes `*.localhost` subdomains.
+- **D55.** **Transport security.** The VPN encrypts the link. HTTPS is optional, with a cert and key you supply (for example from `tailscale cert`). Without HTTPS, the settings page warns that the cookie is sent in clear text outside the VPN, and Web Push is unavailable.
+
 ---
 
 ## 2. Codebase facts (verified 2026-10-26)
@@ -184,6 +210,24 @@ KanbAIn (from Russian *kombain*, "combine harvester", plus kanban and AI) is a *
   - WebSockets for workspaces, execution processes, logs and approvals.
 - **Cost tracking**: none. There is only `TokenUsageInfo{total_tokens, model_context_window}` (`crates/executors/src/logs/mod.rs:109`), and it isn't persisted.
 - **Types**: Rust → TS through ts-rs. Regenerate with `pnpm run generate-types`; never edit `shared/types.ts` by hand. SQLx offline data: `pnpm run prepare-db`.
+
+### MCP and remote (verified 2026-10-31)
+- **`crates/mcp`** (`kanbain-mcp`, `src/bin/kanbain_mcp.rs`):
+  - stdio only, rmcp 1.2. It sends the launch token as `x-kanbain-token` (`task_server/mod.rs:52-66`).
+  - Tools cover workspaces, sessions, repos and `search_knowledge` only; all their routes still exist. There are **no tools for projects, tickets, comments, plans, orchestration or intake**, although the routes exist (`routes/projects.rs`, `issues.rs`, `plans.rs`, `orchestration.rs`, `intake.rs`, `history.rs`).
+  - `--mode orchestrator` is dead code. `handler.rs:21` and the `default_mcp.json` meta describe tools that don't exist, and link a doc that doesn't exist.
+- **Backend discovery fails under Tauri**:
+  - The binary looks for `KANBAIN_BACKEND_URL`, then host/port env vars, then the port file. Only the standalone server writes the port file (`crates/server/src/main.rs:80`). Tauri's `start()` binds `localhost:0` (`startup.rs:94`) and writes none.
+  - The token is read once at startup, so restarting the app breaks the client.
+  - The app doesn't bundle the binary; `npx-cli` is the only launcher.
+- **Sandbox MCP** (separate, working): `crates/model-proxy/src/mcp.rs` (hand-rolled JSON-RPC at `/mcp`, run-token auth) with the one tool from `local-deployment/src/knowledge.rs`. The adapters inject it (`adapters/claude.rs:119`, `adapters/opencode.rs:194`).
+- **Remote groundwork**:
+  - Launch-token middleware: `crates/server/src/middleware/launch_token.rs` (header or `kanbain_token` cookie, set by `/api/auth/session`). Same-origin check: `middleware/origin.rs:40-75`.
+  - The backend serves the UI (`routes/frontend.rs`), and all WS URLs derive from `window.location` (`localApiTransport.ts`). From a non-loopback origin, the UI and its streams work once the cookie is set.
+  - `start_with_bind` (`startup.rs:99`) already takes any address.
+  - Notifications go through the `PushNotifier` trait (`services/notification.rs:13`). Only the Tauri native notifier is registered.
+  - Relay leftovers: `relay_enabled`/`host_nickname` (`config/versions/v8.rs`), `relay_host_credentials_path` (`utils/src/assets.rs:51`), `settings.relay` i18n strings.
+  - Some mobile layout exists (`useIsMobile.ts`); the ticket pages weren't checked.
 
 ---
 
@@ -398,6 +442,88 @@ Phase 3 combines the ticket-intake work with the first half of `EMBEDDING-IMPLEM
 
 **Demo:** after several tickets, the charts reflect the stored data and update live when a run finishes.
 
+### Phase 9: MCP over-orchestrator
+**Goal:** Claude Code or Claude Desktop on the host drives KanbAIn across all projects through MCP (D48–D51).
+
+1. **API clients and actors (D49, D50)**:
+   - Migration for `api_clients`. `require_launch_token` (`crates/server/src/middleware/launch_token.rs`) also accepts client tokens and puts an `Actor` into the request extensions.
+   - Comments and `issue_events` store the actor.
+   - Plan approve/send-back and merge check the D50 setting when the actor is `mcp:*`.
+2. **Discovery (D51)**:
+   - `startup.rs` writes `<data>/connection.json`, under Tauri too.
+   - `kanbain_mcp.rs` resolves the URL from it, re-reads it on a connection error, and uses the MCP token instead of the launch token.
+   - Bundle `kanbain-mcp` as a Tauri `externalBin` sidecar.
+3. **Tools** in `crates/mcp/src/task_server/tools/`, on the existing `ApiClient` and tool-module pattern:
+   - `projects.rs`: `list_projects`, `get_project` (statuses with `kind`, repos, tags).
+   - `overview.rs`:
+     - `overview(project_ids?)`: counts per status kind per project, plus an **attention list**: Blocked (with reason), Awaiting approval, planner questions waiting, failed or stopped subtasks, budget overruns, running runs with cost.
+     - `whats_new(since)` for polling.
+     - Both are backed by a new `GET /api/overview` route, shared with Phase 8's projects overview.
+   - `tickets.rs`:
+     - `list_tickets` (filters: project, status kind, tag, text);
+     - `get_ticket` (description, External ID, plan summary, coding state, issues found, timeline tail);
+     - `create_ticket` (direct) and `intake_ticket` (raw text through intake, then `accept_intake`);
+     - `update_ticket`, `move_ticket` (by status kind or name);
+     - `add_comment`, `list_comments`, sub-tickets, relationships, tags.
+   - `pipeline.rs`:
+     - `start_planning`, `answer_questions` (a comment that resumes the planner, D20), `get_plan`;
+     - `approve_plan` and `send_back_plan` (both gated by D50);
+     - `start_coding`, `stop_coding`, `retry_coding`, `stop_subtask`, `retry_subtask`;
+     - `history_allow`, `history_deny`;
+     - `list_runs`, `get_run` (summary, cost, tail of the normalized log);
+     - `list_issues_found` (Phase 6 data) and `merge_ticket` (Phase 7, gated by D50).
+   - Keep the workspace, session, repo and search tools. Delete `--mode orchestrator`. Fix the `handler.rs` instructions and the `default_mcp.json` meta.
+   - Results are compact, with IDs: summaries and locations, not dumps (as in D43).
+4. **Settings → MCP**:
+   - the token (show, regenerate) and the D50 toggle;
+   - config snippets and Test connection;
+   - `docs/integrations/kanbain-mcp-server.mdx`.
+5. **Tests**:
+   - An integration test drives the tools through rmcp's client over an in-process duplex against a server on a temp DB. It creates, moves and comments on tickets, starts planning with `qa_mock`, and checks the D50 gate and the actors.
+   - Run-skill driver `mcp.mjs`.
+
+**Demo:**
+- With the Tauri app running, the `claude mcp add` snippet connects Claude Code.
+- Claude Code creates tickets in two projects. The overview lists a Blocked ticket and a waiting question. Claude answers the question, retries a failed subtask and moves a ticket.
+- The timeline shows `mcp:claude-code` as the actor.
+- `approve_plan` is refused until the setting is on.
+- Restarting the app doesn't break the client.
+
+### Phase 10: Remote control over LAN/VPN
+**Goal:** a phone or laptop on your VPN uses KanbAIn safely (D52–D55).
+
+1. **Cleanup**: remove the relay leftovers:
+   - `relay_enabled` and `host_nickname`, through a new config version;
+   - `relay_host_credentials_path`;
+   - the `settings.relay` i18n strings.
+2. **Listener (D52)**:
+   - Settings → Remote access, off by default, with interface picker, port and CIDR allowlist.
+   - The backend starts and stops a second axum listener with the same router, plus a middleware that checks the source IP and the `Host` header. `middleware/origin.rs` learns the remote host.
+   - Optional TLS (`axum-server` with rustls) using your cert (D55).
+3. **Pairing and devices (D53, D54)**:
+   - `POST /api/remote/pairing` (desktop actor only), `GET /api/auth/pair?code=…`, the device list and Revoke.
+   - A QR code in the pairing dialog.
+   - Route scopes are enforced by actor.
+4. **Mobile UI**: reuse `useIsMobile`. Make these usable at phone width:
+   - the board (a list per status, or swipe between columns);
+   - the ticket panel;
+   - an **attention inbox** (same data as `overview`);
+   - plan review and approval, answering questions, stop/retry.
+   The preview says "desktop only".
+5. **Remote notifications**:
+   - A fan-out `PushNotifier` (`crates/services/src/services/notification.rs`) keeps the Tauri native notifier and also publishes to a `/api/notifications/stream` WS. Remote clients show toasts and a badge.
+   - Web Push through a service worker only under HTTPS, as an optional step.
+6. **Tests**:
+   - Middleware unit tests: CIDR, `Host`, a revoked device, pairing-code reuse and expiry, and desktop-only routes refused for `device:*`.
+   - Run-skill driver `remote.mjs`: Playwright at phone viewport over a non-loopback address.
+
+**Demo:**
+- A phone on Tailscale scans the QR code and sees the board and the attention inbox.
+- It approves a plan and answers a planner question, and gets a toast when a ticket reaches Review.
+- A request from outside the allowlist, or from a revoked device, is refused.
+- The phone can't open credentials or remote-access settings.
+- The user verifies it on Windows over Tailscale, including the firewall prompt.
+
 ---
 
 ## 4. Risks and mitigations
@@ -408,9 +534,20 @@ Phase 3 combines the ticket-intake work with the first half of `EMBEDDING-IMPLEM
 - **Subscription login through the proxy**: depends on Claude Code sending the OAuth capability header through the gateway. Verify in Phase 2; the API key path is the fallback. Before offering KanbAIn to others with claude.ai login, check Anthropic's terms.
 - **Cost estimates**: the client-side `--max-budget-usd` can overshoot, so the proxy is the hard limit. Keep the price table editable.
 - **Tests that check nothing**: the tester is black-box from the acceptance criteria, and tester and coder are separate runs.
+- **An AI with user powers**: an MCP client can mass-edit tickets or start many runs. Limits:
+  - the D50 gates and actor attribution (D49);
+  - the existing budgets and the limit of 3 containers (D28).
+- **Exposing the backend on a network**:
+  - Remote access is off by default (D52).
+  - CIDR allowlist plus `Host` checks, and revocable device tokens.
+  - Sensitive routes are desktop-only (D54).
+  - Windows firewall prompts and VPN interface detection must be checked by the user at the end of Phase 10.
 
 ## 5. Open items for later (not decided, not in scope)
 - macOS/Linux packaging.
 - A Jira API import source.
 - gVisor/Firecracker instead of Docker.
 - External notification channels.
+- MCP over HTTP for remote AI clients.
+- Live preview from remote devices.
+- Web Push without HTTPS.
