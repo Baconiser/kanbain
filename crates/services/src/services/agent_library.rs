@@ -595,6 +595,10 @@ impl AgentLibrary {
         write_atomic(&self.agent_path(&def.name), def.to_yaml()?.as_bytes()).await?;
         if let Some(previous) = renamed {
             let _ = tokio::fs::remove_file(self.agent_path(previous)).await;
+            // Renaming a default away must not re-seed it on the next start.
+            if default_agents().iter().any(|a| a.name == previous) {
+                self.record_deleted_default(previous).await?;
+            }
         }
         self.sync().await
     }
