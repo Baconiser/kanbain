@@ -306,17 +306,49 @@ pub async fn pull_branch(
             ],
         )
         .await?;
+        reconcile_to_fetch_head(host_worktree).await
+    }
+    .await;
+    let _ = tokio::fs::remove_file(&local).await;
+    Ok(PullOutcome::Updated { head: result? })
+}
+
+/// Move the host worktree to the just-fetched FETCH_HEAD: fast-forward when
+/// possible, else `reset --keep`, which refuses to drop local edits.
+///
+/// A worktree mid-merge refuses both ("Cannot do a keep reset in the middle
+/// of a merge"). When the incoming FETCH_HEAD already contains the merge
+/// that is in progress on the host, the container resolved that merge, so
+/// the host's merge state is stale: abort it, then move HEAD.
+async fn reconcile_to_fetch_head(host_worktree: &Path) -> Result<String> {
+    if host_git(host_worktree, &["merge", "-q", "--ff-only", "FETCH_HEAD"])
+        .await
+        .is_err()
+    {
+        let mid_merge = host_git(
+            host_worktree,
+            &["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        )
+        .await
+        .is_ok();
+        if mid_merge
+            && host_git(
+                host_worktree,
+                &["merge-base", "--is-ancestor", "MERGE_HEAD", "FETCH_HEAD"],
+            )
+            .await
+            .is_ok()
+        {
+            host_git(host_worktree, &["merge", "--abort"]).await?;
+        }
         if host_git(host_worktree, &["merge", "-q", "--ff-only", "FETCH_HEAD"])
             .await
             .is_err()
         {
             host_git(host_worktree, &["reset", "-q", "--keep", "FETCH_HEAD"]).await?;
         }
-        host_git(host_worktree, &["rev-parse", "HEAD"]).await
     }
-    .await;
-    let _ = tokio::fs::remove_file(&local).await;
-    Ok(PullOutcome::Updated { head: result? })
+    host_git(host_worktree, &["rev-parse", "HEAD"]).await
 }
 
 fn temp_path(repo_name: &str, direction: &str) -> PathBuf {
@@ -348,4 +380,168 @@ async fn host_git(dir: &Path, args: &[&str]) -> Result<String> {
         )));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn git_sync(dir: &Path, args: &[&str]) -> String {
+        let out = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "git {} failed: {}",
+            args.join(" "),
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    /// A host repo with a conflicted merge in progress, plus a "container"
+    /// clone whose `main` resolves that merge.
+    fn conflicted_host() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let host = tmp.path().join("host");
+        let remote = tmp.path().join("remote");
+        std::fs::create_dir_all(&host).unwrap();
+        git_sync(&host, &["init", "-q", "-b", "main"]);
+        git_sync(&host, &["config", "user.email", "t@t"]);
+        git_sync(&host, &["config", "user.name", "t"]);
+        std::fs::write(host.join("f"), "a\n").unwrap();
+        git_sync(&host, &["add", "f"]);
+        git_sync(&host, &["commit", "-qm", "a"]);
+        git_sync(&host, &["checkout", "-qb", "side"]);
+        std::fs::write(host.join("f"), "b\n").unwrap();
+        git_sync(&host, &["commit", "-qam", "b"]);
+        git_sync(&host, &["checkout", "-q", "main"]);
+        std::fs::write(host.join("f"), "c\n").unwrap();
+        git_sync(&host, &["commit", "-qam", "c"]);
+        // The conflicted merge the user is stuck in.
+        let merge = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&host)
+            .args(["merge", "side"])
+            .output()
+            .unwrap();
+        assert!(!merge.status.success());
+        assert!(host.join(".git/MERGE_HEAD").exists());
+
+        // The "container": resolve the same merge on a clone.
+        git_sync(
+            tmp.path(),
+            &[
+                "clone",
+                "-q",
+                &host.to_string_lossy(),
+                &remote.to_string_lossy(),
+            ],
+        );
+        git_sync(&remote, &["config", "user.email", "t@t"]);
+        git_sync(&remote, &["config", "user.name", "t"]);
+        git_sync(&remote, &["checkout", "-q", "main"]);
+        let m = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&remote)
+            .args(["merge", "origin/side"])
+            .output()
+            .unwrap();
+        assert!(!m.status.success());
+        std::fs::write(remote.join("f"), "resolved\n").unwrap();
+        git_sync(&remote, &["add", "f"]);
+        git_sync(&remote, &["commit", "-qm", "resolve merge"]);
+        (tmp, host, remote)
+    }
+
+    #[tokio::test]
+    async fn reconcile_aborts_stale_merge_when_incoming_resolved_it() {
+        let (_tmp, host, remote) = conflicted_host();
+        let resolved = git_sync(&remote, &["rev-parse", "HEAD"]);
+        // Host fetches the container's branch, like pull_branch does.
+        host_git(
+            &host,
+            &["fetch", "-q", &remote.to_string_lossy(), "refs/heads/main"],
+        )
+        .await
+        .unwrap();
+        let head = reconcile_to_fetch_head(&host).await.unwrap();
+        assert_eq!(head, resolved);
+        assert!(!host.join(".git/MERGE_HEAD").exists());
+        assert_eq!(
+            std::fs::read_to_string(host.join("f")).unwrap(),
+            "resolved\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn reconcile_keeps_merge_when_incoming_lacks_it() {
+        let (_tmp, host, remote) = conflicted_host();
+        // FETCH_HEAD that does not contain the host's MERGE_HEAD: the stale
+        // merge must survive and the reconcile reports an error (the old
+        // `reset --keep` behavior) instead of corrupting the worktree.
+        git_sync(&remote, &["checkout", "-q", "main"]);
+        git_sync(&remote, &["reset", "-q", "--hard", "HEAD~1"]);
+        host_git(
+            &host,
+            &["fetch", "-q", &remote.to_string_lossy(), "refs/heads/main"],
+        )
+        .await
+        .unwrap();
+        assert!(reconcile_to_fetch_head(&host).await.is_err());
+        assert!(host.join(".git/MERGE_HEAD").exists());
+    }
+
+    #[tokio::test]
+    async fn reconcile_fast_forwards_and_keeps_diverged() {
+        let tmp = tempfile::tempdir().unwrap();
+        let host = tmp.path().join("host");
+        let remote = tmp.path().join("remote");
+        std::fs::create_dir_all(&host).unwrap();
+        git_sync(&host, &["init", "-q", "-b", "main"]);
+        git_sync(&host, &["config", "user.email", "t@t"]);
+        git_sync(&host, &["config", "user.name", "t"]);
+        std::fs::write(host.join("f"), "a\n").unwrap();
+        git_sync(&host, &["add", "f"]);
+        git_sync(&host, &["commit", "-qm", "a"]);
+        git_sync(
+            tmp.path(),
+            &[
+                "clone",
+                "-q",
+                &host.to_string_lossy(),
+                &remote.to_string_lossy(),
+            ],
+        );
+        git_sync(&remote, &["config", "user.email", "t@t"]);
+        git_sync(&remote, &["config", "user.name", "t"]);
+
+        // Plain fast-forward.
+        std::fs::write(remote.join("f"), "b\n").unwrap();
+        git_sync(&remote, &["commit", "-qam", "b"]);
+        let b = git_sync(&remote, &["rev-parse", "HEAD"]);
+        host_git(
+            &host,
+            &["fetch", "-q", &remote.to_string_lossy(), "refs/heads/main"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(reconcile_to_fetch_head(&host).await.unwrap(), b);
+
+        // Diverged history: reset --keep moves HEAD on a clean worktree.
+        git_sync(&remote, &["reset", "-q", "--hard", "HEAD~1"]);
+        std::fs::write(remote.join("f"), "c\n").unwrap();
+        git_sync(&remote, &["commit", "-qam", "c"]);
+        let c = git_sync(&remote, &["rev-parse", "HEAD"]);
+        host_git(
+            &host,
+            &["fetch", "-q", &remote.to_string_lossy(), "refs/heads/main"],
+        )
+        .await
+        .unwrap();
+        assert_eq!(reconcile_to_fetch_head(&host).await.unwrap(), c);
+    }
 }
