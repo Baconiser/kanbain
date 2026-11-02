@@ -72,6 +72,32 @@ pub struct ExportQuery {
     pub agents: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct ForRoleQuery {
+    pub role: AgentRole,
+}
+
+/// The agent a role resolves to, for system-initiated runs (conflict
+/// resolution, review, PR description).
+#[derive(Debug, Serialize, TS)]
+pub struct AgentForRole {
+    pub name: String,
+    pub definition: AgentDefinition,
+}
+
+async fn agent_for_role(
+    State(deployment): State<DeploymentImpl>,
+    Query(query): Query<ForRoleQuery>,
+) -> Result<ResponseJson<ApiResponse<AgentForRole>>, ApiError> {
+    let library = deployment.agent_library();
+    let name = library.agent_name_for_role(query.role).await?;
+    let definition = library.get_agent(&name).await?;
+    Ok(ResponseJson(ApiResponse::success(AgentForRole {
+        name,
+        definition,
+    })))
+}
+
 async fn meta(
     State(deployment): State<DeploymentImpl>,
 ) -> ResponseJson<ApiResponse<AgentLibraryMeta>> {
@@ -399,6 +425,7 @@ async fn export(
 pub(super) fn router() -> Router<DeploymentImpl> {
     let library = Router::new()
         .route("/meta", get(meta))
+        .route("/for-role", get(agent_for_role))
         .route("/agents", get(list_agents).post(create_agent))
         .route(
             "/agents/{name}",

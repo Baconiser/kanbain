@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { agentLibraryApi } from '@/shared/lib/api';
+import { agentForRole } from '@/shared/lib/agents';
+import type { AgentRole } from 'shared/types';
 
 export const agentLibraryKeys = {
   all: ['agent-library'] as const,
@@ -29,6 +31,20 @@ export function useAgents() {
     queryFn: () => agentLibraryApi.listAgents(),
     ...LIVE,
   });
+}
+
+/**
+ * The agent a role resolves to (named after the role, else the first valid
+ * definition with that role), for system-initiated runs like conflict
+ * resolution and review. Null when no agent has the role.
+ */
+export function useAgentForRole(role: AgentRole | null) {
+  const { data: agents = [], isLoading } = useAgents();
+  const agent = useMemo(
+    () => (role ? agentForRole(agents, role) : null),
+    [agents, role]
+  );
+  return { agent, isLoading: role != null && isLoading };
 }
 
 export function useStyles() {

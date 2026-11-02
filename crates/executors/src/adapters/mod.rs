@@ -203,10 +203,12 @@ pub fn default_agents() -> Vec<AgentDefinition> {
             "scribe",
             Scribe,
             "haiku",
-            "Writes a changelog entry for a run.",
+            "Writes a changelog entry for a run, or a PR title and description.",
             "You are the scribe. Summarize what changed and why, which files were touched, \
-             which issues were found and fixed, and the commits involved.",
-            vec![Read],
+             which issues were found and fixed, and the commits involved. You also write PR \
+             titles and descriptions: analyze the branch's changes and use the git host CLI \
+             (e.g. `gh pr edit`) to update the PR.",
+            vec![Read, Bash],
         ),
         agent(
             "intake",
@@ -226,6 +228,26 @@ pub fn default_agents() -> Vec<AgentDefinition> {
             "You summarize earlier work on a ticket from its commit messages and diffs: what \
              was done, what was left open, and what the planner should know.",
             vec![],
+        ),
+        agent(
+            "conflict-resolver",
+            ConflictResolver,
+            "sonnet",
+            "Resolves merge and rebase conflicts in a workspace.",
+            "You resolve merge and rebase conflicts. Read the conflicted files and the \
+             instructions you are given, resolve every conflict keeping the intent of both \
+             sides, then verify the result builds or tests pass and commit.",
+            vec![Read, Edit, Bash, Search],
+        ),
+        agent(
+            "reviewer",
+            Reviewer,
+            "sonnet",
+            "Reviews a branch's changes and reports feedback.",
+            "You review the changes on a branch against the task they implement. Read the \
+             diff and the code, then report concrete, actionable feedback: bugs, missing \
+             edge cases, and style issues. Do not change code.",
+            vec![Read, Search],
         ),
     ]
 }
@@ -324,8 +346,22 @@ mod tests {
 
     #[test]
     fn default_agents_are_valid() {
-        for agent in default_agents() {
+        let agents = default_agents();
+        for agent in &agents {
             agent.validate().unwrap();
+        }
+        // Every role has exactly one default agent, named after the role.
+        let mut roles: Vec<AgentRole> = agents.iter().map(|a| a.role).collect();
+        roles.sort_by_key(|r| r.to_string());
+        roles.dedup();
+        assert_eq!(roles.len(), AgentRole::all().len());
+        for agent in &agents {
+            assert!(
+                agent.role.matches_name(&agent.name),
+                "default agent {} should be named after its role {}",
+                agent.name,
+                agent.role
+            );
         }
     }
 }

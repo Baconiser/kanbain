@@ -233,7 +233,11 @@
     "includeGitContext": "包含 Git 上下文",
     "includeGitContextDescription": "告訴代理如何查看此分支上的所有變更",
     "newSession": "新工作階段",
-    "sessionName": "審查"
+    "sessionName": "審查",
+    "agentLabel": "代理",
+    "loadingAgents": "正在載入代理…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "沒有 reviewer 角色的代理。請在設定 → 代理中建立。"
   },
   "actionsMenu": {
     "startReview": "開始審查",
@@ -249,7 +253,11 @@
       "filesWithConflicts_one": "{{count}} 個檔案有衝突",
       "filesWithConflicts_other": "{{count}} 個檔案有衝突",
       "andMore": "...還有 {{count}} 個",
-      "sessionName": "解決衝突"
+      "sessionName": "解決衝突",
+      "agentLabel": "代理",
+      "loadingAgents": "正在載入代理…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "沒有 conflict_resolver 角色的代理。請在設定 → 代理中建立。"
     }
   },
   "rebaseInProgress": {

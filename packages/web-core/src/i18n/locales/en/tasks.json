@@ -317,7 +317,11 @@
     "includeGitContext": "Include git context",
     "includeGitContextDescription": "Tells the agent how to view all changes made on this branch",
     "newSession": "New Session",
-    "sessionName": "Review"
+    "sessionName": "Review",
+    "agentLabel": "Agent",
+    "loadingAgents": "Loading agents…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "No agent with the reviewer role. Create one in Settings → Agents."
   },
   "actionsMenu": {
     "startReview": "Start Review",
@@ -333,7 +337,11 @@
       "filesWithConflicts_one": "{{count}} file has conflicts",
       "filesWithConflicts_other": "{{count}} files have conflicts",
       "andMore": "...and {{count}} more",
-      "sessionName": "Resolve conflicts"
+      "sessionName": "Resolve conflicts",
+      "agentLabel": "Agent",
+      "loadingAgents": "Loading agents…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "No agent with the conflict_resolver role. Create one in Settings → Agents."
     }
   },
   "rebaseInProgress": {

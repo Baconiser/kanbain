@@ -49,24 +49,13 @@ impl AgentJobs {
     }
 
     /// The agent for a role: the one named after the role, else the first
-    /// valid definition with that role.
+    /// valid definition with that role. Shared with the `for-role` API via
+    /// the library so they can't drift.
     pub async fn agent_name_for(&self, role: AgentRole) -> Result<String, String> {
-        let agents = self
-            .library
-            .list_agents()
+        self.library
+            .agent_name_for_role(role)
             .await
-            .map_err(|e| e.to_string())?;
-        let with_role: Vec<_> = agents
-            .iter()
-            .filter_map(|a| a.definition.as_ref())
-            .filter(|d| d.role == role)
-            .collect();
-        with_role
-            .iter()
-            .find(|d| d.name == role.to_string())
-            .or(with_role.first())
-            .map(|d| d.name.clone())
-            .ok_or_else(|| format!("No agent definition has the {role} role"))
+            .map_err(|e| e.to_string())
     }
 
     /// Creates the job row and runs it to completion. The job row records the

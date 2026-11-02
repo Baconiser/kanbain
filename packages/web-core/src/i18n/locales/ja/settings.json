@@ -784,7 +784,9 @@
         "tester": "テスター",
         "scribe": "記録係",
         "intake": "受付",
-        "history": "履歴"
+        "history": "履歴",
+        "conflict_resolver": "コンフリクト解決",
+        "reviewer": "レビューアー"
       },
       "runtimes": {
         "claude-code": "Claude Code",

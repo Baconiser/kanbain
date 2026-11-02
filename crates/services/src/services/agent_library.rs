@@ -22,7 +22,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use db::models::agent_library::{AgentDefinitionRow, SkillRow, StyleBlockRow};
 use executors::adapters::{
-    AgentDefinition, ResolvedAgent, Skill, SkillFile, StyleBlock, default_agents,
+    AgentDefinition, AgentRole, ResolvedAgent, Skill, SkillFile, StyleBlock, default_agents,
     definition::{skill_frontmatter, validate_name},
 };
 use notify::{RecommendedWatcher, RecursiveMode};
@@ -38,6 +38,11 @@ use ts_rs::TS;
 pub const MAX_SKILL_BYTES: usize = 10 * 1024 * 1024;
 /// Largest import (zip or uploaded files together).
 pub const MAX_IMPORT_BYTES: usize = 50 * 1024 * 1024;
+
+/// Marker file in `agents/` listing default agents the user deleted, so
+/// seeding doesn't bring them back on restart. Dot-prefixed, so the sync
+/// skips it.
+const DELETED_DEFAULTS_FILE: &str = ".deleted-defaults";
 
 #[derive(Debug, Error)]
 pub enum AgentLibraryError {
@@ -238,19 +243,16 @@ impl AgentLibrary {
         self.skills_dir().join(name)
     }
 
-    /// Create the folders, seed the default agents on first start, index
-    /// everything and start watching for changes.
+    /// Create the folders, seed missing default agents, index everything
+    /// and start watching for changes.
+    ///
+    /// Seeding runs on every start, not just when the folder is new: default
+    /// agents added by an update appear for existing installs too. A default
+    /// whose file exists is never overwritten (user edits win), and a
+    /// default the user deleted is recorded in `.deleted-defaults` and left
+    /// alone.
     pub async fn init(self: &Arc<Self>) -> Result<()> {
-        if !self.agents_dir().exists() {
-            tokio::fs::create_dir_all(self.agents_dir()).await?;
-            for agent in default_agents() {
-                write_atomic(&self.agent_path(&agent.name), agent.to_yaml()?.as_bytes()).await?;
-            }
-            tracing::info!(
-                "Seeded the default agents into {}",
-                self.agents_dir().display()
-            );
-        }
+        self.seed_default_agents().await?;
         tokio::fs::create_dir_all(self.styles_dir()).await?;
         tokio::fs::create_dir_all(self.skills_dir()).await?;
         self.sync().await?;
@@ -258,6 +260,81 @@ impl AgentLibrary {
             tracing::warn!("Agent library watcher not started: {e}");
         }
         Ok(())
+    }
+
+    fn deleted_defaults_path(&self) -> PathBuf {
+        self.agents_dir().join(DELETED_DEFAULTS_FILE)
+    }
+
+    async fn read_deleted_defaults(&self) -> Result<BTreeSet<String>> {
+        match tokio::fs::read_to_string(self.deleted_defaults_path()).await {
+            Ok(text) => Ok(text
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeSet::new()),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn record_deleted_default(&self, name: &str) -> Result<()> {
+        let mut deleted = self.read_deleted_defaults().await?;
+        if !deleted.insert(name.to_string()) {
+            return Ok(());
+        }
+        let mut text: String = deleted.iter().map(|n| format!("{n}\n")).collect();
+        if text.is_empty() {
+            text.push('\n');
+        }
+        write_atomic(&self.deleted_defaults_path(), text.as_bytes()).await?;
+        Ok(())
+    }
+
+    /// Write every default agent that is neither present nor marked deleted.
+    pub async fn seed_default_agents(&self) -> Result<()> {
+        tokio::fs::create_dir_all(self.agents_dir()).await?;
+        let deleted = self.read_deleted_defaults().await?;
+        let mut seeded = Vec::new();
+        for agent in default_agents() {
+            if deleted.contains(&agent.name) {
+                continue;
+            }
+            let path = self.agent_path(&agent.name);
+            if path.exists() {
+                continue;
+            }
+            write_atomic(&path, agent.to_yaml()?.as_bytes()).await?;
+            seeded.push(agent.name);
+        }
+        if !seeded.is_empty() {
+            tracing::info!(
+                "Seeded the default agents into {}: {}",
+                self.agents_dir().display(),
+                seeded.join(", ")
+            );
+        }
+        Ok(())
+    }
+
+    /// The agent for a role: the one named after the role, else the first
+    /// valid definition with that role. Shared by the job runner and the
+    /// `for-role` API so they can't drift.
+    pub async fn agent_name_for_role(&self, role: AgentRole) -> Result<String> {
+        let agents = self.list_agents().await?;
+        let with_role: Vec<&AgentDefinition> = agents
+            .iter()
+            .filter_map(|a| a.definition.as_ref())
+            .filter(|d| d.role == role)
+            .collect();
+        with_role
+            .iter()
+            .find(|d| role.matches_name(&d.name))
+            .or(with_role.first())
+            .map(|d| d.name.clone())
+            .ok_or_else(|| {
+                AgentLibraryError::NotFound(format!("no agent definition has the {role} role"))
+            })
     }
 
     fn watch(self: &Arc<Self>) -> notify::Result<()> {
@@ -537,6 +614,10 @@ impl AgentLibrary {
                 return Err(AgentLibraryError::NotFound(format!("agent {name}")));
             }
             Err(e) => return Err(e.into()),
+        }
+        // A deleted default must not be re-seeded on the next start.
+        if default_agents().iter().any(|a| a.name == name) {
+            self.record_deleted_default(name).await?;
         }
         self.sync().await
     }
@@ -1053,7 +1134,16 @@ mod tests {
         let names: Vec<_> = agents.iter().map(|a| a.name.as_str()).collect();
         assert_eq!(
             names,
-            ["coder", "history", "intake", "planner", "scribe", "tester"]
+            [
+                "coder",
+                "conflict-resolver",
+                "history",
+                "intake",
+                "planner",
+                "reviewer",
+                "scribe",
+                "tester"
+            ]
         );
         library
             .save_style(
@@ -1160,6 +1250,94 @@ mod tests {
         assert_eq!(summary.agents, ["coder"]);
         assert_eq!(summary.skills, ["pdf-tools"]);
         assert!(other.resolve("coder").await.is_ok());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn seeding_writes_missing_defaults_and_respects_deletions() {
+        let (dir, library) = library().await;
+        let agents_dir = dir.path().join("lib/agents");
+
+        // A user edit to a default is never overwritten by re-seeding.
+        let mut coder = library.get_agent("coder").await.unwrap();
+        coder.model = "opus".into();
+        library.save_agent(&coder, Some("coder")).await.unwrap();
+
+        // Deleting a default records it so it is not re-seeded.
+        library.delete_agent("reviewer").await.unwrap();
+        assert!(!agents_dir.join("reviewer.yaml").exists());
+        assert!(
+            tokio::fs::read_to_string(agents_dir.join(".deleted-defaults"))
+                .await
+                .unwrap()
+                .contains("reviewer")
+        );
+
+        // Simulate a restart: init again. reviewer stays gone, coder keeps
+        // the user's edit, and a default removed by hand comes back.
+        tokio::fs::remove_file(agents_dir.join("tester.yaml"))
+            .await
+            .unwrap();
+        library.init().await.unwrap();
+        assert!(agents_dir.join("tester.yaml").exists());
+        assert!(!agents_dir.join("reviewer.yaml").exists());
+        assert_eq!(library.get_agent("coder").await.unwrap().model, "opus");
+
+        // Deleting a non-default agent leaves no marker.
+        let custom = AgentDefinition::from_yaml(
+            "name: mine\nrole: reviewer\nruntime: opencode\nmodel: sonnet\n",
+        )
+        .unwrap();
+        library.create_agent(&custom).await.unwrap();
+        library.delete_agent("mine").await.unwrap();
+        assert!(
+            !tokio::fs::read_to_string(agents_dir.join(".deleted-defaults"))
+                .await
+                .unwrap()
+                .contains("mine")
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn resolves_role_to_agent() {
+        let (_dir, library) = library().await;
+        // Named after the role wins (dash matches underscore).
+        assert_eq!(
+            library
+                .agent_name_for_role(AgentRole::ConflictResolver)
+                .await
+                .unwrap(),
+            "conflict-resolver"
+        );
+        assert_eq!(
+            library
+                .agent_name_for_role(AgentRole::Reviewer)
+                .await
+                .unwrap(),
+            "reviewer"
+        );
+        // A custom agent with the role is the fallback when the default is
+        // deleted.
+        library.delete_agent("reviewer").await.unwrap();
+        let custom = AgentDefinition::from_yaml(
+            "name: my-reviewer\nrole: reviewer\nruntime: opencode\nmodel: sonnet\n",
+        )
+        .unwrap();
+        library.create_agent(&custom).await.unwrap();
+        assert_eq!(
+            library
+                .agent_name_for_role(AgentRole::Reviewer)
+                .await
+                .unwrap(),
+            "my-reviewer"
+        );
+        // A role with no agent at all is an error.
+        library.delete_agent("my-reviewer").await.unwrap();
+        assert!(
+            library
+                .agent_name_for_role(AgentRole::Reviewer)
+                .await
+                .is_err()
+        );
     }
 
     #[test]

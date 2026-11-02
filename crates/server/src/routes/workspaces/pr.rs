@@ -8,7 +8,7 @@ use axum::{
 };
 use db::models::{
     coding_agent_turn::CodingAgentTurn,
-    execution_process::{ExecutionProcess, ExecutionProcessRunReason},
+    execution_process::ExecutionProcessRunReason,
     merge::{Merge, MergeStatus},
     pull_request::PullRequest,
     repo::{Repo, RepoError},
@@ -110,6 +110,18 @@ async fn trigger_pr_description_follow_up(
 
     drop(config); // Release the lock before async operations
 
+    // The PR description is written by the scribe-role agent, configured in
+    // Settings → Agents; its runtime replaces the executor at launch.
+    let agent_name = deployment
+        .agent_library()
+        .agent_name_for_role(executors::adapters::AgentRole::Scribe)
+        .await?;
+    let agent_def = deployment.agent_library().get_agent(&agent_name).await?;
+    let mut executor_config = executors::profile::ExecutorConfig::new(
+        executors::adapters::executor_for(agent_def.runtime),
+    );
+    executor_config.agent_definition = Some(agent_name.clone());
+
     // Get or create a session for this follow-up
     let session =
         match Session::find_latest_by_workspace_id(&deployment.db().pool, workspace.id).await? {
@@ -118,7 +130,7 @@ async fn trigger_pr_description_follow_up(
                 Session::create(
                     &deployment.db().pool,
                     &CreateSession {
-                        executor: None,
+                        executor: Some(executor_config.executor.to_string()),
                         name: None,
                     },
                     Uuid::new_v4(),
@@ -127,18 +139,6 @@ async fn trigger_pr_description_follow_up(
                 .await?
             }
         };
-
-    // Get executor profile from the latest coding agent process in this session
-    let Some(executor_profile_id) =
-        ExecutionProcess::latest_executor_profile_for_session(&deployment.db().pool, session.id)
-            .await?
-    else {
-        tracing::warn!(
-            "No executor profile found for session {}, skipping PR description follow-up",
-            session.id
-        );
-        return Ok(());
-    };
 
     // Get latest agent turn if one exists (for coding agent continuity)
     let latest_session_info =
@@ -156,13 +156,13 @@ async fn trigger_pr_description_follow_up(
             prompt,
             session_id: info.session_id,
             reset_to_message_id: None,
-            executor_config: executors::profile::ExecutorConfig::from(executor_profile_id.clone()),
+            executor_config,
             working_dir: working_dir.clone(),
         })
     } else {
         ExecutorActionType::CodingAgentInitialRequest(CodingAgentInitialRequest {
             prompt,
-            executor_config: executors::profile::ExecutorConfig::from(executor_profile_id.clone()),
+            executor_config,
             working_dir,
         })
     };

@@ -16,16 +16,12 @@ import {
   splitMessageToTitleDescription,
 } from '@/shared/lib/string';
 import { BaseCodingAgent } from 'shared/types';
-import type { AgentRuntime, ExecutorConfig, Repo } from 'shared/types';
+import type { ExecutorConfig, Repo } from 'shared/types';
 import { CreateChatBox } from '@kanbain/ui/components/CreateChatBox';
 import { SettingsDialog } from '@/shared/dialogs/settings/SettingsDialog';
 import { CreateModeRepoPickerBar } from './CreateModeRepoPickerBar';
 import { ModelSelectorContainer } from '@/shared/components/ModelSelectorContainer';
-
-const RUNTIME_EXECUTORS: Record<AgentRuntime, BaseCodingAgent> = {
-  'claude-code': BaseCodingAgent.CLAUDE_CODE,
-  opencode: BaseCodingAgent.OPENCODE,
-};
+import { RUNTIME_EXECUTORS } from '@/shared/lib/agents';
 
 function getRepoDisplayName(repo: Repo) {
   return repo.display_name || repo.name;

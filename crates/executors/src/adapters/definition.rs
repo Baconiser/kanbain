@@ -32,6 +32,10 @@ pub enum AgentRole {
     Scribe,
     Intake,
     History,
+    /// Resolves merge/rebase conflicts in a workspace.
+    ConflictResolver,
+    /// Reviews a branch's changes and reports feedback.
+    Reviewer,
 }
 
 /// Which CLI runs the agent.
@@ -94,6 +98,13 @@ pub enum Capability {
 impl AgentRole {
     pub fn all() -> Vec<Self> {
         <Self as strum::IntoEnumIterator>::iter().collect()
+    }
+
+    /// Whether an agent definition name is "named after" this role, so it is
+    /// preferred when resolving a role to an agent (`conflict-resolver`
+    /// matches `conflict_resolver`).
+    pub fn matches_name(&self, name: &str) -> bool {
+        name.replace('-', "_") == self.to_string()
     }
 }
 

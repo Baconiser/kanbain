@@ -317,7 +317,11 @@
     "includeGitContext": "Inclure le contexte git",
     "includeGitContextDescription": "Indique à l'agent comment voir toutes les modifications effectuées sur cette branche",
     "newSession": "Nouvelle session",
-    "sessionName": "Révision"
+    "sessionName": "Révision",
+    "agentLabel": "Agent",
+    "loadingAgents": "Chargement des agents…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "Aucun agent avec le rôle reviewer. Créez-en un dans Paramètres → Agents."
   },
   "actionsMenu": {
     "startReview": "Démarrer la révision",
@@ -333,7 +337,11 @@
       "filesWithConflicts_one": "{{count}} fichier a des conflits",
       "filesWithConflicts_other": "{{count}} fichiers ont des conflits",
       "andMore": "...et {{count}} autres",
-      "sessionName": "Résoudre les conflits"
+      "sessionName": "Résoudre les conflits",
+      "agentLabel": "Agent",
+      "loadingAgents": "Chargement des agents…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "Aucun agent avec le rôle conflict_resolver. Créez-en un dans Paramètres → Agents."
     }
   },
   "rebaseInProgress": {

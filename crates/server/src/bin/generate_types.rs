@@ -264,6 +264,7 @@ fn generate_types_content() -> String {
         services::services::agent_library::SkillFileInfo::decl(),
         services::services::agent_library::ImportSummary::decl(),
         server::routes::agents::AgentLibraryMeta::decl(),
+        server::routes::agents::AgentForRole::decl(),
         server::routes::agents::CreateSkill::decl(),
         server::routes::agents::AgentTestRun::decl(),
         server::routes::sandbox::CredentialProvider::decl(),

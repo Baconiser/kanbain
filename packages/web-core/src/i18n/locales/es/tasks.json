@@ -29,7 +29,11 @@
     "includeGitContext": "Incluir contexto de git",
     "includeGitContextDescription": "Indica al agente cómo ver todos los cambios realizados en esta rama",
     "newSession": "Nueva sesión",
-    "sessionName": "Revisión"
+    "sessionName": "Revisión",
+    "agentLabel": "Agente",
+    "loadingAgents": "Cargando agentes…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "No hay ningún agente con el rol reviewer. Crea uno en Ajustes → Agentes."
   },
   "actionsMenu": {
     "startReview": "Iniciar revisión",
@@ -50,7 +54,11 @@
       "filesWithConflicts_one": "{{count}} archivo tiene conflictos",
       "filesWithConflicts_other": "{{count}} archivos tienen conflictos",
       "andMore": "...y {{count}} más",
-      "sessionName": "Resolver conflictos"
+      "sessionName": "Resolver conflictos",
+      "agentLabel": "Agente",
+      "loadingAgents": "Cargando agentes…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "No hay ningún agente con el rol conflict_resolver. Crea uno en Ajustes → Agentes."
     }
   },
   "rebaseInProgress": {

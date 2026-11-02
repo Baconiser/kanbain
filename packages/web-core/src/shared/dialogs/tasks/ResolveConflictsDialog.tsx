@@ -11,9 +11,7 @@ import {
 import { Button } from '@kanbain/ui/components/Button';
 import { Label } from '@kanbain/ui/components/Label';
 import { Switch } from '@kanbain/ui/components/Switch';
-import { AgentSelector } from '@/shared/components/tasks/AgentSelector';
-import { ConfigSelector } from '@/shared/components/tasks/ConfigSelector';
-import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { useAgentForRole } from '@/shared/hooks/useAgentLibrary';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { workspaceSessionKeys } from '@/shared/hooks/workspaceSessionKeys';
 import { sessionsApi } from '@/shared/lib/api';
@@ -21,13 +19,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
 import { buildResolveConflictsInstructions } from '@/shared/lib/conflicts';
-import { useExecutionProcesses } from '@/shared/hooks/useExecutionProcesses';
-import { getLatestConfigFromProcesses } from '@/shared/lib/executor';
-import type {
-  BaseCodingAgent,
-  ExecutorProfileId,
-  ConflictOp,
-} from 'shared/types';
+import { RUNTIME_EXECUTORS } from '@/shared/lib/agents';
+import { toPrettyCase } from '@/shared/lib/string';
+import type { ConflictOp } from 'shared/types';
 
 export interface ResolveConflictsDialogProps {
   workspaceId: string;
@@ -52,15 +46,18 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
   }) => {
     const modal = useModal();
     const queryClient = useQueryClient();
-    const { profiles, config } = useUserSystem();
     const {
       workspaceId: activeWorkspaceId,
-      sessions,
-      selectedSession,
       selectedSessionId,
       selectSession,
     } = useWorkspaceContext();
     const { t } = useTranslation(['tasks', 'common']);
+    // Conflict resolution runs as the conflict_resolver agent (Settings → Agents).
+    const { agent, isLoading: agentsLoading } =
+      useAgentForRole('conflict_resolver');
+    const agentExecutor = agent?.definition
+      ? RUNTIME_EXECUTORS[agent.definition.runtime]
+      : null;
 
     // Auto-dismiss when the user switches to a different workspace
     useEffect(() => {
@@ -72,55 +69,15 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
       }
     }, [activeWorkspaceId, workspaceId, modal]);
 
-    const resolvedSession = useMemo(() => {
-      if (!selectedSessionId) return selectedSession ?? null;
-      return (
-        sessions.find((session) => session.id === selectedSessionId) ??
-        selectedSession ??
-        null
-      );
-    }, [sessions, selectedSessionId, selectedSession]);
-    const sessionExecutor = resolvedSession?.executor as BaseCodingAgent | null;
-
-    // Get the variant from the session's latest process
-    const resolvedSessionId = resolvedSession?.id;
-    const { executionProcesses: sessionProcesses } =
-      useExecutionProcesses(resolvedSessionId);
-    const sessionProfileFromProcesses =
-      useMemo((): ExecutorProfileId | null => {
-        const config = getLatestConfigFromProcesses(sessionProcesses);
-        if (!config) return null;
-        return { executor: config.executor, variant: config.variant ?? null };
-      }, [sessionProcesses]);
-
-    const resolvedDefaultProfile = useMemo(() => {
-      // Prefer the full profile (executor+variant) from the session's processes
-      if (sessionProfileFromProcesses) return sessionProfileFromProcesses;
-      // Fall back to session executor with config variant hint while processes load
-      if (sessionExecutor) {
-        const variant =
-          config?.executor_profile?.executor === sessionExecutor
-            ? config.executor_profile.variant
-            : null;
-        return { executor: sessionExecutor, variant };
-      }
-      return config?.executor_profile ?? null;
-    }, [
-      sessionProfileFromProcesses,
-      sessionExecutor,
-      config?.executor_profile,
-    ]);
-
     // Default to creating a new session if no existing session
     const [createNewSession, setCreateNewSession] =
       useState(!selectedSessionId);
-    const [userSelectedProfile, setUserSelectedProfile] =
-      useState<ExecutorProfileId | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const effectiveProfile = userSelectedProfile ?? resolvedDefaultProfile;
-    const canSubmit = Boolean(effectiveProfile && !isSubmitting);
+    const canSubmit = Boolean(
+      agent?.definition && agentExecutor && !isSubmitting
+    );
 
     // Build the conflict resolution instructions
     const conflictInstructions = useMemo(
@@ -136,7 +93,7 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
     );
 
     const handleSubmit = useCallback(async () => {
-      if (!effectiveProfile) return;
+      if (!agent?.definition || !agentExecutor) return;
 
       setIsSubmitting(true);
       setError(null);
@@ -149,7 +106,7 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
         if (creatingNewSession) {
           const session = await sessionsApi.create({
             workspace_id: workspaceId,
-            executor: effectiveProfile.executor,
+            executor: agentExecutor,
             name: t('resolveConflicts.dialog.sessionName'),
           });
           targetSessionId = session.id;
@@ -161,12 +118,13 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
           return;
         }
 
-        // Send follow-up with conflict resolution instructions
+        // Send follow-up with conflict resolution instructions; the agent
+        // definition decides runtime, model and prompts.
         await sessionsApi.followUp(targetSessionId, {
           prompt: conflictInstructions,
           executor_config: {
-            executor: effectiveProfile.executor,
-            variant: effectiveProfile.variant,
+            executor: agentExecutor,
+            agent_definition: agent.name,
           },
           retry_process_id: null,
           force_when_dirty: null,
@@ -204,7 +162,8 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
         setIsSubmitting(false);
       }
     }, [
-      effectiveProfile,
+      agent,
+      agentExecutor,
       selectedSessionId,
       createNewSession,
       workspaceId,
@@ -212,6 +171,7 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
       queryClient,
       selectSession,
       modal,
+      t,
     ]);
 
     const handleCancel = useCallback(() => {
@@ -225,10 +185,6 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
 
     const handleNewSessionChange = (checked: boolean) => {
       setCreateNewSession(checked);
-      // Reset to default profile when toggling back to existing session
-      if (!checked && resolvedDefaultProfile) {
-        setUserSelectedProfile(resolvedDefaultProfile);
-      }
     };
 
     const hasExistingSession = Boolean(selectedSessionId);
@@ -276,23 +232,39 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
 
             {error && <div className="text-sm text-destructive">{error}</div>}
 
-            {/* Agent/profile selector - only show when creating new session */}
-            {profiles && createNewSession && (
-              <div className="flex gap-3 flex-col sm:flex-row">
-                <AgentSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  showLabel={false}
-                />
-                <ConfigSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  showLabel={false}
-                />
-              </div>
-            )}
+            {/* The conflict_resolver agent decides runtime, model and prompts;
+                edit it in Settings → Agents. */}
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">
+                {t('resolveConflicts.dialog.agentLabel', 'Agent')}
+              </Label>
+              {agentsLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  {t(
+                    'resolveConflicts.dialog.loadingAgents',
+                    'Loading agents…'
+                  )}
+                </p>
+              ) : agent?.definition ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('resolveConflicts.dialog.agentDetail', {
+                    name: agent.name,
+                    runtime: toPrettyCase(agentExecutor ?? ''),
+                    model: agent.definition.model,
+                    defaultValue: `${agent.name} · ${toPrettyCase(
+                      agentExecutor ?? ''
+                    )} · ${agent.definition.model}`,
+                  })}
+                </p>
+              ) : (
+                <p className="text-sm text-destructive">
+                  {t(
+                    'resolveConflicts.dialog.noAgent',
+                    'No agent with the conflict_resolver role. Create one in Settings → Agents.'
+                  )}
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="sm:!justify-between">

@@ -1048,7 +1048,7 @@ claude_account_connected: boolean, openai_key_configured: boolean,
  */
 custom_provider_count: number, running_containers: number, };
 
-export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history";
+export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history" | "conflict_resolver" | "reviewer";
 
 export type AgentRuntime = "claude-code" | "opencode";
 
@@ -1128,6 +1128,8 @@ replaced: Array<string>,
 skipped: Array<string>, };
 
 export type AgentLibraryMeta = { roles: Array<AgentRole>, runtimes: Array<AgentRuntime>, capabilities: Array<Capability>, claude_code_models: Array<RuntimeModelOption>, opencode_models: Array<RuntimeModelOption>, default_test_commands: Array<string>, };
+
+export type AgentForRole = { name: string, definition: AgentDefinition, };
 
 export type CreateSkill = { name: string, description: string, };
 

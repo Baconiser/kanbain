@@ -29,7 +29,11 @@
     "includeGitContext": "Gitコンテキストを含める",
     "includeGitContextDescription": "このブランチで行われたすべての変更を確認する方法をエージェントに伝えます",
     "newSession": "新しいセッション",
-    "sessionName": "レビュー"
+    "sessionName": "レビュー",
+    "agentLabel": "エージェント",
+    "loadingAgents": "エージェントを読み込み中…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "reviewer ロールのエージェントがありません。設定 → エージェントで作成してください。"
   },
   "actionsMenu": {
     "startReview": "レビューを開始",
@@ -50,7 +54,11 @@
       "filesWithConflicts_one": "{{count}}件のファイルに競合があります",
       "filesWithConflicts_other": "{{count}}件のファイルに競合があります",
       "andMore": "...他{{count}}件",
-      "sessionName": "コンフリクトを解決"
+      "sessionName": "コンフリクトを解決",
+      "agentLabel": "エージェント",
+      "loadingAgents": "エージェントを読み込み中…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "conflict_resolver ロールのエージェントがありません。設定 → エージェントで作成してください。"
     }
   },
   "rebaseInProgress": {

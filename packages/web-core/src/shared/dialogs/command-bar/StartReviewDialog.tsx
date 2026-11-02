@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Dialog,
@@ -13,59 +13,37 @@ import { Textarea } from '@kanbain/ui/components/Textarea';
 import { Label } from '@kanbain/ui/components/Label';
 import { Switch } from '@kanbain/ui/components/Switch';
 import { Checkbox } from '@kanbain/ui/components/Checkbox';
-import { AgentSelector } from '@/shared/components/tasks/AgentSelector';
-import { ConfigSelector } from '@/shared/components/tasks/ConfigSelector';
-import { useUserSystem } from '@/shared/hooks/useUserSystem';
+import { useAgentForRole } from '@/shared/hooks/useAgentLibrary';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { workspaceSessionKeys } from '@/shared/hooks/workspaceSessionKeys';
 import { sessionsApi } from '@/shared/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
-import type { BaseCodingAgent, ExecutorProfileId } from 'shared/types';
+import { RUNTIME_EXECUTORS } from '@/shared/lib/agents';
+import { toPrettyCase } from '@/shared/lib/string';
 
 export interface StartReviewDialogProps {
   sessionId?: string;
   workspaceId: string;
   reviewMarkdown?: string;
-  defaultProfile?: ExecutorProfileId | null;
   onSuccess?: (newSessionId?: string) => void;
 }
 
 const StartReviewDialogImpl = create<StartReviewDialogProps>(
-  ({ sessionId, workspaceId, reviewMarkdown, defaultProfile, onSuccess }) => {
+  ({ sessionId, workspaceId, reviewMarkdown, onSuccess }) => {
     const modal = useModal();
     const queryClient = useQueryClient();
-    const { profiles, config } = useUserSystem();
-    const { sessions, selectedSession, selectedSessionId, selectSession } =
-      useWorkspaceContext();
+    const { selectedSessionId, selectSession } = useWorkspaceContext();
     const { t } = useTranslation(['tasks', 'common']);
+    // Reviews run as the reviewer agent (Settings → Agents).
+    const { agent, isLoading: agentsLoading } = useAgentForRole('reviewer');
+    const agentExecutor = agent?.definition
+      ? RUNTIME_EXECUTORS[agent.definition.runtime]
+      : null;
 
     const resolvedSessionId = sessionId ?? selectedSessionId;
-    const resolvedSession = useMemo(() => {
-      if (!resolvedSessionId) return selectedSession ?? null;
-      return (
-        sessions.find((session) => session.id === resolvedSessionId) ??
-        selectedSession ??
-        null
-      );
-    }, [sessions, resolvedSessionId, selectedSession]);
-    const sessionExecutor = resolvedSession?.executor as BaseCodingAgent | null;
 
-    const resolvedDefaultProfile = useMemo(() => {
-      if (defaultProfile) return defaultProfile;
-      if (sessionExecutor) {
-        const variant =
-          config?.executor_profile?.executor === sessionExecutor
-            ? config.executor_profile.variant
-            : null;
-        return { executor: sessionExecutor, variant };
-      }
-      return config?.executor_profile ?? null;
-    }, [defaultProfile, sessionExecutor, config?.executor_profile]);
-
-    const [userSelectedProfile, setUserSelectedProfile] =
-      useState<ExecutorProfileId | null>(null);
     const [additionalPrompt, setAdditionalPrompt] = useState('');
     const [createNewSession, setCreateNewSession] = useState(
       () => !resolvedSessionId
@@ -74,12 +52,12 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const effectiveProfile = userSelectedProfile ?? resolvedDefaultProfile;
-
-    const canSubmit = Boolean(effectiveProfile && !isSubmitting);
+    const canSubmit = Boolean(
+      agent?.definition && agentExecutor && !isSubmitting
+    );
 
     const handleSubmit = useCallback(async () => {
-      if (!effectiveProfile) return;
+      if (!agent?.definition || !agentExecutor) return;
 
       setIsSubmitting(true);
       setError(null);
@@ -90,7 +68,7 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
         if (createNewSession || !resolvedSessionId) {
           const session = await sessionsApi.create({
             workspace_id: workspaceId,
-            executor: effectiveProfile.executor,
+            executor: agentExecutor,
             name: t('startReviewDialog.sessionName'),
           });
           targetSessionId = session.id;
@@ -111,8 +89,8 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
 
         await sessionsApi.startReview(targetSessionId, {
           executor_config: {
-            executor: effectiveProfile.executor,
-            variant: effectiveProfile.variant,
+            executor: agentExecutor,
+            agent_definition: agent.name,
           },
           additional_prompt: combinedPrompt || null,
           use_all_workspace_commits: includeGitContext,
@@ -138,7 +116,8 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
         setIsSubmitting(false);
       }
     }, [
-      effectiveProfile,
+      agent,
+      agentExecutor,
       resolvedSessionId,
       workspaceId,
       createNewSession,
@@ -149,6 +128,7 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
       selectSession,
       onSuccess,
       modal,
+      t,
     ]);
 
     const handleOpenChange = (open: boolean) => {
@@ -157,9 +137,6 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
 
     const handleNewSessionChange = (checked: boolean) => {
       setCreateNewSession(checked);
-      if (!checked && resolvedDefaultProfile) {
-        setUserSelectedProfile(resolvedDefaultProfile);
-      }
     };
 
     const hasReviewComments = Boolean(reviewMarkdown);
@@ -232,23 +209,36 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
               </p>
             </div>
 
-            {profiles && (
-              <div className="flex gap-3 flex-col sm:flex-row">
-                <AgentSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  disabled={!createNewSession}
-                  showLabel={false}
-                />
-                <ConfigSelector
-                  profiles={profiles}
-                  selectedExecutorProfile={effectiveProfile}
-                  onChange={setUserSelectedProfile}
-                  showLabel={false}
-                />
-              </div>
-            )}
+            {/* The reviewer agent decides runtime, model and prompts;
+                edit it in Settings → Agents. */}
+            <div className="space-y-1">
+              <Label className="text-sm font-medium">
+                {t('startReviewDialog.agentLabel', 'Agent')}
+              </Label>
+              {agentsLoading ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('startReviewDialog.loadingAgents', 'Loading agents…')}
+                </p>
+              ) : agent?.definition ? (
+                <p className="text-sm text-muted-foreground">
+                  {t('startReviewDialog.agentDetail', {
+                    name: agent.name,
+                    runtime: toPrettyCase(agentExecutor ?? ''),
+                    model: agent.definition.model,
+                    defaultValue: `${agent.name} · ${toPrettyCase(
+                      agentExecutor ?? ''
+                    )} · ${agent.definition.model}`,
+                  })}
+                </p>
+              ) : (
+                <p className="text-sm text-destructive">
+                  {t(
+                    'startReviewDialog.noAgent',
+                    'No agent with the reviewer role. Create one in Settings → Agents.'
+                  )}
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter className="sm:!justify-between">

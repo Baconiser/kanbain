@@ -21,7 +21,9 @@ import {
   SaveModelProvider,
   RunTimeLimit,
   AgentDefinition,
+  AgentForRole,
   AgentLibraryMeta,
+  AgentRole,
   AgentSummary,
   AgentTestRun,
   ClaudeLoginState,
@@ -839,6 +841,14 @@ export const agentLibraryApi = {
       cache: 'no-store',
     });
     return handleApiResponse<AgentSummary[]>(response);
+  },
+
+  forRole: async (role: AgentRole): Promise<AgentForRole> => {
+    const response = await makeRequest(
+      libraryPath(`/for-role?role=${encodeURIComponent(role)}`),
+      { cache: 'no-store' }
+    );
+    return handleApiResponse<AgentForRole>(response);
   },
 
   createAgent: async (agent: AgentDefinition): Promise<AgentDefinition> => {

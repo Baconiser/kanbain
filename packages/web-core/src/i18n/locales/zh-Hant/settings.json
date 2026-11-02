@@ -784,7 +784,9 @@
         "tester": "測試者",
         "scribe": "記錄員",
         "intake": "受理",
-        "history": "歷史"
+        "history": "歷史",
+        "conflict_resolver": "衝突解決",
+        "reviewer": "審查"
       },
       "runtimes": {
         "claude-code": "Claude Code",

@@ -784,7 +784,9 @@
         "tester": "테스터",
         "scribe": "기록자",
         "intake": "접수",
-        "history": "이력"
+        "history": "이력",
+        "conflict_resolver": "충돌 해결",
+        "reviewer": "리뷰어"
       },
       "runtimes": {
         "claude-code": "Claude Code",

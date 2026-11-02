@@ -29,7 +29,11 @@
     "includeGitContext": "Git 컨텍스트 포함",
     "includeGitContextDescription": "이 브랜치에서 수행된 모든 변경 사항을 확인하는 방법을 에이전트에게 알려줍니다",
     "newSession": "새 세션",
-    "sessionName": "리뷰"
+    "sessionName": "리뷰",
+    "agentLabel": "에이전트",
+    "loadingAgents": "에이전트 로딩 중…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "reviewer 역할을 가진 에이전트가 없습니다. 설정 → 에이전트에서 만드세요."
   },
   "actionsMenu": {
     "startReview": "리뷰 시작",
@@ -50,7 +54,11 @@
       "filesWithConflicts_one": "{{count}}개 파일에 충돌이 있습니다",
       "filesWithConflicts_other": "{{count}}개 파일에 충돌이 있습니다",
       "andMore": "...외 {{count}}개",
-      "sessionName": "충돌 해결"
+      "sessionName": "충돌 해결",
+      "agentLabel": "에이전트",
+      "loadingAgents": "에이전트 로딩 중…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "conflict_resolver 역할을 가진 에이전트가 없습니다. 설정 → 에이전트에서 만드세요."
     }
   },
   "rebaseInProgress": {

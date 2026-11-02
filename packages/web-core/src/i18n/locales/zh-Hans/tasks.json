@@ -233,7 +233,11 @@
     "includeGitContext": "包含 Git 上下文",
     "includeGitContextDescription": "告诉代理如何查看此分支上的所有更改",
     "newSession": "新会话",
-    "sessionName": "审查"
+    "sessionName": "审查",
+    "agentLabel": "智能体",
+    "loadingAgents": "正在加载智能体…",
+    "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+    "noAgent": "没有 reviewer 角色的智能体。请在设置 → 智能体中创建。"
   },
   "actionsMenu": {
     "startReview": "开始审查",
@@ -249,7 +253,11 @@
       "filesWithConflicts_one": "{{count}} 个文件有冲突",
       "filesWithConflicts_other": "{{count}} 个文件有冲突",
       "andMore": "...还有 {{count}} 个",
-      "sessionName": "解决冲突"
+      "sessionName": "解决冲突",
+      "agentLabel": "智能体",
+      "loadingAgents": "正在加载智能体…",
+      "agentDetail": "{{name}} · {{runtime}} · {{model}}",
+      "noAgent": "没有 conflict_resolver 角色的智能体。请在设置 → 智能体中创建。"
     }
   },
   "rebaseInProgress": {

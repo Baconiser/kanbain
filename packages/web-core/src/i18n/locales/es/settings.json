@@ -784,7 +784,9 @@
         "tester": "Tester",
         "scribe": "Escriba",
         "intake": "Recepción",
-        "history": "Historial"
+        "history": "Historial",
+        "conflict_resolver": "Resolutor de conflictos",
+        "reviewer": "Revisor"
       },
       "runtimes": {
         "claude-code": "Claude Code",

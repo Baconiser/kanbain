@@ -144,12 +144,28 @@ pub async fn follow_up(
 
     let executor_profile_id = payload.executor_config.profile_id();
 
+    // When the run names an agent definition, the launch overrides the
+    // executor with the agent's runtime (container.rs), so the session's
+    // executor must not be compared against the payload's.
+    let agent_executor: Option<String> = match &payload.executor_config.agent_definition {
+        Some(name) => Some(
+            executors::adapters::executor_for(
+                deployment.agent_library().get_agent(name).await?.runtime,
+            )
+            .to_string(),
+        ),
+        None => None,
+    };
+
     // Validate executor matches session if session has prior executions
-    let expected_executor: Option<String> =
+    let expected_executor: Option<String> = if agent_executor.is_some() {
+        None
+    } else {
         ExecutionProcess::latest_executor_profile_for_session(pool, session.id)
             .await?
             .map(|profile| profile.executor.to_string())
-            .or_else(|| session.executor.clone());
+            .or_else(|| session.executor.clone())
+    };
 
     if let Some(expected) = expected_executor {
         let actual = executor_profile_id.executor.to_string();
@@ -162,8 +178,8 @@ pub async fn follow_up(
     }
 
     if session.executor.is_none() {
-        Session::update_executor(pool, session.id, &executor_profile_id.executor.to_string())
-            .await?;
+        let executor = agent_executor.unwrap_or_else(|| executor_profile_id.executor.to_string());
+        Session::update_executor(pool, session.id, &executor).await?;
     }
 
     if let Some(proc_id) = payload.retry_process_id {
