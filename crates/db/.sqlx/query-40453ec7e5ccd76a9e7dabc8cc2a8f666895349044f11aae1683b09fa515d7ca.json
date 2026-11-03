@@ -1,0 +1,68 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT\n                w.id AS \"workspace_id!: Uuid\",\n                COALESCE(p.id, i.id) AS \"ticket_id: Uuid\",\n                COALESCE(p.number, i.number) AS \"ticket_number: i64\",\n                ps.kind AS \"ticket_status: String\",\n                (SELECT os.id FROM orchestration_subtasks os\n                  WHERE os.workspace_id = w.id LIMIT 1) AS \"subtask_id: Uuid\",\n                (SELECT os.status FROM orchestration_subtasks os\n                  WHERE os.workspace_id = w.id LIMIT 1) AS \"subtask_status: String\",\n                (SELECT oc.id FROM orchestration_checkpoints oc\n                  WHERE oc.tester_workspace_id = w.id OR oc.fixer_workspace_id = w.id\n                  LIMIT 1) AS \"checkpoint_id: Uuid\",\n                (SELECT oc.status FROM orchestration_checkpoints oc\n                  WHERE oc.tester_workspace_id = w.id OR oc.fixer_workspace_id = w.id\n                  LIMIT 1) AS \"checkpoint_status: String\",\n                EXISTS (SELECT 1 FROM merges m WHERE m.workspace_id = w.id\n                         AND (m.merge_type = 'direct' OR m.pr_status = 'merged'))\n                  AS \"merged!: bool\"\n            FROM workspaces w\n            LEFT JOIN issues i ON i.id = w.issue_id\n            LEFT JOIN issues p ON p.id = i.parent_issue_id\n            LEFT JOIN project_statuses ps ON ps.id = COALESCE(p.status_id, i.status_id)\n            WHERE w.archived = $1",
+  "describe": {
+    "columns": [
+      {
+        "name": "workspace_id!: Uuid",
+        "ordinal": 0,
+        "type_info": "Blob"
+      },
+      {
+        "name": "ticket_id: Uuid",
+        "ordinal": 1,
+        "type_info": "Blob"
+      },
+      {
+        "name": "ticket_number: i64",
+        "ordinal": 2,
+        "type_info": "Integer"
+      },
+      {
+        "name": "ticket_status: String",
+        "ordinal": 3,
+        "type_info": "Text"
+      },
+      {
+        "name": "subtask_id: Uuid",
+        "ordinal": 4,
+        "type_info": "Blob"
+      },
+      {
+        "name": "subtask_status: String",
+        "ordinal": 5,
+        "type_info": "Text"
+      },
+      {
+        "name": "checkpoint_id: Uuid",
+        "ordinal": 6,
+        "type_info": "Blob"
+      },
+      {
+        "name": "checkpoint_status: String",
+        "ordinal": 7,
+        "type_info": "Text"
+      },
+      {
+        "name": "merged!: bool",
+        "ordinal": 8,
+        "type_info": "Integer"
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "40453ec7e5ccd76a9e7dabc8cc2a8f666895349044f11aae1683b09fa515d7ca"
+}

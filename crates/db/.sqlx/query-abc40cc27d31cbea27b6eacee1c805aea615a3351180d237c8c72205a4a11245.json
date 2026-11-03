@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE workspaces SET archived = 1, updated_at = datetime('now', 'subsec')\n               WHERE archived = 0\n                 AND pinned = 0\n                 AND (issue_id = $1\n                      OR issue_id IN (SELECT id FROM issues WHERE parent_issue_id = $1))\n                 AND NOT EXISTS (\n                     SELECT 1 FROM sessions s\n                     JOIN execution_processes ep ON ep.session_id = s.id\n                     WHERE s.workspace_id = workspaces.id AND ep.status = 'running'\n                 )",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "abc40cc27d31cbea27b6eacee1c805aea615a3351180d237c8c72205a4a11245"
+}

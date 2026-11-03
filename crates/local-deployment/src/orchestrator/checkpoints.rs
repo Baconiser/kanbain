@@ -890,6 +890,19 @@ impl OrchestratorService {
         if open.is_empty() {
             OrchestrationCheckpoint::set_status(pool, row.id, CheckpointStatus::Passed, None)
                 .await?;
+            // Its fixes are merged and nothing is open: the tester and fixer
+            // workspaces are done. Archived like a merged subtask's.
+            for id in [row.tester_workspace_id, row.fixer_workspace_id]
+                .into_iter()
+                .flatten()
+            {
+                if let Err(e) = Workspace::update(pool, id, Some(true), None, None).await {
+                    tracing::warn!(
+                        "Archiving workspace {id} of checkpoint {} failed: {e}",
+                        row.id
+                    );
+                }
+            }
             self.event(
                 issue.id,
                 IssueEventType::CheckpointPassed,

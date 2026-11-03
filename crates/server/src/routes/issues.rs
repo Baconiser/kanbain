@@ -14,6 +14,7 @@ use db::models::{
     issue_relationship::{CreateIssueRelationship, IssueRelationship},
     project_status::{ProjectStatus, ProjectStatusKind},
     project_tag::{IssueTag, ProjectTag},
+    workspace::Workspace,
 };
 use deployment::Deployment;
 use serde::Deserialize;
@@ -56,6 +57,7 @@ async fn update_issue(
     }
     start_planning_on_status(&deployment, &before, &issue).await;
     complete_subtask_on_done(&deployment, &before, &issue).await;
+    archive_workspaces_on_done(&deployment, &before, &issue).await;
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 
@@ -107,6 +109,33 @@ pub(crate) async fn complete_subtask_on_done(
             tracing::warn!("Completing sub-ticket {} by hand failed: {e}", issue.id);
         }
     });
+}
+
+/// A main ticket moved into Done is finished, merged in the app or not: its
+/// idle workspaces (ticket, subtasks, testers, fixers) go to the archive.
+pub(crate) async fn archive_workspaces_on_done(
+    deployment: &DeploymentImpl,
+    before: &Issue,
+    after: &Issue,
+) {
+    if after.parent_issue_id.is_some() || before.status_id == after.status_id {
+        return;
+    }
+    let pool = &deployment.db().pool;
+    match ProjectStatus::find_by_id(pool, after.status_id).await {
+        Ok(Some(status)) if status.kind == ProjectStatusKind::Done => {}
+        Ok(_) => return,
+        Err(e) => {
+            tracing::warn!("Looking up the status of ticket {} failed: {e}", after.id);
+            return;
+        }
+    }
+    if let Err(e) = Workspace::archive_for_ticket(pool, after.id).await {
+        tracing::warn!(
+            "Archiving the workspaces of ticket {} failed: {e}",
+            after.id
+        );
+    }
 }
 
 async fn delete_issue(

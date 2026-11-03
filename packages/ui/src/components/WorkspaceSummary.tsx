@@ -7,6 +7,7 @@ import {
   CircleIcon,
   GitPullRequestIcon,
   DotsThreeIcon,
+  CheckIcon,
 } from '@phosphor-icons/react';
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/cn';
@@ -26,6 +27,22 @@ const formatRelativeElapsed = (dateString: string): string => {
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${diffDays}d ago`;
 };
+
+/** The one thing a workspace waits for; the row shows only this. */
+export type WorkspaceNextStep =
+  | 'approve'
+  | 'working'
+  | 'retry'
+  | 'review'
+  | 'check'
+  | 'archive'
+  | 'none';
+
+/** Steps with a one-click action on the row. */
+export const ACTIONABLE_STEPS: ReadonlySet<WorkspaceNextStep> = new Set([
+  'retry',
+  'archive',
+]);
 
 export interface WorkspaceSummaryProps {
   name: string;
@@ -48,6 +65,30 @@ export interface WorkspaceSummaryProps {
   /** Whether this is a draft workspace (shows "Draft" instead of elapsed time) */
   isDraft?: boolean;
   onOpenWorkspaceActions?: (workspaceId: string) => void;
+  /** Next step from the server; derived from the flags above when absent */
+  nextStep?: WorkspaceNextStep;
+  /** Colour of the workspace's ticket, shown as the left stripe */
+  accentColor?: string;
+  /** Runs the next step (retry, archive); shown on hover */
+  onNextStep?: (workspaceId: string, step: WorkspaceNextStep) => void;
+}
+
+function deriveNextStep({
+  isRunning,
+  hasPendingApproval,
+  hasUnseenActivity,
+  isFailed,
+}: {
+  isRunning: boolean;
+  hasPendingApproval: boolean;
+  hasUnseenActivity: boolean;
+  isFailed: boolean;
+}): WorkspaceNextStep {
+  if (hasPendingApproval) return 'approve';
+  if (isRunning) return 'working';
+  if (isFailed) return 'retry';
+  if (hasUnseenActivity) return 'check';
+  return 'none';
 }
 
 export function WorkspaceSummary({
@@ -70,11 +111,32 @@ export function WorkspaceSummary({
   summary = false,
   isDraft = false,
   onOpenWorkspaceActions,
+  nextStep,
+  accentColor,
+  onNextStep,
 }: WorkspaceSummaryProps) {
   const { t } = useTranslation('common');
-  const hasChanges = filesChanged !== undefined && filesChanged > 0;
   const isFailed =
     latestProcessStatus === 'failed' || latestProcessStatus === 'killed';
+  const step =
+    nextStep ??
+    deriveNextStep({
+      isRunning,
+      hasPendingApproval,
+      hasUnseenActivity,
+      isFailed,
+    });
+  // Merged work diffs against a branch that moved on: noise.
+  const hasChanges =
+    step !== 'archive' && filesChanged !== undefined && filesChanged > 0;
+  const stepAction =
+    workspaceId && onNextStep && ACTIONABLE_STEPS.has(step) ? step : null;
+
+  const handleNextStep = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!workspaceId || !stepAction) return;
+    onNextStep?.(workspaceId, stepAction);
+  };
 
   const handleOpenCommandBar = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -90,12 +152,13 @@ export function WorkspaceSummary({
         className
       )}
     >
-      {/* Selection indicator - thin colored tab on the left */}
+      {/* Ticket colour stripe, or the selection tab without a ticket */}
       <div
         className={cn(
           'absolute left-0 top-1 bottom-1 w-0.5 rounded-full transition-colors duration-100',
-          isActive ? 'bg-brand' : 'bg-transparent'
+          !accentColor && (isActive ? 'bg-brand' : 'bg-transparent')
         )}
+        style={accentColor ? { backgroundColor: accentColor } : undefined}
       />
       <button
         onClick={onClick}
@@ -130,32 +193,8 @@ export function WorkspaceSummary({
               />
             )}
 
-            {/* Failed/killed status (only when not running) */}
-            {!isRunning && isFailed && (
-              <TriangleIcon
-                className="size-icon-xs text-error shrink-0"
-                weight="fill"
-              />
-            )}
-
-            {/* Running dots OR hand icon for pending approval */}
-            {isRunning &&
-              (hasPendingApproval ? (
-                <HandIcon
-                  className="size-icon-xs text-brand shrink-0"
-                  weight="fill"
-                />
-              ) : (
-                <RunningDots />
-              ))}
-
-            {/* Unseen activity indicator (only when not running and not failed) */}
-            {hasUnseenActivity && !isRunning && !isFailed && (
-              <CircleIcon
-                className="size-icon-xs text-brand shrink-0"
-                weight="fill"
-              />
-            )}
+            {/* The next step: one icon + one word */}
+            <NextStepBadge step={step} />
 
             {/* PR status icon */}
             {prStatus === 'open' && (
@@ -180,7 +219,7 @@ export function WorkspaceSummary({
             )}
 
             {/* Time elapsed OR "Draft" label (when not running) */}
-            {!isRunning &&
+            {step !== 'working' &&
               (isDraft ? (
                 <span className="min-w-0 flex-1 truncate">
                   {t('workspaces.draft')}
@@ -194,7 +233,7 @@ export function WorkspaceSummary({
               ))}
 
             {/* Spacer when running (no elapsed time shown) */}
-            {isRunning && <span className="flex-1" />}
+            {step === 'working' && <span className="flex-1" />}
 
             {/* File count + lines changed on the right */}
             {hasChanges && (
@@ -218,8 +257,16 @@ export function WorkspaceSummary({
         <div className="absolute right-0 top-0 bottom-0 flex items-center sm:opacity-0 sm:group-hover:opacity-100">
           {/* Gradient fade from transparent to background */}
           <div className="h-full w-6 pointer-events-none bg-gradient-to-r from-transparent to-secondary" />
-          {/* Single action button */}
-          <div className="flex items-center pr-base h-full bg-secondary">
+          <div className="flex items-center gap-half pr-base h-full bg-secondary">
+            {stepAction && (
+              <button
+                onClick={handleNextStep}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="rounded-sm px-1.5 py-0.5 text-xs text-normal bg-tertiary hover:bg-brand hover:text-high"
+              >
+                {t(`workspaces.stepAction.${stepAction}`)}
+              </button>
+            )}
             <button
               onClick={handleOpenCommandBar}
               onPointerDown={(e) => e.stopPropagation()}
@@ -233,4 +280,52 @@ export function WorkspaceSummary({
       )}
     </div>
   );
+}
+
+function NextStepBadge({ step }: { step: WorkspaceNextStep }) {
+  const { t } = useTranslation('common');
+  const label = (key: WorkspaceNextStep) => (
+    <span className="shrink-0">{t(`workspaces.step.${key}`)}</span>
+  );
+  switch (step) {
+    case 'approve':
+      return (
+        <span className="flex shrink-0 items-center gap-half text-brand">
+          <HandIcon className="size-icon-xs" weight="fill" />
+          {label(step)}
+        </span>
+      );
+    case 'working':
+      return <RunningDots />;
+    case 'retry':
+      return (
+        <span className="flex shrink-0 items-center gap-half text-error">
+          <TriangleIcon className="size-icon-xs" weight="fill" />
+          {label(step)}
+        </span>
+      );
+    case 'review':
+      return (
+        <span className="flex shrink-0 items-center gap-half text-brand">
+          <GitPullRequestIcon className="size-icon-xs" weight="fill" />
+          {label(step)}
+        </span>
+      );
+    case 'check':
+      return (
+        <span className="flex shrink-0 items-center gap-half text-brand">
+          <CircleIcon className="size-icon-xs" weight="fill" />
+          {label(step)}
+        </span>
+      );
+    case 'archive':
+      return (
+        <span className="flex shrink-0 items-center gap-half text-low">
+          <CheckIcon className="size-icon-xs" weight="bold" />
+          {label(step)}
+        </span>
+      );
+    default:
+      return null;
+  }
 }

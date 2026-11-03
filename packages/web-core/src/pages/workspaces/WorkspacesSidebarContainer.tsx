@@ -1,5 +1,9 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
+import { workspacesApi } from '@/shared/lib/api';
+import { codingApi } from '@/shared/lib/ticketsApi';
+import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { useScratch } from '@/shared/hooks/useScratch';
 import { ScratchType, type DraftWorkspaceData } from 'shared/types';
@@ -20,6 +24,7 @@ import {
   WorkspacesSidebar,
   type WorkspacesSidebarPersistKeys,
 } from '@kanbain/ui/components/WorkspacesSidebar';
+import type { WorkspaceNextStep } from '@kanbain/ui/components/WorkspaceSummary';
 import { PropertyDropdown } from '@kanbain/ui/components/PropertyDropdown';
 import { PrimaryButton } from '@kanbain/ui/components/PrimaryButton';
 import { IconButton } from '@kanbain/ui/components/IconButton';
@@ -460,6 +465,46 @@ export function WorkspacesSidebarContainer({
     });
   }, []);
 
+  const queryClient = useQueryClient();
+  const refreshSummaries = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: workspaceSummaryKeys.all }),
+    [queryClient]
+  );
+
+  // Retry restarts the orchestrator's subtask or checkpoint; a hand-made
+  // workspace has nothing to restart, so it opens to be retried from chat.
+  const handleNextStep = useCallback(
+    async (workspaceId: string, step: WorkspaceNextStep) => {
+      const workspace = activeWorkspaces.find((w) => w.id === workspaceId);
+      try {
+        if (step === 'archive') {
+          await workspacesApi.update(workspaceId, { archived: true });
+        } else if (step === 'retry' && workspace?.checkpointId) {
+          await codingApi.retryCheckpoint(workspace.checkpointId);
+        } else if (step === 'retry' && workspace?.subtaskId) {
+          await codingApi.retrySubtask(workspace.subtaskId);
+        } else {
+          handleSelectWorkspace(workspaceId);
+          return;
+        }
+      } catch (err) {
+        console.error(`Workspace ${step} failed:`, err);
+      }
+      void refreshSummaries();
+    },
+    [activeWorkspaces, handleSelectWorkspace, refreshSummaries]
+  );
+
+  const handleArchiveFinished = useCallback(async () => {
+    const finished = activeWorkspaces.filter((w) => w.nextStep === 'archive');
+    const results = await Promise.allSettled(
+      finished.map((w) => workspacesApi.update(w.id, { archived: true }))
+    );
+    const failed = results.filter((r) => r.status === 'rejected').length;
+    if (failed) console.error(`Archiving ${failed} workspaces failed`);
+    void refreshSummaries();
+  }, [activeWorkspaces, refreshSummaries]);
+
   const sidebarPersistKeys: WorkspacesSidebarPersistKeys = {
     raisedHand: PERSIST_KEYS.workspacesSidebarRaisedHand,
     notRunning: PERSIST_KEYS.workspacesSidebarNotRunning,
@@ -539,6 +584,8 @@ export function WorkspacesSidebarContainer({
       searchControls={searchControls}
       onOpenWorkspaceActions={handleOpenWorkspaceActions}
       persistKeys={sidebarPersistKeys}
+      onNextStep={handleNextStep}
+      onArchiveFinished={handleArchiveFinished}
     />
   );
 }

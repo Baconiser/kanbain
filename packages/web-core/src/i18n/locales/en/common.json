@@ -110,6 +110,20 @@
     "noWorkspaces": "No workspaces",
     "newWorkspace": "New workspace",
     "needsAttention": "Needs Attention",
+    "yourTurn": "Your turn",
+    "finished": "Finished",
+    "archiveAll": "Archive all",
+    "step": {
+      "approve": "Approve",
+      "retry": "Failed",
+      "review": "Review",
+      "check": "New",
+      "archive": "Done"
+    },
+    "stepAction": {
+      "retry": "Retry",
+      "archive": "Archive"
+    },
     "idle": "Idle",
     "running": "Running",
     "pin": "Pin",

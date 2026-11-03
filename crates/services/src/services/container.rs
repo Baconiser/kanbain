@@ -17,6 +17,7 @@ use db::{
         execution_process_repo_state::{
             CreateExecutionProcessRepoState, ExecutionProcessRepoState,
         },
+        orchestration::{OrchestrationCheckpoint, OrchestrationSubtask},
         repo::Repo,
         session::{CreateSession, Session, SessionError},
         workspace::{Workspace, WorkspaceError},
@@ -555,6 +556,21 @@ pub trait ContainerService {
                 workspace_id,
                 e
             );
+        }
+
+        // A ticket's own workspace going away takes its subtask, tester and
+        // fixer workspaces along; nobody wants those once the ticket landed.
+        if let Some(issue_id) = Workspace::find_by_id(pool, workspace_id)
+            .await?
+            .and_then(|w| w.issue_id)
+            && OrchestrationSubtask::find_by_workspace(pool, workspace_id)
+                .await?
+                .is_none()
+            && OrchestrationCheckpoint::find_by_workspace(pool, workspace_id)
+                .await?
+                .is_none()
+        {
+            Workspace::archive_for_ticket(pool, issue_id).await?;
         }
 
         Ok(())

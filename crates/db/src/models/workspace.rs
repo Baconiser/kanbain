@@ -53,6 +53,23 @@ pub struct Workspace {
     pub worktree_deleted: bool,
 }
 
+/// Which ticket a workspace works for and what the orchestrator uses it for.
+/// Statuses stay raw text; the summary route parses what it needs.
+#[derive(Debug, Clone)]
+pub struct WorkspaceTicketRole {
+    pub workspace_id: Uuid,
+    /// The main ticket, also for sub-ticket workspaces.
+    pub ticket_id: Option<Uuid>,
+    pub ticket_number: Option<i64>,
+    pub ticket_status: Option<String>,
+    pub subtask_id: Option<Uuid>,
+    pub subtask_status: Option<String>,
+    pub checkpoint_id: Option<Uuid>,
+    pub checkpoint_status: Option<String>,
+    /// Merged directly or through a merged PR.
+    pub merged: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct WorkspaceWithStatus {
     #[serde(flatten)]
@@ -413,6 +430,65 @@ impl Workspace {
         .execute(pool)
         .await?;
         Ok(())
+    }
+
+    /// Archives every unpinned, idle workspace of a ticket and its
+    /// sub-tickets: the ticket workspace, subtask coders, testers, fixers.
+    /// Returns how many were archived.
+    pub async fn archive_for_ticket(pool: &SqlitePool, issue_id: Uuid) -> Result<u64, sqlx::Error> {
+        let result = sqlx::query!(
+            r#"UPDATE workspaces SET archived = 1, updated_at = datetime('now', 'subsec')
+               WHERE archived = 0
+                 AND pinned = 0
+                 AND (issue_id = $1
+                      OR issue_id IN (SELECT id FROM issues WHERE parent_issue_id = $1))
+                 AND NOT EXISTS (
+                     SELECT 1 FROM sessions s
+                     JOIN execution_processes ep ON ep.session_id = s.id
+                     WHERE s.workspace_id = workspaces.id AND ep.status = 'running'
+                 )"#,
+            issue_id
+        )
+        .execute(pool)
+        .await?;
+        Ok(result.rows_affected())
+    }
+
+    /// The ticket and orchestrator role of each workspace with the given
+    /// archived state. Sub-ticket workspaces report their main ticket.
+    pub async fn ticket_roles(
+        pool: &SqlitePool,
+        archived: bool,
+    ) -> Result<Vec<WorkspaceTicketRole>, sqlx::Error> {
+        sqlx::query_as!(
+            WorkspaceTicketRole,
+            r#"SELECT
+                w.id AS "workspace_id!: Uuid",
+                COALESCE(p.id, i.id) AS "ticket_id: Uuid",
+                COALESCE(p.number, i.number) AS "ticket_number: i64",
+                ps.kind AS "ticket_status: String",
+                (SELECT os.id FROM orchestration_subtasks os
+                  WHERE os.workspace_id = w.id LIMIT 1) AS "subtask_id: Uuid",
+                (SELECT os.status FROM orchestration_subtasks os
+                  WHERE os.workspace_id = w.id LIMIT 1) AS "subtask_status: String",
+                (SELECT oc.id FROM orchestration_checkpoints oc
+                  WHERE oc.tester_workspace_id = w.id OR oc.fixer_workspace_id = w.id
+                  LIMIT 1) AS "checkpoint_id: Uuid",
+                (SELECT oc.status FROM orchestration_checkpoints oc
+                  WHERE oc.tester_workspace_id = w.id OR oc.fixer_workspace_id = w.id
+                  LIMIT 1) AS "checkpoint_status: String",
+                EXISTS (SELECT 1 FROM merges m WHERE m.workspace_id = w.id
+                         AND (m.merge_type = 'direct' OR m.pr_status = 'merged'))
+                  AS "merged!: bool"
+            FROM workspaces w
+            LEFT JOIN issues i ON i.id = w.issue_id
+            LEFT JOIN issues p ON p.id = i.parent_issue_id
+            LEFT JOIN project_statuses ps ON ps.id = COALESCE(p.status_id, i.status_id)
+            WHERE w.archived = $1"#,
+            archived
+        )
+        .fetch_all(pool)
+        .await
     }
 
     /// Update workspace fields. Only non-None values will be updated.

@@ -10,7 +10,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import { cn } from '../lib/cn';
 import { InputField } from './InputField';
-import { WorkspaceSummary } from './WorkspaceSummary';
+import {
+  WorkspaceSummary,
+  type WorkspaceNextStep,
+} from './WorkspaceSummary';
 import {
   CollapsibleSectionHeader,
   type SectionAction,
@@ -32,19 +35,40 @@ export interface WorkspacesSidebarWorkspace {
   latestProcessCompletedAt?: string;
   latestProcessStatus?: 'running' | 'completed' | 'failed' | 'killed';
   prStatus?: 'open' | 'merged' | 'closed' | 'unknown';
+  nextStep?: WorkspaceNextStep;
+  /** Colour of the workspace's ticket */
+  accentColor?: string;
 }
 
 export interface WorkspacesSidebarPersistKeys {
   raisedHand: string;
   notRunning: string;
   running: string;
+  finished?: string;
 }
 
 const DEFAULT_PERSIST_KEYS: WorkspacesSidebarPersistKeys = {
   raisedHand: 'workspaces-sidebar-raised-hand',
   notRunning: 'workspaces-sidebar-not-running',
   running: 'workspaces-sidebar-running',
+  finished: 'workspaces-sidebar-finished',
 };
+
+const YOUR_TURN_STEPS: ReadonlySet<WorkspaceNextStep> = new Set([
+  'approve',
+  'retry',
+  'review',
+  'check',
+]);
+
+/** The step a row stands for; server-provided, or derived from its flags. */
+function stepOf(ws: WorkspacesSidebarWorkspace): WorkspaceNextStep {
+  if (ws.nextStep) return ws.nextStep;
+  if (ws.hasPendingApproval) return 'approve';
+  if (ws.isRunning) return 'working';
+  if (ws.hasUnseenActivity) return 'check';
+  return 'none';
+}
 
 export interface WorkspacesSidebarProps {
   workspaces: WorkspacesSidebarWorkspace[];
@@ -80,6 +104,10 @@ export interface WorkspacesSidebarProps {
   onOpenWorkspaceActions?: (workspaceId: string) => void;
   /** Persist keys for collapsible sections */
   persistKeys?: WorkspacesSidebarPersistKeys;
+  /** Runs a row's one-click next step (retry, archive) */
+  onNextStep?: (workspaceId: string, step: WorkspaceNextStep) => void;
+  /** Archives every finished workspace */
+  onArchiveFinished?: () => void;
 }
 
 export interface WorkspacesSidebarReopenTagProps {
@@ -127,17 +155,25 @@ function WorkspaceList({
   selectedWorkspaceId,
   onSelectWorkspace,
   onOpenWorkspaceActions,
+  onNextStep,
+  summary,
 }: {
   workspaces: WorkspacesSidebarWorkspace[];
   selectedWorkspaceId: string | null;
   onSelectWorkspace: (id: string) => void;
   onOpenWorkspaceActions: (workspaceId: string) => void;
+  onNextStep?: (workspaceId: string, step: WorkspaceNextStep) => void;
+  summary?: boolean;
 }) {
   return (
     <>
       {workspaces.map((workspace) => (
         <WorkspaceSummary
           key={workspace.id}
+          summary={summary}
+          nextStep={workspace.nextStep}
+          accentColor={workspace.accentColor}
+          onNextStep={onNextStep}
           name={workspace.name}
           workspaceId={workspace.id}
           filesChanged={workspace.filesChanged}
@@ -182,6 +218,8 @@ export function WorkspacesSidebar({
   searchControls,
   onOpenWorkspaceActions,
   persistKeys = DEFAULT_PERSIST_KEYS,
+  onNextStep,
+  onArchiveFinished,
 }: WorkspacesSidebarProps) {
   const { t } = useTranslation(['tasks', 'common']);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -207,22 +245,66 @@ export function WorkspacesSidebar({
   };
 
   // Categorize workspaces for accordion layout
-  const { raisedHandWorkspaces, idleWorkspaces, runningWorkspaces } =
-    useMemo(() => {
-      // Running workspaces should stay in the "Running" section even if unseen.
-      const needsAttention = (ws: WorkspacesSidebarWorkspace) =>
-        ws.hasPendingApproval || (ws.hasUnseenActivity && !ws.isRunning);
+  const {
+    raisedHandWorkspaces,
+    idleWorkspaces,
+    runningWorkspaces,
+    finishedWorkspaces,
+    openWorkspaces,
+  } = useMemo(() => {
+    const withStep = workspaces.map((ws) => ({ ws, step: stepOf(ws) }));
+    const pick = (keep: (step: WorkspaceNextStep) => boolean) =>
+      withStep.filter(({ step }) => keep(step)).map(({ ws }) => ws);
 
-      return {
-        raisedHandWorkspaces: workspaces.filter((ws) => needsAttention(ws)),
-        idleWorkspaces: workspaces.filter(
-          (ws) => !ws.isRunning && !needsAttention(ws)
-        ),
-        runningWorkspaces: workspaces.filter(
-          (ws) => ws.isRunning && !needsAttention(ws)
-        ),
-      };
-    }, [workspaces]);
+    return {
+      raisedHandWorkspaces: pick((step) => YOUR_TURN_STEPS.has(step)),
+      runningWorkspaces: pick((step) => step === 'working'),
+      idleWorkspaces: pick((step) => step === 'none'),
+      finishedWorkspaces: pick((step) => step === 'archive'),
+      openWorkspaces: pick((step) => step !== 'archive'),
+    };
+  }, [workspaces]);
+
+  const finishedSection = finishedWorkspaces.length > 0 && (
+    <CollapsibleSectionHeader
+      title={`${t('common:workspaces.finished')} (${finishedWorkspaces.length})`}
+      persistKey={persistKeys.finished ?? DEFAULT_PERSIST_KEYS.finished}
+      defaultExpanded={false}
+      headerExtra={
+        onArchiveFinished && (
+          // The header is a button itself; no nested <button>.
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              onArchiveFinished();
+            }}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return;
+              e.preventDefault();
+              e.stopPropagation();
+              onArchiveFinished();
+            }}
+            className="flex items-center gap-half text-xs font-normal text-low hover:text-normal"
+          >
+            <ArchiveIcon className="size-icon-xs" />
+            {t('common:workspaces.archiveAll')}
+          </span>
+        )
+      }
+    >
+      <div className="flex flex-col gap-base py-half">
+        <WorkspaceList
+          workspaces={finishedWorkspaces}
+          selectedWorkspaceId={selectedWorkspaceId}
+          onSelectWorkspace={onSelectWorkspace}
+          onOpenWorkspaceActions={handleOpenWorkspaceActions}
+          onNextStep={onNextStep}
+        />
+      </div>
+    </CollapsibleSectionHeader>
+  );
 
   const headerActions: SectionAction[] = [
     {
@@ -284,36 +366,21 @@ export function WorkspacesSidebar({
                 {t('common:workspaces.noArchived')}
               </span>
             ) : (
-              archivedWorkspaces.map((workspace) => (
-                <WorkspaceSummary
-                  summary
-                  key={workspace.id}
-                  name={workspace.name}
-                  workspaceId={workspace.id}
-                  filesChanged={workspace.filesChanged}
-                  linesAdded={workspace.linesAdded}
-                  linesRemoved={workspace.linesRemoved}
-                  isActive={selectedWorkspaceId === workspace.id}
-                  isRunning={workspace.isRunning}
-                  isPinned={workspace.isPinned}
-                  hasPendingApproval={workspace.hasPendingApproval}
-                  hasRunningDevServer={workspace.hasRunningDevServer}
-                  hasUnseenActivity={workspace.hasUnseenActivity}
-                  latestProcessCompletedAt={workspace.latestProcessCompletedAt}
-                  latestProcessStatus={workspace.latestProcessStatus}
-                  prStatus={workspace.prStatus}
-                  onOpenWorkspaceActions={handleOpenWorkspaceActions}
-                  onClick={() => onSelectWorkspace(workspace.id)}
-                />
-              ))
+              <WorkspaceList
+                summary
+                workspaces={archivedWorkspaces}
+                selectedWorkspaceId={selectedWorkspaceId}
+                onSelectWorkspace={onSelectWorkspace}
+                onOpenWorkspaceActions={handleOpenWorkspaceActions}
+              />
             )}
           </div>
         ) : layoutMode === 'accordion' ? (
           /* Accordion layout view */
           <div className="flex flex-col gap-base">
-            {/* Needs Attention section */}
+            {/* Your turn: approve, retry, review, check */}
             <CollapsibleSectionHeader
-              title={t('common:workspaces.needsAttention')}
+              title={t('common:workspaces.yourTurn')}
               persistKey={persistKeys.raisedHand}
               defaultExpanded={true}
             >
@@ -336,6 +403,7 @@ export function WorkspacesSidebar({
                     selectedWorkspaceId={selectedWorkspaceId}
                     onSelectWorkspace={onSelectWorkspace}
                     onOpenWorkspaceActions={handleOpenWorkspaceActions}
+                    onNextStep={onNextStep}
                   />
                 )}
               </div>
@@ -358,6 +426,7 @@ export function WorkspacesSidebar({
                     selectedWorkspaceId={selectedWorkspaceId}
                     onSelectWorkspace={onSelectWorkspace}
                     onOpenWorkspaceActions={handleOpenWorkspaceActions}
+                    onNextStep={onNextStep}
                   />
                 )}
               </div>
@@ -380,10 +449,13 @@ export function WorkspacesSidebar({
                     selectedWorkspaceId={selectedWorkspaceId}
                     onSelectWorkspace={onSelectWorkspace}
                     onOpenWorkspaceActions={handleOpenWorkspaceActions}
+                    onNextStep={onNextStep}
                   />
                 )}
               </div>
             </CollapsibleSectionHeader>
+
+            {finishedSection}
           </div>
         ) : (
           /* Active workspaces flat view */
@@ -402,27 +474,14 @@ export function WorkspacesSidebar({
                 onClick={onSelectCreate}
               />
             )}
-            {workspaces.map((workspace) => (
-              <WorkspaceSummary
-                key={workspace.id}
-                name={workspace.name}
-                workspaceId={workspace.id}
-                filesChanged={workspace.filesChanged}
-                linesAdded={workspace.linesAdded}
-                linesRemoved={workspace.linesRemoved}
-                isActive={selectedWorkspaceId === workspace.id}
-                isRunning={workspace.isRunning}
-                isPinned={workspace.isPinned}
-                hasPendingApproval={workspace.hasPendingApproval}
-                hasRunningDevServer={workspace.hasRunningDevServer}
-                hasUnseenActivity={workspace.hasUnseenActivity}
-                latestProcessCompletedAt={workspace.latestProcessCompletedAt}
-                latestProcessStatus={workspace.latestProcessStatus}
-                prStatus={workspace.prStatus}
-                onOpenWorkspaceActions={handleOpenWorkspaceActions}
-                onClick={() => onSelectWorkspace(workspace.id)}
-              />
-            ))}
+            <WorkspaceList
+              workspaces={openWorkspaces}
+              selectedWorkspaceId={selectedWorkspaceId}
+              onSelectWorkspace={onSelectWorkspace}
+              onOpenWorkspaceActions={handleOpenWorkspaceActions}
+              onNextStep={onNextStep}
+            />
+            {finishedSection}
           </div>
         )}
       </div>

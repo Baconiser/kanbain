@@ -3,10 +3,12 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
 import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { makeLocalApiRequest } from '@/shared/lib/localApiTransport';
+import { ticketAccentColor } from '@/shared/lib/ticketColor';
 import type {
   WorkspaceWithStatus,
   WorkspaceSummary,
   WorkspaceSummaryResponse,
+  WorkspaceNextAction,
   ApiResponse,
 } from 'shared/types';
 
@@ -32,6 +34,12 @@ export interface SidebarWorkspace {
   prStatus?: 'open' | 'merged' | 'closed' | 'unknown';
   prNumber?: number;
   prUrl?: string;
+  nextStep?: WorkspaceNextAction;
+  /** Colour of the workspace's main ticket */
+  accentColor?: string;
+  ticketId?: string;
+  subtaskId?: string;
+  checkpointId?: string;
 }
 
 // Keep the old export name for backwards compatibility
@@ -80,6 +88,14 @@ function toSidebarWorkspace(
     prNumber:
       summary?.pr_number != null ? Number(summary.pr_number) : undefined,
     prUrl: summary?.pr_url ?? undefined,
+    nextStep: summary?.next_action,
+    accentColor:
+      summary?.ticket_number != null
+        ? ticketAccentColor({ number: Number(summary.ticket_number) })
+        : undefined,
+    ticketId: summary?.ticket_id ?? undefined,
+    subtaskId: summary?.subtask_id ?? undefined,
+    checkpointId: summary?.checkpoint_id ?? undefined,
   };
 }
 
@@ -119,6 +135,19 @@ async function fetchWorkspaceSummariesByArchived(
     console.warn('Error fetching workspace summaries:', err);
     return new Map();
   }
+}
+
+/** Summaries of the active workspaces, shared with the sidebar's cache. */
+export function useActiveWorkspaceSummaries(): Map<string, WorkspaceSummary> {
+  const { data = new Map<string, WorkspaceSummary>() } = useQuery({
+    queryKey: workspaceSummaryKeys.byArchived(false),
+    queryFn: () => fetchWorkspaceSummariesByArchived(false),
+    staleTime: 1000,
+    refetchInterval: 15000,
+    refetchOnWindowFocus: false,
+    placeholderData: keepPreviousData,
+  });
+  return data;
 }
 
 export function useWorkspaces(): UseWorkspacesResult {

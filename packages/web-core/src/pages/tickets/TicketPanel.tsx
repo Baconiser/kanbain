@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react';
 import {
+  ArrowRightIcon,
   LinkIcon,
   PlayIcon,
   PlusIcon,
@@ -28,9 +29,12 @@ import type {
   IssueRelationshipType,
   Project,
   UpdateIssue,
+  WorkspaceNextAction,
   WorkspaceWithStatus,
 } from 'shared/types';
 import { useJsonPatchWsStream } from '@/shared/hooks/useJsonPatchWsStream';
+import { useActiveWorkspaceSummaries } from '@/shared/hooks/useWorkspaces';
+import { ticketAccentColor } from '@/shared/lib/ticketColor';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import { resolveDefaultTargetBranch } from '@/shared/hooks/useProjectRepoDefaults';
 import type { ProjectBoard } from '@/shared/hooks/useTicketStreams';
@@ -154,6 +158,25 @@ const tabPanelClass = (active: boolean) =>
     : 'hidden';
 
 type WorkspacesState = { workspaces: Record<string, WorkspaceWithStatus> };
+
+const STEP_LABEL: Record<WorkspaceNextAction, string> = {
+  approve: 'Approve',
+  working: 'Running',
+  retry: 'Failed',
+  review: 'Review',
+  check: 'New',
+  archive: 'Done',
+  none: '',
+};
+const STEP_CLASS: Record<WorkspaceNextAction, string> = {
+  approve: 'text-brand',
+  working: 'text-brand',
+  retry: 'text-error',
+  review: 'text-brand',
+  check: 'text-brand',
+  archive: 'text-low',
+  none: '',
+};
 const initialWorkspaces = (): WorkspacesState => ({ workspaces: {} });
 
 export function TicketPanel({
@@ -379,6 +402,27 @@ export function TicketPanel({
     [workspaceData, issue.id, subtaskWorkspaceIds]
   );
 
+  const summaries = useActiveWorkspaceSummaries();
+  // The workspace "Go to workspace" opens: a sub-ticket's coder, or the
+  // ticket's own workspace (not a subtask, tester or fixer one), newest first.
+  const mainWorkspace = useMemo(() => {
+    const newest = [...workspaces].sort((a, b) =>
+      b.created_at.localeCompare(a.created_at)
+    );
+    if (parentId)
+      return newest.find((w) => subtaskWorkspaceIds.includes(w.id)) ?? null;
+    return (
+      newest.find((w) => {
+        const summary = summaries.get(w.id);
+        return (
+          w.issue_id === issue.id &&
+          !summary?.subtask_id &&
+          !summary?.checkpoint_id
+        );
+      }) ?? null
+    );
+  }, [workspaces, parentId, subtaskWorkspaceIds, summaries, issue.id]);
+
   const startWorkspace = async () => {
     let preferredRepos: { repo_id: string; target_branch: string | null }[] =
       [];
@@ -465,10 +509,43 @@ export function TicketPanel({
           {ticketDisplayId(issue, project)}
         </span>
         <div className="flex shrink-0 items-center gap-half">
-          <Button size="xs" variant="outline" onClick={startWorkspace}>
-            <PlayIcon className="mr-half size-icon-xs" weight="fill" />
-            Start workspace
-          </Button>
+          {mainWorkspace && mainWorkspace.id !== currentWorkspaceId ? (
+            <>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => openWorkspace(mainWorkspace.id)}
+              >
+                <span
+                  className="mr-half size-dot rounded-full"
+                  style={{
+                    backgroundColor: ticketAccentColor({
+                      number: Number(
+                        summaries.get(mainWorkspace.id)?.ticket_number ??
+                          issue.number
+                      ),
+                    }),
+                  }}
+                />
+                Go to workspace
+                <ArrowRightIcon className="ml-half size-icon-xs" />
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                aria-label="Start another workspace"
+                title="Start another workspace"
+                onClick={startWorkspace}
+              >
+                <PlayIcon className="size-icon-xs" weight="fill" />
+              </Button>
+            </>
+          ) : (
+            <Button size="xs" variant="outline" onClick={startWorkspace}>
+              <PlayIcon className="mr-half size-icon-xs" weight="fill" />
+              Start workspace
+            </Button>
+          )}
           {headerActions}
           {confirmDelete ? (
             <Button
@@ -753,23 +830,51 @@ export function TicketPanel({
                 Start one from the header to work on this with an agent.
               </p>
             )}
-            {workspaces.map((w) => (
-              <button
-                key={w.id}
-                type="button"
-                onClick={() => openWorkspace(w.id)}
-                title={`${w.name ?? w.branch}\n${w.branch}`}
-                className="flex items-center justify-between gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary"
-              >
-                <span className="truncate">{w.name ?? w.branch}</span>
-                <span className="flex shrink-0 items-center gap-half text-xs">
-                  {w.id === currentWorkspaceId && (
-                    <span className="text-low">This workspace</span>
-                  )}
-                  {w.is_running && <span className="text-brand">Running</span>}
-                </span>
-              </button>
-            ))}
+            {workspaces.map((w) => {
+              const summary = summaries.get(w.id);
+              const step = summary?.next_action;
+              return (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => openWorkspace(w.id)}
+                  title={`${w.name ?? w.branch}\n${w.branch}`}
+                  className={`flex items-center justify-between gap-base rounded-sm px-half py-half text-left text-sm hover:bg-secondary ${
+                    step === 'archive' ? 'opacity-60' : ''
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-half">
+                    {summary?.ticket_number != null && (
+                      <span
+                        className="size-dot shrink-0 rounded-full"
+                        style={{
+                          backgroundColor: ticketAccentColor({
+                            number: Number(summary.ticket_number),
+                          }),
+                        }}
+                      />
+                    )}
+                    <span className="truncate">{w.name ?? w.branch}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-half text-xs">
+                    {w.id === currentWorkspaceId && (
+                      <span className="text-low">This workspace</span>
+                    )}
+                    {w.is_running ? (
+                      <span className="text-brand">Running</span>
+                    ) : (
+                      step &&
+                      step !== 'none' &&
+                      step !== 'working' && (
+                        <span className={STEP_CLASS[step]}>
+                          {STEP_LABEL[step]}
+                        </span>
+                      )
+                    )}
+                  </span>
+                </button>
+              );
+            })}
           </CollapsibleSection>
 
           <TicketRelated

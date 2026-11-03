@@ -1035,11 +1035,33 @@ pr_number: bigint | null,
 /**
  * PR URL for this workspace (if any PR exists)
  */
-pr_url: string | null, };
+pr_url: string | null, 
+/**
+ * The main ticket this workspace works for
+ */
+ticket_id: string | null, 
+/**
+ * Number of that ticket; its accent colour derives from it
+ */
+ticket_number: number | null, 
+/**
+ * Orchestrator subtask run in this workspace, for Retry
+ */
+subtask_id: string | null, 
+/**
+ * Orchestrator checkpoint tested or fixed in this workspace, for Retry
+ */
+checkpoint_id: string | null, 
+/**
+ * The one thing the user should do next
+ */
+next_action: WorkspaceNextAction, };
 
 export type WorkspaceSummaryResponse = { summaries: Array<WorkspaceSummary>, };
 
 export type DiffStats = { files_changed: number, lines_added: number, lines_removed: number, };
+
+export type WorkspaceNextAction = "approve" | "working" | "retry" | "review" | "check" | "archive" | "none";
 
 export type DirectoryEntry = { name: string, path: string, is_directory: boolean, is_git_repo: boolean, last_modified: bigint | null, };
 
