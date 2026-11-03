@@ -119,6 +119,10 @@ pub struct ContainerSpec {
     pub networks: Vec<(String, Vec<String>)>,
     /// Anonymous volumes (container paths). Never bind mounts.
     pub volumes: Vec<String>,
+    /// Named volumes that outlive the container (per-project caches). Docker
+    /// creates a missing one on first use, seeded from the image's content at
+    /// that path, and labels it like the container.
+    pub named_volumes: Vec<NamedVolume>,
     pub working_dir: Option<String>,
     pub user: Option<String>,
     /// Defaults to a process that sleeps forever so the container stays up
@@ -127,6 +131,14 @@ pub struct ContainerSpec {
     /// `host:ip` entries for `/etc/hosts` (the gateway uses
     /// `host.docker.internal:host-gateway`).
     pub extra_hosts: Vec<String>,
+}
+
+/// A named Docker volume mounted into a container.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedVolume {
+    pub name: String,
+    /// Container path.
+    pub target: String,
 }
 
 /// A file to place into a container.

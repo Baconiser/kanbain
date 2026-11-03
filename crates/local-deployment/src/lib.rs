@@ -37,6 +37,7 @@ pub mod jobs;
 pub mod knowledge;
 pub mod orchestrator;
 pub mod planning;
+pub mod project_setup;
 pub mod pty;
 pub mod sandbox;
 pub mod search;

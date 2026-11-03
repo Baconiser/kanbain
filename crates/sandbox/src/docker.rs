@@ -6,8 +6,8 @@ use bollard::{
     container::LogOutput,
     exec::{StartExecOptions, StartExecResults},
     models::{
-        ContainerCreateBody, EndpointSettings, ExecConfig, HostConfig, NetworkConnectRequest,
-        NetworkingConfig,
+        ContainerCreateBody, EndpointSettings, ExecConfig, HostConfig, Mount, MountType,
+        MountVolumeOptions, NetworkConnectRequest, NetworkingConfig,
     },
     query_parameters::{
         CreateContainerOptionsBuilder, DownloadFromContainerOptionsBuilder,
@@ -155,6 +155,28 @@ impl Sandbox for DockerSandbox {
         let mut networks = spec.networks.iter();
         let first_network = networks.next();
 
+        // Named volumes carry the container's ownership labels so they can be
+        // found (and pruned) per KanbAIn instance.
+        let volume_labels: HashMap<String, String> = spec
+            .labels
+            .iter()
+            .filter(|(k, _)| k.as_str() == LABEL_MANAGED || k.as_str() == LABEL_INSTANCE)
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        let mounts: Vec<Mount> = spec
+            .named_volumes
+            .iter()
+            .map(|volume| Mount {
+                target: Some(volume.target.clone()),
+                source: Some(volume.name.clone()),
+                typ: Some(MountType::VOLUME),
+                volume_options: Some(MountVolumeOptions {
+                    labels: Some(volume_labels.clone()),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .collect();
         let host_config = HostConfig {
             nano_cpus: Some((spec.limits.cpus * 1e9) as i64),
             memory: Some((spec.limits.memory_mb * 1024 * 1024) as i64),
@@ -163,6 +185,7 @@ impl Sandbox for DockerSandbox {
             security_opt: Some(vec!["no-new-privileges".to_string()]),
             network_mode: first_network.map(|(name, _)| name.clone()),
             extra_hosts: (!spec.extra_hosts.is_empty()).then(|| spec.extra_hosts.clone()),
+            mounts: (!mounts.is_empty()).then_some(mounts),
             init: Some(true),
             ..Default::default()
         };

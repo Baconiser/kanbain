@@ -306,6 +306,15 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [sandboxDockerfile, setSandboxDockerfile] = useState(
       project?.settings.sandbox_dockerfile ?? ''
     );
+    const [setupCommands, setSetupCommands] = useState(
+      project?.settings.sandbox_setup_commands ?? ''
+    );
+    const [setupSkipInstall, setSetupSkipInstall] = useState(
+      project?.settings.sandbox_setup_skip_install ?? false
+    );
+    const [sharedCargoTarget, setSharedCargoTarget] = useState(
+      project?.settings.sandbox_shared_cargo_target ?? false
+    );
     const [repos, setRepos] = useState<Repo[]>([]);
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -380,6 +389,9 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   .map((d) => d.trim())
                   .filter(Boolean),
                 sandbox_dockerfile: sandboxDockerfile.trim() || null,
+                sandbox_setup_commands: setupCommands.trim() || null,
+                sandbox_setup_skip_install: setupSkipInstall,
+                sandbox_shared_cargo_target: sharedCargoTarget,
               },
             })
           : await projectsApi.create({
@@ -535,6 +547,43 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                     onChange={(e) => setSandboxDockerfile(e.target.value)}
                   />
                 </div>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-setup-commands">
+                    Sandbox setup commands (run after the dependency installs,
+                    before the agent starts)
+                  </Label>
+                  <p className="text-xs text-low">
+                    KanbAIn installs dependencies from the lockfiles it finds
+                    (pnpm, npm, yarn, cargo, rust-toolchain, pip, go) and reruns
+                    setup whenever a lockfile or these commands change.
+                  </p>
+                  <textarea
+                    id="project-setup-commands"
+                    data-testid="project-setup-commands"
+                    className="min-h-16 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder={'cargo install cargo-component'}
+                    value={setupCommands}
+                    onChange={(e) => setSetupCommands(e.target.value)}
+                  />
+                </div>
+                <label className="col-span-2 flex items-center gap-base text-sm">
+                  <input
+                    type="checkbox"
+                    checked={setupSkipInstall}
+                    onChange={(e) => setSetupSkipInstall(e.target.checked)}
+                  />
+                  Don’t install dependencies automatically; only run the setup
+                  commands
+                </label>
+                <label className="col-span-2 flex items-center gap-base text-sm">
+                  <input
+                    type="checkbox"
+                    checked={sharedCargoTarget}
+                    onChange={(e) => setSharedCargoTarget(e.target.checked)}
+                  />
+                  Share one cargo target dir across this project’s sandbox runs
+                  (applies to new sandbox containers)
+                </label>
               </div>
             )}
 

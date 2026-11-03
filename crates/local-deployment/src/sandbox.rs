@@ -516,6 +516,7 @@ impl SandboxRuntime {
         &self,
         workspace: &Workspace,
         image: &str,
+        project: Option<&Project>,
     ) -> Result<String, SandboxRunError> {
         if let Some(id) = self.workspace_container(workspace.id).await {
             return Ok(id);
@@ -542,6 +543,9 @@ impl SandboxRuntime {
             },
             networks: vec![(ready.network.internal_network.clone(), vec![])],
             volumes: vec![KANBAIN_DIR.to_string()],
+            named_volumes: project
+                .map(|p| crate::project_setup::cache_volumes(p, &self.inner.instance, image))
+                .unwrap_or_default(),
             working_dir: Some(WORKSPACE_DIR.to_string()),
             user: Some(AGENT_USER.to_string()),
             ..Default::default()
@@ -582,7 +586,7 @@ impl SandboxRuntime {
         };
 
         let container = self
-            .ensure_workspace_container(run.workspace, &image)
+            .ensure_workspace_container(run.workspace, &image, run.project)
             .await?;
 
         for repo in run.repos {
@@ -601,34 +605,6 @@ impl SandboxRuntime {
                     repo.name, run.workspace.branch
                 ));
             }
-        }
-
-        if let Some(issue) = run.issue {
-            let prefix = run.project.map(|p| p.id_prefix.as_str()).unwrap_or("KAN");
-            let id = issue.display_id(prefix);
-            let ticket = format!(
-                "# {id}: {}\n\n{}\n\n---\nStart every commit message with `{id}: `.\n",
-                issue.title,
-                issue.description.as_deref().unwrap_or("")
-            );
-            let repo_roots: Vec<(String, PathBuf)> = run
-                .repos
-                .iter()
-                .map(|repo| (repo.name.clone(), run.workspace_root.join(&repo.name)))
-                .collect();
-            let custom_image = image != base_tag;
-            let environment = crate::environment::environment_md(&repo_roots, custom_image);
-            let mut files = vec![
-                FileEntry::new("ticket.md", ticket).owned_by_root(),
-                FileEntry::new("environment.md", environment).owned_by_root(),
-            ];
-            if let Some(prior_work) = run.prior_work {
-                files.push(FileEntry::new("prior_work.md", prior_work).owned_by_root());
-            }
-            for (name, contents) in &run.extra_context {
-                files.push(FileEntry::new(name, contents.as_str()).owned_by_root());
-            }
-            ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
         }
 
         let model_token = self
@@ -659,7 +635,59 @@ impl SandboxRuntime {
             .network
             .egress_proxy_url(&run.execution.id.simple().to_string(), &egress_token);
         let no_proxy = format!("{GATEWAY_HOST},localhost,127.0.0.1");
-        let vars = HashMap::from([
+        let proxy_env: Vec<(String, String)> =
+            ["HTTPS_PROXY", "HTTP_PROXY", "https_proxy", "http_proxy"]
+                .into_iter()
+                .map(|key| (key.to_string(), proxy_url.clone()))
+                .chain(
+                    ["NO_PROXY", "no_proxy"]
+                        .into_iter()
+                        .map(|key| (key.to_string(), no_proxy.clone())),
+                )
+                .collect();
+        let build_env = crate::project_setup::build_env(run.project);
+
+        // Dependencies go in before the agent looks at anything. Registries
+        // only: setup gets the egress proxy, never a model token.
+        let repo_roots: Vec<(String, PathBuf)> = run
+            .repos
+            .iter()
+            .map(|repo| (repo.name.clone(), run.workspace_root.join(&repo.name)))
+            .collect();
+        let setup = crate::project_setup::run(
+            &ready.docker,
+            &container,
+            crate::project_setup::plan(&repo_roots, run.project.map(|p| &*p.settings)),
+            proxy_env.iter().chain(&build_env).cloned().collect(),
+            log,
+        )
+        .await;
+
+        if let Some(issue) = run.issue {
+            let prefix = run.project.map(|p| p.id_prefix.as_str()).unwrap_or("KAN");
+            let id = issue.display_id(prefix);
+            let ticket = format!(
+                "# {id}: {}\n\n{}\n\n---\nStart every commit message with `{id}: `.\n",
+                issue.title,
+                issue.description.as_deref().unwrap_or("")
+            );
+            let custom_image = image != base_tag;
+            let environment =
+                crate::environment::environment_md(&repo_roots, custom_image, Some(&setup));
+            let mut files = vec![
+                FileEntry::new("ticket.md", ticket).owned_by_root(),
+                FileEntry::new("environment.md", environment).owned_by_root(),
+            ];
+            if let Some(prior_work) = run.prior_work {
+                files.push(FileEntry::new("prior_work.md", prior_work).owned_by_root());
+            }
+            for (name, contents) in &run.extra_context {
+                files.push(FileEntry::new(name, contents.as_str()).owned_by_root());
+            }
+            ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
+        }
+
+        let mut vars = HashMap::from([
             (
                 "ANTHROPIC_BASE_URL".to_string(),
                 ready.network.model_proxy_url(),
@@ -670,12 +698,6 @@ impl SandboxRuntime {
                 format!("{}/openai/v1", ready.network.model_proxy_url()),
             ),
             ("OPENAI_API_KEY".to_string(), model_token),
-            ("HTTPS_PROXY".to_string(), proxy_url.clone()),
-            ("HTTP_PROXY".to_string(), proxy_url.clone()),
-            ("https_proxy".to_string(), proxy_url.clone()),
-            ("http_proxy".to_string(), proxy_url),
-            ("NO_PROXY".to_string(), no_proxy.clone()),
-            ("no_proxy".to_string(), no_proxy),
             (
                 "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".to_string(),
                 "1".to_string(),
@@ -683,6 +705,8 @@ impl SandboxRuntime {
             ("DISABLE_AUTOUPDATER".to_string(), "1".to_string()),
             ("KANBAIN_RUN_ID".to_string(), run.execution.id.to_string()),
         ]);
+        vars.extend(proxy_env);
+        vars.extend(build_env);
 
         ExecutionProcess::set_run_info(
             &self.inner.db.pool,
@@ -1046,7 +1070,9 @@ impl SandboxRuntime {
     ) -> Result<crate::pty::ContainerShell, SandboxRunError> {
         let base_tag = self.ensure_image_and_gateway(&|_| {}).await?;
         let image = self.image_for(project, &base_tag, &|_| {}).await?;
-        let container = self.ensure_workspace_container(workspace, &image).await?;
+        let container = self
+            .ensure_workspace_container(workspace, &image, project)
+            .await?;
         let ready = self.ready()?;
         for repo in repos {
             transfer::sync_branch_in(

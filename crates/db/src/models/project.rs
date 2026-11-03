@@ -24,6 +24,19 @@ pub struct ProjectSettings {
     /// the base image for this project's runs.
     #[serde(default)]
     pub sandbox_dockerfile: Option<String>,
+    /// Shell commands KanbAIn runs in the sandbox after the dependency
+    /// installs and before the agent starts (e.g. `cargo install
+    /// cargo-component`). Rerun whenever they or a lockfile change.
+    #[serde(default)]
+    pub sandbox_setup_commands: Option<String>,
+    /// Don't install dependencies from the detected lockfiles; only run
+    /// [`Self::sandbox_setup_commands`].
+    #[serde(default)]
+    pub sandbox_setup_skip_install: bool,
+    /// One cargo target dir per project, kept across runs on a volume
+    /// (`CARGO_TARGET_DIR`). Parallel runs queue on cargo's lock.
+    #[serde(default)]
+    pub sandbox_shared_cargo_target: bool,
     /// Let code go to a code embedder that is not on this machine or its
     /// private network (E9). Off by default.
     #[serde(default)]

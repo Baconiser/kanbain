@@ -24,6 +24,22 @@ sandbox_allowed_domains: Array<string>,
  */
 sandbox_dockerfile: string | null, 
 /**
+ * Shell commands KanbAIn runs in the sandbox after the dependency
+ * installs and before the agent starts (e.g. `cargo install
+ * cargo-component`). Rerun whenever they or a lockfile change.
+ */
+sandbox_setup_commands: string | null, 
+/**
+ * Don't install dependencies from the detected lockfiles; only run
+ * [`Self::sandbox_setup_commands`].
+ */
+sandbox_setup_skip_install: boolean, 
+/**
+ * One cargo target dir per project, kept across runs on a volume
+ * (`CARGO_TARGET_DIR`). Parallel runs queue on cargo's lock.
+ */
+sandbox_shared_cargo_target: boolean, 
+/**
  * Let code go to a code embedder that is not on this machine or its
  * private network (E9). Off by default.
  */

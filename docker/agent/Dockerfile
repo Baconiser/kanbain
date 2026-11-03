@@ -18,16 +18,32 @@ RUN apt-get update \
 RUN mkdir -p /workspace /kanbain/context /kanbain/out \
     && chown node:node /workspace /kanbain/out
 
+# pnpm and yarn shims for projects that use them (versions follow the
+# project's packageManager field).
+RUN corepack enable
+
 USER node
 ENV HOME=/home/node \
     PATH=/home/node/.cargo/bin:$PATH \
     npm_config_update_notifier=false \
     npm_config_fund=false \
     npm_config_prefer_offline=true \
-    DISABLE_AUTOUPDATER=1
+    DISABLE_AUTOUPDATER=1 \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    COREPACK_HOME=/home/node/.kanbain-cache/corepack \
+    npm_config_store_dir=/home/node/.kanbain-cache/pnpm-store \
+    YARN_CACHE_FOLDER=/home/node/.kanbain-cache/yarn \
+    PIP_CACHE_DIR=/home/node/.kanbain-cache/pip \
+    GOMODCACHE=/home/node/.kanbain-cache/go-mod
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
         | sh -s -- -y --profile minimal --default-toolchain stable --component clippy,rustfmt
+
+# Mount points of the per-project cache volumes. They must exist here, owned
+# by node: Docker seeds a new volume's owner from the image, and nobody in the
+# container can chown later (all capabilities are dropped).
+RUN mkdir -p /home/node/.kanbain-cache /home/node/.kanbain-target \
+        /home/node/.cargo/registry /home/node/.cargo/git
 
 # Warm the npx cache with the exact commands the executors run, so runs start
 # without downloading the CLIs.

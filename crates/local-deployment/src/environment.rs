@@ -7,9 +7,11 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::project_setup::{SetupOutcome, SetupReport};
+
 /// What the base image (`docker/agent/Dockerfile`) ships.
 const BASE_IMAGE_TOOLS: &str = "\
-- Node.js 22 with npm (pnpm and yarn through `corepack`, if the project pins them)\n\
+- Node.js 22 with npm, pnpm and yarn (through `corepack`)\n\
 - Python 3 with pip and venv\n\
 - Rust stable (minimal profile) with cargo, clippy and rustfmt\n\
 - gcc, make, pkg-config, OpenSSL headers, git, ripgrep, jq\n";
@@ -32,7 +34,8 @@ fn detect(root: &Path) -> RepoStack {
         for file in ["rust-toolchain.toml", "rust-toolchain"] {
             if has(file) {
                 out.notes.push(format!(
-                    "`{file}` pins a toolchain; it is only available if setup installed it."
+                    "`{file}` pins a toolchain; it is only available if project setup \
+                     installed it (see below)."
                 ));
             }
         }
@@ -87,7 +90,12 @@ fn detect(root: &Path) -> RepoStack {
 
 /// Markdown for `/kanbain/context/environment.md`. `repos` are
 /// `(name, host worktree)` pairs; the agent sees each at `/workspace/<name>`.
-pub fn environment_md(repos: &[(String, PathBuf)], custom_image: bool) -> String {
+/// `setup` is what project setup did before this run.
+pub fn environment_md(
+    repos: &[(String, PathBuf)],
+    custom_image: bool,
+    setup: Option<&SetupReport>,
+) -> String {
     let mut md = String::from("# Sandbox environment\n\n## Installed tools\n\n");
     md.push_str(BASE_IMAGE_TOOLS);
     if custom_image {
@@ -96,7 +104,11 @@ pub fn environment_md(repos: &[(String, PathBuf)], custom_image: bool) -> String
 
     md.push_str("\n## Repositories\n");
     for (name, root) in repos {
-        let stack = detect(root);
+        let mut stack = detect(root);
+        // The host checkout has no node_modules, but the container does now.
+        if setup.is_some_and(|s| s.installed_js(name)) {
+            stack.notes.retain(|n| !n.contains("node_modules"));
+        }
         md.push_str(&format!("\n### /workspace/{name}\n\n"));
         if stack.stacks.is_empty() {
             md.push_str("No known build system detected.\n");
@@ -116,6 +128,10 @@ pub fn environment_md(repos: &[(String, PathBuf)], custom_image: bool) -> String
         }
     }
 
+    if let Some(setup) = setup {
+        md.push_str(&setup_md(setup));
+    }
+
     md.push_str(
         "\n## Rules\n\n\
          - You cannot install toolchains, cargo subcommands or system packages, and \
@@ -124,6 +140,47 @@ pub fn environment_md(repos: &[(String, PathBuf)], custom_image: bool) -> String
          Say exactly what is missing (e.g. \"`cargo component` is not installed\") in \
          your result and stop that line of work.\n",
     );
+    md
+}
+
+/// The "Project setup" section: what was installed and whether it worked.
+fn setup_md(setup: &SetupReport) -> String {
+    if setup.outcome == SetupOutcome::NothingToDo {
+        return String::new();
+    }
+    let mut md = String::from(
+        "\n## Project setup\n\n\
+         KanbAIn ran these before you started (again whenever a lockfile changes):\n\n",
+    );
+    for step in &setup.plan.steps {
+        md.push_str(&format!(
+            "- `/workspace/{}`: `{}`\n",
+            step.repo, step.command
+        ));
+    }
+    if let Some(commands) = &setup.plan.project_commands {
+        md.push_str(&format!(
+            "- Project commands, from `/workspace`:\n\n```sh\n{commands}\n```\n"
+        ));
+    }
+    md.push_str(match &setup.outcome {
+        SetupOutcome::Ran | SetupOutcome::UpToDate => {
+            "\nStatus: succeeded. Dependencies are installed; don't reinstall them. \
+             If you add a dependency, update the lockfile and commit it: the next run \
+             installs it.\n"
+        }
+        _ => "",
+    });
+    if let SetupOutcome::Failed { failed_steps, tail } = &setup.outcome {
+        md.push_str("\nStatus: **failed**");
+        if !failed_steps.is_empty() {
+            md.push_str(&format!(" ({})", failed_steps.join(", ")));
+        }
+        md.push_str(&format!(
+            ". Whatever those steps install is missing; report that instead of \
+             working around it.\n\n```\n{tail}\n```\n"
+        ));
+    }
     md
 }
 
@@ -174,10 +231,51 @@ mod tests {
                 ("api".to_string(), go.path().to_path_buf()),
             ],
             true,
+            None,
         );
         assert!(md.contains("### /workspace/docs\n\nNo known build system detected."));
         assert!(md.contains("### /workspace/api\n\n- Stack: Go\n- Test commands: `go test ./...`"));
         assert!(md.contains("project's own Dockerfile"));
         assert!(md.contains("do not hunt for workarounds"));
+        assert!(!md.contains("## Project setup"));
+    }
+
+    #[test]
+    fn setup_section_reflects_the_outcome() {
+        use crate::project_setup::{SetupPlan, SetupStep};
+
+        let web = tempfile::tempdir().unwrap();
+        std::fs::write(web.path().join("package.json"), "{}").unwrap();
+        let repos = [("web".to_string(), web.path().to_path_buf())];
+        let plan = SetupPlan {
+            steps: vec![SetupStep {
+                repo: "web".into(),
+                command: "npm ci".into(),
+            }],
+            project_commands: Some("cargo install cargo-component".into()),
+            ..Default::default()
+        };
+
+        let ok = SetupReport {
+            plan: plan.clone(),
+            outcome: SetupOutcome::Ran,
+        };
+        let md = environment_md(&repos, false, Some(&ok));
+        assert!(md.contains("- `/workspace/web`: `npm ci`"));
+        assert!(md.contains("cargo install cargo-component"));
+        assert!(md.contains("Status: succeeded"));
+        assert!(!md.contains("node_modules"));
+
+        let failed = SetupReport {
+            plan,
+            outcome: SetupOutcome::Failed {
+                failed_steps: vec!["[/workspace/web] npm ci".into()],
+                tail: "npm ERR! boom".into(),
+            },
+        };
+        let md = environment_md(&repos, false, Some(&failed));
+        assert!(md.contains("Status: **failed** ([/workspace/web] npm ci)"));
+        assert!(md.contains("npm ERR! boom"));
+        assert!(md.contains("node_modules"));
     }
 }
