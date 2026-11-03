@@ -10,7 +10,11 @@ use axum::{
     routing::{get, post},
 };
 use db::models::{
+    issue::Issue,
     merge::{Merge, MergeStatus, PrMerge, PullRequestInfo},
+    orchestration::{OrchestrationSubtask, SubtaskStatus, TicketOrchestration},
+    plan::Plan,
+    project::Project,
     repo::{Repo, RepoError},
     workspace::Workspace,
     workspace_repo::WorkspaceRepo,
@@ -202,9 +206,13 @@ pub async fn merge_workspace(
     let workspace_path = Path::new(&container_ref);
     let worktree_path = workspace_path.join(repo.name);
 
-    let workspace_label = workspace.name.as_deref().unwrap_or(&workspace.branch);
-    let vk_id = workspace.id;
-    let commit_message = format!("{} (kanbain {})", workspace_label, vk_id);
+    let commit_message = merge_commit_message(
+        &deployment,
+        &workspace,
+        &repo.path,
+        &workspace_repo.target_branch,
+    )
+    .await;
 
     let merge_commit_id = deployment.git().merge_changes(
         &repo.path,
@@ -230,6 +238,87 @@ pub async fn merge_workspace(
     }
 
     Ok(ResponseJson(ApiResponse::success(())))
+}
+
+/// A changelog instead of "Plan KAN-12 (kanbain <uuid>)": the ticket id and
+/// title, then what went in. Orchestrated tickets list their merged
+/// subtasks (the plan already says what each one was for); anything else
+/// lists the branch's own commit subjects.
+async fn merge_commit_message(
+    deployment: &DeploymentImpl,
+    workspace: &Workspace,
+    repo_path: &Path,
+    target_branch: &str,
+) -> String {
+    let pool = &deployment.db().pool;
+    let label = workspace.name.as_deref().unwrap_or(&workspace.branch);
+    let issue = match workspace.issue_id {
+        Some(id) => Issue::find_by_id(pool, id).await.ok().flatten(),
+        None => None,
+    };
+    let ticket_id = match &issue {
+        Some(issue) => Project::find_by_id(pool, issue.project_id)
+            .await
+            .ok()
+            .flatten()
+            .map(|p| issue.display_id(&p.id_prefix)),
+        None => None,
+    };
+
+    let mut items = match &issue {
+        Some(issue) => merged_subtask_titles(pool, issue.id, workspace.id).await,
+        None => vec![],
+    };
+    if items.is_empty() {
+        items = deployment
+            .git()
+            .commit_subjects(repo_path, target_branch, &workspace.branch)
+            .unwrap_or_else(|e| {
+                tracing::warn!("Listing commits of {} failed: {e}", workspace.branch);
+                vec![]
+            });
+    }
+
+    let subject = issue.as_ref().map_or(label, |i| i.title.as_str());
+    utils::ticket_id::changelog_commit_message(
+        ticket_id.as_deref(),
+        subject,
+        &items,
+        &workspace.id.to_string(),
+    )
+}
+
+/// Titles of the plan's subtasks that made it onto this ticket branch, in
+/// plan order. Empty when the workspace isn't the ticket's orchestrated one.
+async fn merged_subtask_titles(
+    pool: &sqlx::SqlitePool,
+    issue_id: Uuid,
+    workspace_id: Uuid,
+) -> Vec<String> {
+    let Ok(Some(o)) = TicketOrchestration::find(pool, issue_id).await else {
+        return vec![];
+    };
+    if o.workspace_id != Some(workspace_id) {
+        return vec![];
+    }
+    let (Ok(Some(plan)), Ok(rows)) = (
+        Plan::find_by_id(pool, o.plan_id).await,
+        OrchestrationSubtask::find_by_issue(pool, issue_id).await,
+    ) else {
+        return vec![];
+    };
+    let merged: std::collections::HashSet<&str> = rows
+        .iter()
+        .filter(|r| r.status == SubtaskStatus::Merged)
+        .map(|r| r.plan_subtask_id.as_str())
+        .collect();
+    plan.plan
+        .0
+        .subtasks
+        .iter()
+        .filter(|s| merged.contains(s.id.as_str()))
+        .map(|s| s.title.clone())
+        .collect()
 }
 
 pub async fn push_workspace_branch(

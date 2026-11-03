@@ -312,6 +312,33 @@ impl GitService {
         Ok(())
     }
 
+    /// Subjects of the non-merge commits on `head` that `base` lacks, oldest
+    /// first.
+    pub fn commit_subjects(
+        &self,
+        repo_path: &Path,
+        base: &str,
+        head: &str,
+    ) -> Result<Vec<String>, GitServiceError> {
+        let range = format!("{base}..{head}");
+        let out = GitCli::new().git(
+            repo_path,
+            [
+                "log",
+                "--no-merges",
+                "--reverse",
+                "--format=%s",
+                range.as_str(),
+            ],
+        )?;
+        Ok(out
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(String::from)
+            .collect())
+    }
+
     pub fn commit(&self, path: &Path, message: &str) -> Result<bool, GitServiceError> {
         // Use Git CLI to respect sparse-checkout semantics for staging and commit
         let git = GitCli::new();

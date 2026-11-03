@@ -1,6 +1,7 @@
 import {
   ElementTransformer,
   $convertFromMarkdownString,
+  HIGHLIGHT,
   TRANSFORMERS,
 } from '@lexical/markdown';
 import {
@@ -16,13 +17,20 @@ import {
   TableCellHeaderStates,
 } from '@lexical/table';
 
+// Lexical's stock set minus `==highlight==`. Agents write `a==0` all day and
+// that transformer happily paints everything between two `==` bright yellow
+// while eating the operators. Nobody asked for a highlighter.
+export const MARKDOWN_TRANSFORMERS = TRANSFORMERS.filter(
+  (transformer) => transformer !== HIGHLIGHT
+);
+
 const TABLE_ROW_REG_EXP = /^(?:\|)(.+)(?:\|)\s?$/;
 const TABLE_ROW_DIVIDER_REG_EXP = /^(\| ?:?-+:? ?)+\|\s?$/;
 
 function $createTableCell(textContent: string): TableCellNode {
   textContent = textContent.replace(/\\n/g, '\n');
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
-  $convertFromMarkdownString(textContent, TRANSFORMERS, cell);
+  $convertFromMarkdownString(textContent, MARKDOWN_TRANSFORMERS, cell);
   return cell;
 }
 

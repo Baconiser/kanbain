@@ -611,7 +611,17 @@ impl SandboxRuntime {
                 issue.title,
                 issue.description.as_deref().unwrap_or("")
             );
-            let mut files = vec![FileEntry::new("ticket.md", ticket).owned_by_root()];
+            let repo_roots: Vec<(String, PathBuf)> = run
+                .repos
+                .iter()
+                .map(|repo| (repo.name.clone(), run.workspace_root.join(&repo.name)))
+                .collect();
+            let custom_image = image != base_tag;
+            let environment = crate::environment::environment_md(&repo_roots, custom_image);
+            let mut files = vec![
+                FileEntry::new("ticket.md", ticket).owned_by_root(),
+                FileEntry::new("environment.md", environment).owned_by_root(),
+            ];
             if let Some(prior_work) = run.prior_work {
                 files.push(FileEntry::new("prior_work.md", prior_work).owned_by_root());
             }

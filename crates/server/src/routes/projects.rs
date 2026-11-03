@@ -378,6 +378,7 @@ async fn bulk_update_issues(
         };
         let issue = Issue::update(pool, item.id, &item.changes).await?;
         super::issues::start_planning_on_status(&deployment, &before, &issue).await;
+        super::issues::complete_subtask_on_done(&deployment, &before, &issue).await;
         updated.push(issue);
     }
     Ok(ResponseJson(ApiResponse::success(updated)))

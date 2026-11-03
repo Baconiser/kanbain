@@ -93,6 +93,8 @@ pub fn tester_task(id: &str, n: usize, what: &str, round: i64, rerun: bool) -> S
          - /kanbain/context/checkpoint.md: what to test, the test paths you may write to, \
          earlier issues and the issues.json format.\n\
          - /kanbain/context/ticket.md: the ticket and its requirements.\n\
+         - /kanbain/context/environment.md: the installed tools and this project's test \
+         commands. Use those commands; do not go looking for others.\n\
          - /kanbain/context/plan.json: the approved plan, for context only.\n",
         if round > 0 {
             format!(" This is a re-test after fix round {round}.")
@@ -131,6 +133,8 @@ pub fn fixer_task(id: &str, n: usize, what: &str, round: i64, rerun: bool) -> St
          Read these first (read-only):\n\
          - /kanbain/context/issues.md: the open issues, with file, line and severity.\n\
          - /kanbain/context/ticket.md: the ticket.\n\
+         - /kanbain/context/environment.md: the installed tools and this project's build \
+         and test commands.\n\
          - /kanbain/context/plan.json: the approved plan, for context only.\n\
          - /kanbain/context/related.md: code locations search found for these issues.\n"
     );

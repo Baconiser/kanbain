@@ -29,3 +29,11 @@ export function ticketMatchesQuery(
     .filter((v): v is string => !!v)
     .some((v) => v.toLowerCase().includes(q));
 }
+
+/** Accent colour of a main ticket, shared by its sub-tickets. Hues step by
+ * the golden angle per ticket number: looks random, stays stable across
+ * reloads, and tickets created back to back never get lookalike colours. */
+export function ticketAccentColor(issue: Pick<Issue, 'number'>): string {
+  const hue = Math.round((issue.number * 137.508) % 360);
+  return `hsl(${hue} 70% 55%)`;
+}

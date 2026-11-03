@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { PlusIcon } from '@phosphor-icons/react';
+import { useCallback, useMemo, useState, type CSSProperties } from 'react';
+import { CaretDownIcon, CaretRightIcon, PlusIcon } from '@phosphor-icons/react';
 import {
   KanbanBoard,
   KanbanCard,
@@ -17,7 +17,7 @@ import type {
 } from 'shared/types';
 import type { ProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { projectsApi } from '@/shared/lib/ticketsApi';
-import { ticketDisplayId } from './ticketIds';
+import { ticketAccentColor, ticketDisplayId } from './ticketIds';
 
 interface TicketBoardProps {
   project: Project;
@@ -60,6 +60,15 @@ function PlanningMarker({ status }: { status?: PlanningStatus }) {
   );
 }
 
+// Two ghost cards peeking out under a done main ticket whose sub-tickets are
+// folded away. Pure box-shadow, so drag-and-drop never knows they exist.
+const STACK_SHADOW = [
+  '0 4px 0 -1px hsl(var(--bg-primary))',
+  '0 4px 0 0 hsl(var(--border))',
+  '0 8px 0 -1px hsl(var(--bg-primary))',
+  '0 8px 0 0 hsl(var(--border))',
+].join(', ');
+
 export function computeMove(
   columns: Record<string, string[]>,
   id: string,
@@ -99,6 +108,16 @@ export function TicketBoard({
 }: TicketBoardProps) {
   // Placements applied locally until the server's patches arrive.
   const [optimistic, setOptimistic] = useState<Record<string, Placement>>({});
+  // Done main tickets the user unfolded again.
+  const [expandedStacks, setExpandedStacks] = useState<Set<string>>(
+    () => new Set()
+  );
+
+  const doneStatusIds = useMemo(
+    () =>
+      new Set(board.statuses.filter((s) => s.kind === 'done').map((s) => s.id)),
+    [board.statuses]
+  );
 
   const visibleStatuses = useMemo(
     () => board.statuses.filter((s) => showHidden || !s.hidden),
@@ -111,11 +130,31 @@ export function TicketBoard({
       ...(optimistic[issue.id] ?? {}),
     }));
     placed.sort((a, b) => a.sort_order - b.sort_order || a.number - b.number);
+    // A done main ticket swallows its sub-tickets into a stack. Hidden cards
+    // are left out of the columns entirely so drag indices stay honest.
+    const statusById = new Map(placed.map((i) => [i.id, i.status_id]));
+    const folded = (issue: Issue) => {
+      const parentId = issue.parent_issue_id;
+      if (!parentId || expandedStacks.has(parentId)) return false;
+      const parentStatus = statusById.get(parentId);
+      return !!parentStatus && doneStatusIds.has(parentStatus);
+    };
     const result: Record<string, string[]> = {};
     for (const status of board.statuses) result[status.id] = [];
-    for (const issue of placed) (result[issue.status_id] ??= []).push(issue.id);
+    for (const issue of placed) {
+      if (folded(issue)) continue;
+      (result[issue.status_id] ??= []).push(issue.id);
+    }
     return result;
-  }, [issues, optimistic, board.statuses]);
+  }, [issues, optimistic, board.statuses, doneStatusIds, expandedStacks]);
+
+  const toggleStack = useCallback((issueId: string) => {
+    setExpandedStacks((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(issueId)) next.add(issueId);
+      return next;
+    });
+  }, []);
 
   const handleDragEnd = useCallback(
     (result: DropResult) => {
@@ -167,18 +206,15 @@ export function TicketBoard({
   // Sub-ticket progress per parent; Done counts as finished (for orchestrated
   // subtasks: merged into the ticket branch).
   const subIssuesByParent = useMemo(() => {
-    const doneStatuses = new Set(
-      board.statuses.filter((s) => s.kind === 'done').map((s) => s.id)
-    );
     const progress: Record<string, { done: number; total: number }> = {};
     for (const issue of board.issues) {
       if (!issue.parent_issue_id) continue;
       const entry = (progress[issue.parent_issue_id] ??= { done: 0, total: 0 });
       entry.total += 1;
-      if (doneStatuses.has(issue.status_id)) entry.done += 1;
+      if (doneStatusIds.has(issue.status_id)) entry.done += 1;
     }
     return progress;
-  }, [board.issues, board.statuses]);
+  }, [board.issues, doneStatusIds]);
 
   if (visibleStatuses.length === 0) {
     return (
@@ -225,17 +261,33 @@ export function TicketBoard({
                   const parent = issue.parent_issue_id
                     ? board.issuesById[issue.parent_issue_id]
                     : undefined;
+                  const subIssues = subIssuesByParent[issue.id];
+                  const hasSubIssues = !!subIssues && subIssues.total > 0;
+                  const stackable =
+                    hasSubIssues && doneStatusIds.has(status.id);
+                  const stacked = stackable && !expandedStacks.has(issue.id);
+                  // Main tickets wear their colour on top, sub-tickets
+                  // inherit it on the left so families are obvious.
+                  const style: CSSProperties = {};
+                  if (parent) {
+                    style.borderLeftWidth = 3;
+                    style.borderLeftColor = ticketAccentColor(parent);
+                  } else if (hasSubIssues) {
+                    style.borderTopWidth = 3;
+                    style.borderTopColor = ticketAccentColor(issue);
+                  }
+                  if (stacked) {
+                    style.boxShadow = STACK_SHADOW;
+                    style.marginBottom = 8;
+                  }
                   return (
                     <KanbanCard
                       key={issue.id}
                       id={issue.id}
                       name={issue.title}
                       index={index}
-                      className={
-                        issue.parent_issue_id
-                          ? 'group border-l-2 border-l-brand/60'
-                          : 'group'
-                      }
+                      className="group"
+                      style={style}
                       onClick={() => onSelectIssue(issue.id)}
                       isOpen={selectedIssueId === issue.id}
                     >
@@ -253,11 +305,34 @@ export function TicketBoard({
                             title: parent.title,
                           }
                         }
-                        subIssues={subIssuesByParent[issue.id]}
+                        subIssues={subIssues}
                       />
                       <PlanningMarker
                         status={board.planningByIssue[issue.id]?.status}
                       />
+                      {stackable && (
+                        <button
+                          type="button"
+                          className="mt-half flex items-center gap-half self-start text-xs text-low hover:text-normal"
+                          // The card opens on mouseup, so the toggle has to
+                          // eat that event too or every click opens the panel.
+                          onMouseUp={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleStack(issue.id);
+                          }}
+                          data-testid="subticket-stack-toggle"
+                        >
+                          {stacked ? (
+                            <CaretRightIcon className="size-icon-xs" />
+                          ) : (
+                            <CaretDownIcon className="size-icon-xs" />
+                          )}
+                          {stacked
+                            ? `${subIssues?.total} sub-tickets`
+                            : 'Stack sub-tickets'}
+                        </button>
+                      )}
                     </KanbanCard>
                   );
                 })}

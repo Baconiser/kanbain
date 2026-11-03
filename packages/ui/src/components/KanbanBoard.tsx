@@ -18,6 +18,7 @@ import {
   type DroppableProvided,
 } from '@hello-pangea/dnd';
 import {
+  type CSSProperties,
   type KeyboardEvent,
   type MouseEvent,
   type MutableRefObject,
@@ -67,6 +68,8 @@ export type KanbanCardProps = Pick<Feature, 'id' | 'name'> & {
   index: number;
   children?: ReactNode;
   className?: string;
+  /** Merged over the drag library's inline style (never replaces it). */
+  style?: CSSProperties;
   onClick?: (e: MouseEvent<HTMLDivElement>) => void;
   tabIndex?: number;
   forwardedRef?: Ref<HTMLDivElement>;
@@ -83,6 +86,7 @@ export const KanbanCard = ({
   index,
   children,
   className,
+  style,
   onClick,
   tabIndex,
   forwardedRef,
@@ -119,6 +123,7 @@ export const KanbanCard = ({
             ref={setRefs}
             {...provided.draggableProps}
             {...(isMobile ? {} : provided.dragHandleProps)}
+            style={{ ...provided.draggableProps.style, ...style }}
             tabIndex={tabIndex}
             onClick={
               isMobile

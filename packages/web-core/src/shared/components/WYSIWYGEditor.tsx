@@ -14,7 +14,7 @@ import { RichTextPlugin } from '@lexical/react/LexicalRichTextPlugin';
 import { HistoryPlugin } from '@lexical/react/LexicalHistoryPlugin';
 import { AutoFocusPlugin } from '@lexical/react/LexicalAutoFocusPlugin';
 import { ContentEditable } from '@lexical/react/LexicalContentEditable';
-import { TRANSFORMERS, type Transformer } from '@lexical/markdown';
+import { type Transformer } from '@lexical/markdown';
 import { MarkdownShortcutPlugin } from '@lexical/react/LexicalMarkdownShortcutPlugin';
 import { CodeBlockEscapePlugin } from '@kanbain/ui/components/CodeBlockEscapePlugin';
 import { InlineCodeBoundaryPlugin } from '@kanbain/ui/components/InlineCodeBoundaryPlugin';
@@ -31,7 +31,10 @@ import {
   COMPONENT_INFO_EXPORT_TRANSFORMER,
   $isComponentInfoNode,
 } from '@kanbain/ui/components/component-info-node';
-import { TABLE_TRANSFORMER } from '@kanbain/ui/lib/table-transformer';
+import {
+  MARKDOWN_TRANSFORMERS,
+  TABLE_TRANSFORMER,
+} from '@kanbain/ui/lib/table-transformer';
 import {
   WorkspaceContext as EditorWorkspaceContext,
   SessionContext,
@@ -465,7 +468,7 @@ const WYSIWYGEditor = forwardRef<WYSIWYGEditorRef, WysiwygProps>(
         PR_COMMENT_TRANSFORMER,
         COMPONENT_INFO_EXPORT_TRANSFORMER,
         COMPONENT_INFO_TRANSFORMER,
-        ...TRANSFORMERS,
+        ...MARKDOWN_TRANSFORMERS,
       ],
       [ATTACHMENT_TRANSFORMER, IMAGE_TRANSFORMER]
     );

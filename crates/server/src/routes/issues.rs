@@ -12,6 +12,7 @@ use db::models::{
     issue_description::IssueDescription,
     issue_event::IssueEvent,
     issue_relationship::{CreateIssueRelationship, IssueRelationship},
+    project_status::{ProjectStatus, ProjectStatusKind},
     project_tag::{IssueTag, ProjectTag},
 };
 use deployment::Deployment;
@@ -54,6 +55,7 @@ async fn update_issue(
         deployment.history().spawn_check(issue.id);
     }
     start_planning_on_status(&deployment, &before, &issue).await;
+    complete_subtask_on_done(&deployment, &before, &issue).await;
     Ok(ResponseJson(ApiResponse::success(issue)))
 }
 
@@ -77,6 +79,34 @@ pub(crate) async fn start_planning_on_status(
         Ok(false) => {}
         Err(e) => tracing::warn!("Checking ticket {} for planning failed: {e}", after.id),
     }
+}
+
+/// Dragging a sub-ticket into Done counts as "I fixed it": a failed or
+/// stopped subtask is merged and its ticket resumes. The merge runs in the
+/// background; if it fails, the sub-ticket goes back to Blocked with why.
+pub(crate) async fn complete_subtask_on_done(
+    deployment: &DeploymentImpl,
+    before: &Issue,
+    after: &Issue,
+) {
+    if after.parent_issue_id.is_none() || before.status_id == after.status_id {
+        return;
+    }
+    match ProjectStatus::find_by_id(&deployment.db().pool, after.status_id).await {
+        Ok(Some(status)) if status.kind == ProjectStatusKind::Done => {}
+        Ok(_) => return,
+        Err(e) => {
+            tracing::warn!("Looking up the status of ticket {} failed: {e}", after.id);
+            return;
+        }
+    }
+    let orchestrator = deployment.orchestrator().clone();
+    let issue = after.clone();
+    tokio::spawn(async move {
+        if let Err(e) = orchestrator.complete_subtask_by_hand(&issue).await {
+            tracing::warn!("Completing sub-ticket {} by hand failed: {e}", issue.id);
+        }
+    });
 }
 
 async fn delete_issue(

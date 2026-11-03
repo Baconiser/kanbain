@@ -30,6 +30,7 @@ pub mod claude_login;
 mod command;
 pub mod container;
 mod copy;
+pub mod environment;
 pub mod history;
 pub mod intake;
 pub mod jobs;

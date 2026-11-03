@@ -115,9 +115,104 @@ pub fn ticket_commit_message(id: &str, message: &str) -> String {
     }
 }
 
+/// Bullets past this get summarised as "…and N more"; a merge commit is a
+/// changelog, not a transcript.
+const MAX_CHANGELOG_ITEMS: usize = 20;
+
+/// Message for merging a finished workspace into its target branch:
+/// `<ID>: <subject>`, a blank line, one bullet per piece of work, and a
+/// trailer naming the workspace. Items that repeat the ticket id lose it,
+/// duplicates and empties are dropped.
+pub fn changelog_commit_message(
+    id: Option<&str>,
+    subject: &str,
+    items: &[String],
+    workspace_id: &str,
+) -> String {
+    let strip_id = |item: &str| -> String {
+        let item = item.trim();
+        match id {
+            Some(id) => {
+                let prefixed = ticket_commit_message(id, item);
+                if prefixed == item {
+                    // Already started with the id: drop it and the separator.
+                    item[id.len()..]
+                        .trim_start_matches([':', ' ', '-'])
+                        .to_string()
+                } else {
+                    item.to_string()
+                }
+            }
+            None => item.to_string(),
+        }
+    };
+    let mut seen = std::collections::HashSet::new();
+    let bullets: Vec<String> = items
+        .iter()
+        .map(|item| strip_id(item))
+        .filter(|item| !item.is_empty() && seen.insert(item.to_lowercase()))
+        .collect();
+
+    let mut message = match id {
+        Some(id) => ticket_commit_message(id, subject),
+        None => subject.trim().to_string(),
+    };
+    if !bullets.is_empty() {
+        message.push_str("\n\n");
+        for bullet in bullets.iter().take(MAX_CHANGELOG_ITEMS) {
+            message.push_str(&format!("- {bullet}\n"));
+        }
+        if bullets.len() > MAX_CHANGELOG_ITEMS {
+            message.push_str(&format!(
+                "- …and {} more\n",
+                bullets.len() - MAX_CHANGELOG_ITEMS
+            ));
+        }
+    } else {
+        message.push('\n');
+    }
+    message.push_str(&format!("\nKanbAIn-Workspace: {workspace_id}\n"));
+    message
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn changelog_message_lists_work_without_repeating_the_id() {
+        let items = vec![
+            "KAN-12: Add the 2D pipeline".to_string(),
+            "kan-12 - Wire up textures".to_string(),
+            "Add the 2D pipeline".to_string(),
+            "  ".to_string(),
+            "Fix KAN-120 lookups".to_string(),
+        ];
+        assert_eq!(
+            changelog_commit_message(Some("KAN-12"), "Render pipeline", &items, "ws-1"),
+            "KAN-12: Render pipeline\n\n\
+             - Add the 2D pipeline\n\
+             - Wire up textures\n\
+             - Fix KAN-120 lookups\n\
+             \nKanbAIn-Workspace: ws-1\n"
+        );
+    }
+
+    #[test]
+    fn changelog_message_without_items_or_ticket() {
+        assert_eq!(
+            changelog_commit_message(None, "my-branch", &[], "ws-1"),
+            "my-branch\n\nKanbAIn-Workspace: ws-1\n"
+        );
+    }
+
+    #[test]
+    fn changelog_message_caps_the_list() {
+        let items: Vec<String> = (1..=25).map(|n| format!("Item {n}")).collect();
+        let message = changelog_commit_message(Some("KAN-1"), "Big one", &items, "ws");
+        assert!(message.contains("- Item 20\n- …and 5 more\n"));
+        assert!(!message.contains("Item 21"));
+    }
 
     #[test]
     fn detects_jira_keys() {

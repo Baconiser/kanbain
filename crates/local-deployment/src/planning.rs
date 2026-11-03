@@ -123,7 +123,9 @@ pub fn planner_task(id: &str, title: &str, mode: IssueMode, prior_work: bool) ->
     let mut task = format!(
         "Plan the ticket {id}: \"{title}\".\n\n\
          Read these first (read-only):\n\
-         - /kanbain/context/ticket.md: the ticket.\n"
+         - /kanbain/context/ticket.md: the ticket.\n\
+         - /kanbain/context/environment.md: the project's stack and test commands; base \
+         the test strategy on them.\n"
     );
     if prior_work {
         task.push_str(

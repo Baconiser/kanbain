@@ -158,6 +158,8 @@ pub fn coder_task(id: &str, subtask: &PlanSubtask, n: usize, total: usize, rerun
          Read these first (read-only):\n\
          - /kanbain/context/subtask.md: this subtask, its files and what runs next to it.\n\
          - /kanbain/context/ticket.md: the ticket.\n\
+         - /kanbain/context/environment.md: the installed tools and this project's build \
+         and test commands.\n\
          - /kanbain/context/plan.json: the approved plan, for context only.\n\
          - /kanbain/context/related.md: code locations search found for this subtask. \
          Check it before exploring the code.\n",
@@ -1619,6 +1621,90 @@ impl OrchestratorService {
         self.tick_locked(row.issue_id).await?;
         drop(guard);
         self.view(row.issue_id).await
+    }
+
+    /// You fixed a failed or stopped subtask yourself and dragged its
+    /// sub-ticket to Done. Takes that at face value: commits whatever you left
+    /// uncommitted in the subtask's worktree, merges its branch into the
+    /// ticket branch like a finished coder run, and gets the ticket moving
+    /// again. Before this, Done was a lie the orchestrator never heard about
+    /// and the only way out was burning tokens on Retry.
+    pub async fn complete_subtask_by_hand(
+        &self,
+        sub_issue: &Issue,
+    ) -> Result<(), OrchestratorError> {
+        let Some(parent_id) = sub_issue.parent_issue_id else {
+            return Ok(());
+        };
+        let pool = &self.db.pool;
+        let lock = self.lock_for(parent_id);
+        let _guard = lock.lock().await;
+        let Some(row) = OrchestrationSubtask::find_by_issue(pool, parent_id)
+            .await?
+            .into_iter()
+            .find(|row| row.sub_issue_id == Some(sub_issue.id))
+        else {
+            return Ok(());
+        };
+        if !matches!(row.status, SubtaskStatus::Failed | SubtaskStatus::Stopped) {
+            return Ok(());
+        }
+
+        match row.workspace_id {
+            Some(workspace_id) => {
+                self.commit_hand_fixes(sub_issue, workspace_id).await?;
+                self.merge_locked(&row).await?;
+            }
+            // Never got a workspace, so there is no work to bring in.
+            None => {
+                OrchestrationSubtask::set_merged(pool, row.id, &BTreeMap::new()).await?;
+                self.event(
+                    parent_id,
+                    IssueEventType::SubtaskMerged,
+                    "user",
+                    json!({"subtask": row.plan_subtask_id, "commits": {}}),
+                )
+                .await;
+            }
+        }
+
+        // A failed merge already moved the sub-ticket back to Blocked with
+        // the reason; don't reopen a ticket that is still stuck.
+        let merged = OrchestrationSubtask::find_by_id(pool, row.id)
+            .await?
+            .is_some_and(|r| r.status == SubtaskStatus::Merged);
+        if !merged {
+            return Ok(());
+        }
+        let o = TicketOrchestration::find(pool, parent_id)
+            .await?
+            .ok_or(OrchestratorError::NotFound)?;
+        if o.status != OrchestrationStatus::Running {
+            self.reopen_locked(parent_id).await?;
+        }
+        self.tick_locked(parent_id).await
+    }
+
+    /// Commits uncommitted edits in every repo of a subtask's worktree.
+    async fn commit_hand_fixes(
+        &self,
+        sub_issue: &Issue,
+        workspace_id: Uuid,
+    ) -> Result<(), OrchestratorError> {
+        let pool = &self.db.pool;
+        let Some(ws) = Workspace::find_by_id(pool, workspace_id).await? else {
+            return Ok(());
+        };
+        let root = PathBuf::from(ws.container_ref.clone().unwrap_or_default());
+        let id = self.display_id(sub_issue).await;
+        let message = format!("{id}: Manual fix");
+        for repo in WorkspaceRepo::find_repos_for_workspace(pool, ws.id).await? {
+            let path = root.join(&repo.name);
+            if let Err(e) = self.git.commit(&path, &message) {
+                tracing::warn!("Committing hand fixes in {} failed: {e}", path.display());
+            }
+        }
+        Ok(())
     }
 
     pub async fn retry_ticket(

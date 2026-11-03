@@ -10,6 +10,7 @@ import {
 import type { AgentDefinition, ImportSummary } from 'shared/types';
 import { PrimaryButton } from '@kanbain/ui/components/PrimaryButton';
 import { agentLibraryApi } from '@/shared/lib/api';
+import { modelColor, roleColor } from '@/shared/lib/agents';
 import { cn } from '@/shared/lib/utils';
 import { useAppNavigation } from '@/shared/hooks/useAppNavigation';
 import {
@@ -248,9 +249,10 @@ function AgentsCard({ onClose }: { onClose?: () => void }) {
                 setOpen(agent.name === open ? null : agent.name);
               }}
               className={cn(
-                'flex w-full flex-wrap items-center gap-half px-base py-half text-left hover:bg-secondary',
+                'flex w-full flex-wrap items-center gap-half border-l-4 border-l-transparent px-base py-half text-left hover:bg-secondary',
                 agent.name === open && 'bg-brand/10'
               )}
+              style={def ? { borderLeftColor: roleColor(def.role) } : undefined}
             >
               <span className="font-mono text-sm text-high">{agent.name}</span>
               {def && (
@@ -261,7 +263,13 @@ function AgentsCard({ onClose }: { onClose?: () => void }) {
                   <TwoColumnPickerBadge variant="brand">
                     {t(`settings.agentLibrary.runtimes.${def.runtime}`)}
                   </TwoColumnPickerBadge>
-                  <span className="text-sm text-low">{def.model}</span>
+                  <span className="flex items-center gap-half text-sm text-normal">
+                    <span
+                      className="size-2 shrink-0 rounded-full"
+                      style={{ backgroundColor: modelColor(def.model) }}
+                    />
+                    {def.model}
+                  </span>
                 </>
               )}
               {problem && (
