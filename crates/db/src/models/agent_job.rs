@@ -20,7 +20,8 @@ pub enum AgentJobStatus {
     Failed,
 }
 
-/// A headless agent job without a repo (D34): intake or history analysis.
+/// A headless agent job (D34): intake or history analysis without a repo,
+/// or a setup scan of a project's repos.
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize, TS)]
 pub struct AgentJob {
     pub id: Uuid,
@@ -52,6 +53,7 @@ pub struct AgentJob {
 
 pub const JOB_KIND_INTAKE: &str = "intake";
 pub const JOB_KIND_HISTORY: &str = "history";
+pub const JOB_KIND_SETUP: &str = "setup";
 
 impl AgentJob {
     pub async fn create(

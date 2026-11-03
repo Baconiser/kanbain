@@ -29,6 +29,7 @@ import { repoApi } from '@/shared/lib/api';
 import { defineModal, getErrorMessage } from '@/shared/lib/modals';
 import { projectsApi } from '@/shared/lib/ticketsApi';
 import { useProjectBoard } from '@/shared/hooks/useTicketStreams';
+import { ProjectSetupScan } from './ProjectSetupScan';
 
 export interface ProjectSettingsDialogProps {
   /** Omit to create a new project. */
@@ -315,6 +316,18 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [sharedCargoTarget, setSharedCargoTarget] = useState(
       project?.settings.sandbox_shared_cargo_target ?? false
     );
+    const [testCommands, setTestCommands] = useState(
+      project?.settings.sandbox_test_commands.join('\n') ?? ''
+    );
+    const [runCommands, setRunCommands] = useState(
+      project?.settings.sandbox_run_commands.join('\n') ?? ''
+    );
+    const [environmentNotes, setEnvironmentNotes] = useState(
+      project?.settings.sandbox_environment_notes ?? ''
+    );
+    // What the server last said; an approved setup scan replaces it, so Save
+    // doesn't write the pre-approval settings back over it.
+    const [baseSettings, setBaseSettings] = useState(project?.settings);
     const [repos, setRepos] = useState<Repo[]>([]);
     const [saving, setSaving] = useState(false);
     const [confirmDelete, setConfirmDelete] = useState(false);
@@ -359,6 +372,16 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
       }
     };
 
+    const applyApprovedSetup = (approved: Project) => {
+      const s = approved.settings;
+      setBaseSettings(s);
+      setSetupCommands(s.sandbox_setup_commands ?? '');
+      setSetupSkipInstall(s.sandbox_setup_skip_install);
+      setTestCommands(s.sandbox_test_commands.join('\n'));
+      setRunCommands(s.sandbox_run_commands.join('\n'));
+      setEnvironmentNotes(s.sandbox_environment_notes ?? '');
+    };
+
     const save = async () => {
       if (!name.trim()) {
         setError('A project name is required.');
@@ -374,6 +397,7 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
               external_id_key: externalKey.trim() || null,
               external_id_pattern: externalPattern.trim() || null,
               settings: {
+                ...(baseSettings ?? project.settings),
                 history_always_allow: historyAlwaysAllow,
                 allow_remote_code_embedding: remoteCode,
                 search_exclude_globs: searchExcludes
@@ -392,6 +416,15 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                 sandbox_setup_commands: setupCommands.trim() || null,
                 sandbox_setup_skip_install: setupSkipInstall,
                 sandbox_shared_cargo_target: sharedCargoTarget,
+                sandbox_test_commands: testCommands
+                  .split('\n')
+                  .map((c) => c.trim())
+                  .filter(Boolean),
+                sandbox_run_commands: runCommands
+                  .split('\n')
+                  .map((c) => c.trim())
+                  .filter(Boolean),
+                sandbox_environment_notes: environmentNotes.trim() || null,
               },
             })
           : await projectsApi.create({
@@ -547,6 +580,13 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                     onChange={(e) => setSandboxDockerfile(e.target.value)}
                   />
                 </div>
+                {project && (
+                  <ProjectSetupScan
+                    projectId={project.id}
+                    onApproved={applyApprovedSetup}
+                    onError={setError}
+                  />
+                )}
                 <div className="col-span-2 flex flex-col gap-half">
                   <Label htmlFor="project-setup-commands">
                     Sandbox setup commands (run after the dependency installs,
@@ -584,6 +624,41 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   Share one cargo target dir across this project’s sandbox runs
                   (applies to new sandbox containers)
                 </label>
+                <div className="flex flex-col gap-half">
+                  <Label htmlFor="project-test-commands">
+                    Test commands (one per line)
+                  </Label>
+                  <textarea
+                    id="project-test-commands"
+                    className="min-h-12 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder="cd /workspace/web && pnpm test"
+                    value={testCommands}
+                    onChange={(e) => setTestCommands(e.target.value)}
+                  />
+                </div>
+                <div className="flex flex-col gap-half">
+                  <Label htmlFor="project-run-commands">
+                    Build and run commands
+                  </Label>
+                  <textarea
+                    id="project-run-commands"
+                    className="min-h-12 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    placeholder="cd /workspace/web && pnpm dev"
+                    value={runCommands}
+                    onChange={(e) => setRunCommands(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label htmlFor="project-environment-notes">
+                    Environment notes (added to every agent’s environment.md)
+                  </Label>
+                  <textarea
+                    id="project-environment-notes"
+                    className="min-h-16 rounded-sm border border-border bg-secondary px-base py-half font-mono text-sm"
+                    value={environmentNotes}
+                    onChange={(e) => setEnvironmentNotes(e.target.value)}
+                  />
+                </div>
               </div>
             )}
 

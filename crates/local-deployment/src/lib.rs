@@ -41,6 +41,7 @@ pub mod project_setup;
 pub mod pty;
 pub mod sandbox;
 pub mod search;
+pub mod setup_scan;
 
 #[derive(Clone)]
 pub struct LocalDeployment {
@@ -67,6 +68,7 @@ pub struct LocalDeployment {
     jobs: jobs::AgentJobs,
     intake: intake::IntakeService,
     history: history::HistoryService,
+    setup_scan: setup_scan::SetupScanService,
     planning: planning::PlanningService,
     orchestrator: orchestrator::OrchestratorService,
     search: Option<embeddings::SearchService>,
@@ -203,6 +205,11 @@ impl Deployment for LocalDeployment {
         if let Err(e) = db::models::plan::IssuePlanning::fail_interrupted(&db.pool).await {
             tracing::warn!("Closing interrupted planner runs failed: {e}");
         }
+        if let Err(e) =
+            db::models::project_setup_scan::ProjectSetupScan::fail_interrupted(&db.pool).await
+        {
+            tracing::warn!("Closing interrupted setup scans failed: {e}");
+        }
         // Coder runs of running tickets start again once the server is up
         // (`OrchestratorService::resume`).
         if let Err(e) =
@@ -262,6 +269,13 @@ impl Deployment for LocalDeployment {
             planning.clone(),
         );
         container.set_orchestrator(orchestrator.clone());
+        let setup_scan = setup_scan::SetupScanService::new(
+            db.clone(),
+            container.clone(),
+            git.clone(),
+            jobs.clone(),
+        );
+        container.set_setup_scan(setup_scan.clone());
 
         let search_config = config.read().await.search.clone();
         let search = search::start_search(
@@ -318,6 +332,7 @@ impl Deployment for LocalDeployment {
             jobs,
             intake,
             history,
+            setup_scan,
             planning,
             orchestrator,
             search,
@@ -432,6 +447,10 @@ impl LocalDeployment {
 
     pub fn history(&self) -> &history::HistoryService {
         &self.history
+    }
+
+    pub fn setup_scan(&self) -> &setup_scan::SetupScanService {
+        &self.setup_scan
     }
 
     pub fn planning(&self) -> &planning::PlanningService {

@@ -249,6 +249,18 @@ pub fn default_agents() -> Vec<AgentDefinition> {
              edge cases, and style issues. Do not change code.",
             vec![Read, Search],
         ),
+        agent(
+            "setup",
+            Setup,
+            "sonnet",
+            "Scans a project and proposes its sandbox setup.",
+            "You work out how to set up a project in KanbAIn's sandbox. Read the repositories \
+             in /workspace (manifests, lockfiles, toolchain files, CI workflows, READMEs, \
+             Dockerfiles) and look things up on the web when you need to. Then write the \
+             setup script, the test and run commands and the environment notes described in \
+             your task to /kanbain/out. Do not change code.",
+            vec![Read, Web],
+        ),
     ]
 }
 

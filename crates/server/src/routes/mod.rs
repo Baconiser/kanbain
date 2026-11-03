@@ -31,6 +31,7 @@ pub mod sandbox;
 pub mod scratch;
 pub mod search;
 pub mod sessions;
+pub mod setup_scan;
 pub mod tags;
 pub mod terminal;
 pub mod workspaces;
@@ -50,6 +51,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(intake::router())
         .merge(history::router())
         .merge(plans::router())
+        .merge(setup_scan::router())
         .merge(orchestration::router())
         .merge(logs::router())
         .merge(search::router())

@@ -11,6 +11,7 @@ use super::{
     issue_comment::{CreateIssueComment, IssueComment, USER_AUTHOR},
     issue_relationship::{CreateIssueRelationship, IssueRelationship, IssueRelationshipType},
     project::{CreateProject, Project, UpdateProject},
+    project_setup_scan::{ProjectSetupScan, SetupProposal, SetupScanStatus},
     project_status::{DEFAULT_STATUSES, ProjectStatus, ProjectStatusKind},
     project_tag::{CreateProjectTag, IssueTag, ProjectTag},
 };
@@ -927,4 +928,61 @@ async fn checkpoints_and_issues_found_track_the_fix_loop() {
             .unwrap(),
         1
     );
+}
+
+#[tokio::test]
+async fn setup_scan_lifecycle() {
+    let pool = pool().await;
+    let p = project(&pool, None).await;
+    assert!(ProjectSetupScan::find(&pool, p.id).await.unwrap().is_none());
+
+    assert!(ProjectSetupScan::begin(&pool, p.id, "s1").await.unwrap());
+    // One scan at a time.
+    assert!(!ProjectSetupScan::begin(&pool, p.id, "s2").await.unwrap());
+    // Nothing to decide while it scans.
+    assert!(
+        !ProjectSetupScan::decide(&pool, p.id, SetupScanStatus::Discarded, None)
+            .await
+            .unwrap()
+    );
+
+    let proposal = SetupProposal {
+        setup_script: "pnpm run codegen".into(),
+        test_commands: vec!["pnpm test".into()],
+        run_commands: vec!["pnpm dev".into()],
+        environment_md: "notes".into(),
+        skip_auto_install: true,
+    };
+    ProjectSetupScan::set_ready(&pool, p.id, &proposal, Some("done"))
+        .await
+        .unwrap();
+    let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(scan.status, SetupScanStatus::Ready);
+    assert_eq!(scan.proposal(), proposal);
+    assert_eq!(scan.stack_hash, "s1");
+    assert!(scan.finished_at.is_some());
+
+    let edited = SetupProposal {
+        test_commands: vec!["pnpm test --run".into()],
+        ..proposal.clone()
+    };
+    assert!(
+        ProjectSetupScan::decide(&pool, p.id, SetupScanStatus::Approved, Some(&edited))
+            .await
+            .unwrap()
+    );
+    let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(scan.status, SetupScanStatus::Approved);
+    assert_eq!(scan.test_commands.0, vec!["pnpm test --run"]);
+    assert!(scan.decided_at.is_some());
+
+    // A new scan replaces the old proposal; a restart fails it.
+    assert!(ProjectSetupScan::begin(&pool, p.id, "s2").await.unwrap());
+    let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(scan.status, SetupScanStatus::Scanning);
+    assert!(scan.setup_script.is_none() && scan.decided_at.is_none());
+    assert_eq!(ProjectSetupScan::fail_interrupted(&pool).await.unwrap(), 1);
+    let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(scan.status, SetupScanStatus::Failed);
+    assert_eq!(scan.error.as_deref(), Some("Interrupted by an app restart"));
 }

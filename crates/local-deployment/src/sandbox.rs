@@ -173,6 +173,39 @@ pub struct JobRun<'a> {
     pub project: Option<&'a Project>,
     pub budget_usd: Option<f64>,
     pub timeout: std::time::Duration,
+    /// Repos cloned to `/workspace/<name>` before the agent starts, as
+    /// `(name, host checkout, branch)`. The agent then runs from
+    /// `/workspace`. Empty for intake and history, which get no code.
+    pub repos: Vec<(String, PathBuf, String)>,
+}
+
+/// What a headless job handed in.
+#[derive(Debug, Clone, Default)]
+pub struct JobOutput {
+    /// The agent's final message.
+    pub message: String,
+    /// Files it wrote to `/kanbain/out`, by path relative to it.
+    pub files: serde_json::Map<String, serde_json::Value>,
+}
+
+/// `/kanbain/out` as copied out of a container: paths relative to it, text
+/// capped at [`MAX_HARVEST_BYTES`].
+fn harvest_files(files: Vec<(String, Vec<u8>)>) -> serde_json::Map<String, serde_json::Value> {
+    files
+        .into_iter()
+        .map(|(path, contents)| {
+            let path = path.strip_prefix("out/").unwrap_or(&path).to_string();
+            let mut text = String::from_utf8_lossy(&contents).into_owned();
+            if text.len() > MAX_HARVEST_BYTES {
+                let mut cut = MAX_HARVEST_BYTES;
+                while !text.is_char_boundary(cut) {
+                    cut -= 1;
+                }
+                text.truncate(cut);
+            }
+            (path, serde_json::Value::String(text))
+        })
+        .collect()
 }
 
 /// One run to prepare in a workspace container.
@@ -672,8 +705,12 @@ impl SandboxRuntime {
                 issue.description.as_deref().unwrap_or("")
             );
             let custom_image = image != base_tag;
-            let environment =
-                crate::environment::environment_md(&repo_roots, custom_image, Some(&setup));
+            let environment = crate::environment::environment_md(
+                &repo_roots,
+                custom_image,
+                Some(&setup),
+                run.project.map(|p| &*p.settings),
+            );
             let mut files = vec![
                 FileEntry::new("ticket.md", ticket).owned_by_root(),
                 FileEntry::new("environment.md", environment).owned_by_root(),
@@ -741,8 +778,9 @@ impl SandboxRuntime {
     /// agent's files, `context` under `/kanbain/context` and the task as
     /// `task.md`. The container takes a concurrency slot, reaches only the
     /// model proxy (and package registries through the egress proxy), and is
-    /// removed afterwards. Returns the agent's final message.
-    pub async fn run_job(&self, job: JobRun<'_>) -> Result<String, SandboxRunError> {
+    /// removed afterwards. Returns the agent's final message and whatever it
+    /// wrote to `/kanbain/out`.
+    pub async fn run_job(&self, job: JobRun<'_>) -> Result<JobOutput, SandboxRunError> {
         let base_tag = self.ensure_image_and_gateway(&|_| {}).await?;
         let image = self.image_for(job.project, &base_tag, &|_| {}).await?;
         let ready = self.ready()?;
@@ -787,16 +825,42 @@ impl SandboxRuntime {
             .proxy
             .issue_token(job.job_id, job.budget_usd, 0.0);
         let egress_token = random_token("kbj-");
+        // A job that reads the project's code may look up what the project
+        // itself is allowed to reach; one without code gets the registries.
+        let allowed = match job.project {
+            Some(project) if !job.repos.is_empty() => {
+                let mut allowed = self
+                    .inner
+                    .config
+                    .read()
+                    .await
+                    .sandbox
+                    .allowed_domains
+                    .clone();
+                allowed.extend(project.settings.sandbox_allowed_domains.iter().cloned());
+                allowed
+            }
+            _ => Vec::new(),
+        };
         self.inner.egress_grants.write().unwrap().insert(
             egress_token.clone(),
             EgressGrant {
                 run_id: job.job_id,
-                allowlist: Allowlist::with_defaults(Vec::<String>::new()),
+                allowlist: Allowlist::with_defaults(allowed),
             },
         );
 
-        let result: Result<String, SandboxRunError> = async {
+        let result: Result<JobOutput, SandboxRunError> = async {
             self.install_agent(&container, job.launch).await?;
+            for (name, host_checkout, branch) in &job.repos {
+                transfer::push_branch(&ready.docker, &container, host_checkout, name, branch)
+                    .await?;
+            }
+            let working_dir = if job.repos.is_empty() {
+                OUT_DIR
+            } else {
+                WORKSPACE_DIR
+            };
             let mut files: Vec<FileEntry> = job
                 .context
                 .iter()
@@ -845,7 +909,7 @@ impl SandboxRuntime {
                     &argv_refs,
                     &ExecOptions {
                         user: Some(AGENT_USER.into()),
-                        working_dir: Some(OUT_DIR.into()),
+                        working_dir: Some(working_dir.into()),
                         env,
                     },
                 ),
@@ -859,7 +923,16 @@ impl SandboxRuntime {
             })??;
             let stdout = output.stdout_str();
             match headless::parse_headless_output(job.launch.executor, &stdout) {
-                Ok(text) => Ok(text),
+                Ok(message) => {
+                    // An empty out dir is the normal case for intake/history.
+                    let files = ready
+                        .docker
+                        .copy_out(&container, OUT_DIR)
+                        .await
+                        .map(harvest_files)
+                        .unwrap_or_default();
+                    Ok(JobOutput { message, files })
+                }
                 Err(e) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
                     let tail: String = stderr
@@ -1224,21 +1297,7 @@ impl SandboxRuntime {
         if let Ok(files) = ready.docker.copy_out(container, OUT_DIR).await
             && !files.is_empty()
         {
-            let files: serde_json::Map<String, serde_json::Value> = files
-                .into_iter()
-                .map(|(path, contents)| {
-                    let path = path.strip_prefix("out/").unwrap_or(&path).to_string();
-                    let mut text = String::from_utf8_lossy(&contents).into_owned();
-                    if text.len() > MAX_HARVEST_BYTES {
-                        let mut cut = MAX_HARVEST_BYTES;
-                        while !text.is_char_boundary(cut) {
-                            cut -= 1;
-                        }
-                        text.truncate(cut);
-                    }
-                    (path, serde_json::Value::String(text))
-                })
-                .collect();
+            let files = harvest_files(files);
             let _ = ExecutionProcessEvent::create(
                 pool,
                 execution_id,

@@ -40,6 +40,24 @@ sandbox_setup_skip_install: boolean,
  */
 sandbox_shared_cargo_target: boolean, 
 /**
+ * Commands that test the project, from the approved setup scan.
+ * environment.md hands them to every agent.
+ */
+sandbox_test_commands: Array<string>, 
+/**
+ * Commands that build or run the project (dev server, CLI).
+ */
+sandbox_run_commands: Array<string>, 
+/**
+ * Project notes appended to every run's environment.md.
+ */
+sandbox_environment_notes: string | null, 
+/**
+ * Stack fingerprint of the repos when the setup was approved. A run
+ * that sees another one starts a new setup scan.
+ */
+sandbox_setup_stack: string | null, 
+/**
  * Let code go to a code embedder that is not on this machine or its
  * private network (E9). Off by default.
  */
@@ -212,6 +230,42 @@ export type BoardPlanning = { issue_id: string, project_id: string, status: Plan
 export type PlanningView = { planning: IssuePlanning | null, plans: Array<Plan>, };
 
 export type SendBackPlanRequest = { feedback: string, };
+
+export type SetupScanStatus = "scanning" | "ready" | "failed" | "approved" | "discarded";
+
+export type SetupProposal = { 
+/**
+ * Extra setup commands, run after KanbAIn's lockfile installs.
+ */
+setup_script: string, test_commands: Array<string>, run_commands: Array<string>, environment_md: string, 
+/**
+ * Skip KanbAIn's own lockfile installs; the script does it all.
+ */
+skip_auto_install: boolean, };
+
+export type ProjectSetupScan = { project_id: string, status: SetupScanStatus, job_id: string | null, setup_script: string | null, test_commands: string[], run_commands: string[], environment_md: string | null, skip_auto_install: boolean, summary: string | null, stack_hash: string, error: string | null, started_at: string, finished_at: string | null, decided_at: string | null, };
+
+export type SetupScanView = { scan: ProjectSetupScan | null, 
+/**
+ * The repos' stack differs from the one the approved setup was made
+ * for. `false` when nothing was approved yet.
+ */
+stack_changed: boolean, 
+/**
+ * What KanbAIn installs by itself, as `[repo] command`.
+ */
+auto_steps: Array<string>, };
+
+export type SetupScanResponse = { job: AgentJob | null, scan: ProjectSetupScan | null, 
+/**
+ * The repos' stack differs from the one the approved setup was made
+ * for. `false` when nothing was approved yet.
+ */
+stack_changed: boolean, 
+/**
+ * What KanbAIn installs by itself, as `[repo] command`.
+ */
+auto_steps: Array<string>, };
 
 export type OrchestrationStatus = "running" | "stopped" | "blocked" | "done";
 
@@ -1064,7 +1118,7 @@ claude_account_connected: boolean, openai_key_configured: boolean,
  */
 custom_provider_count: number, running_containers: number, };
 
-export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history" | "conflict_resolver" | "reviewer";
+export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history" | "conflict_resolver" | "reviewer" | "setup";
 
 export type AgentRuntime = "claude-code" | "opencode";
 

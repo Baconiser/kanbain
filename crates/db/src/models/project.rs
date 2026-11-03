@@ -37,6 +37,20 @@ pub struct ProjectSettings {
     /// (`CARGO_TARGET_DIR`). Parallel runs queue on cargo's lock.
     #[serde(default)]
     pub sandbox_shared_cargo_target: bool,
+    /// Commands that test the project, from the approved setup scan.
+    /// environment.md hands them to every agent.
+    #[serde(default)]
+    pub sandbox_test_commands: Vec<String>,
+    /// Commands that build or run the project (dev server, CLI).
+    #[serde(default)]
+    pub sandbox_run_commands: Vec<String>,
+    /// Project notes appended to every run's environment.md.
+    #[serde(default)]
+    pub sandbox_environment_notes: Option<String>,
+    /// Stack fingerprint of the repos when the setup was approved. A run
+    /// that sees another one starts a new setup scan.
+    #[serde(default)]
+    pub sandbox_setup_stack: Option<String>,
     /// Let code go to a code embedder that is not on this machine or its
     /// private network (E9). Off by default.
     #[serde(default)]

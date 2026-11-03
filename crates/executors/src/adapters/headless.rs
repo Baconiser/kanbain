@@ -1,6 +1,7 @@
 //! Headless one-shot runs (D34): intake and history jobs run an agent
 //! definition without a repo or tools, send the task as the first message
-//! and take the agent's final message as the result.
+//! and take the agent's final message as the result. The setup scan is the
+//! one job with tools (read + web, writes fenced to `/kanbain/out`).
 
 use serde_json::Value;
 
@@ -28,6 +29,17 @@ pub fn headless_command(launch: &AgentLaunch, task_file: &str) -> Vec<String> {
             launch.model.clone(),
         ]);
         argv.extend(launch.args.iter().cloned());
+        // `-p` can't answer permission prompts, so a job with tools would
+        // get every Write and WebFetch denied. The container is the sandbox
+        // and the PreToolUse fences still run under bypass, same deal as a
+        // workspace run with the `auto` policy.
+        if launch
+            .args
+            .iter()
+            .any(|a| a.starts_with("--tools=") && a != "--tools=")
+        {
+            argv.push("--permission-mode=bypassPermissions".into());
+        }
     } else {
         argv.extend([
             "npx".into(),
@@ -203,6 +215,15 @@ mod tests {
         );
         assert!(argv.contains(&"-p".to_string()));
         assert!(argv.ends_with(&["haiku".to_string(), "--tools=".to_string()]));
+    }
+
+    #[test]
+    fn claude_jobs_with_tools_skip_permission_prompts() {
+        let mut l = launch(BaseCodingAgent::ClaudeCode);
+        let bypass = "--permission-mode=bypassPermissions".to_string();
+        assert!(!headless_command(&l, "/t.md").contains(&bypass));
+        l.args = vec!["--tools=Read,Glob,Write".into()];
+        assert!(headless_command(&l, "/t.md").contains(&bypass));
     }
 
     #[test]

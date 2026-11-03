@@ -329,8 +329,10 @@ impl IntakeService {
                 issue_id: None,
                 context,
                 task,
+                repos: Vec::new(),
             })
             .await;
+        let result = result.map(|output| output.message);
         if let Some(job_id) = job_id {
             TicketIntake::set_job(pool, intake_id, job_id).await?;
         }

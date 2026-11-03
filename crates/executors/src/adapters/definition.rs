@@ -36,6 +36,8 @@ pub enum AgentRole {
     ConflictResolver,
     /// Reviews a branch's changes and reports feedback.
     Reviewer,
+    /// Scans a project and proposes its sandbox setup.
+    Setup,
 }
 
 /// Which CLI runs the agent.

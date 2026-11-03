@@ -18,6 +18,7 @@ pub mod merge;
 pub mod orchestration;
 pub mod plan;
 pub mod project;
+pub mod project_setup_scan;
 pub mod project_status;
 pub mod project_tag;
 pub mod pull_request;

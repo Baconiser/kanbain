@@ -378,8 +378,10 @@ impl HistoryService {
                 issue_id: Some(issue_id),
                 context,
                 task,
+                repos: Vec::new(),
             })
             .await;
+        let result = result.map(|output| output.message);
         let job = match job_id {
             Some(id) => db::models::agent_job::AgentJob::find_by_id(pool, id).await?,
             None => None,

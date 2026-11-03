@@ -10,6 +10,9 @@ import type {
   SearchRequest,
   SearchResults,
   SetSearchKey,
+  SetupProposal,
+  SetupScanResponse,
+  ProjectSetupScan,
   TestEmbedderRequest,
   TestRerankerRequest,
   AttachmentResponse,
@@ -101,6 +104,18 @@ export const projectsApi = {
     request<Issue | null>(
       `/api/projects/${id}/issues/by-external-id?external_id=${encodeURIComponent(externalId)}`
     ),
+  setupScan: (id: string) =>
+    request<SetupScanResponse>(`/api/projects/${id}/setup-scan`),
+  startSetupScan: (id: string) =>
+    request<ProjectSetupScan>(`/api/projects/${id}/setup-scan/start`, 'POST'),
+  approveSetupScan: (id: string, proposal: SetupProposal) =>
+    request<Project>(
+      `/api/projects/${id}/setup-scan/approve`,
+      'POST',
+      proposal
+    ),
+  discardSetupScan: (id: string) =>
+    request<void>(`/api/projects/${id}/setup-scan/discard`, 'POST'),
   detectExternalId: (id: string, text: string) =>
     request<string | null>(`/api/projects/${id}/detect-external-id`, 'POST', {
       text,

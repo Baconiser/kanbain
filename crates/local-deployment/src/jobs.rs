@@ -1,6 +1,7 @@
 //! Headless agent jobs (D34): intake and history analysis run an agent
 //! definition of the matching role in a throwaway sandbox container with no
-//! repo and no tools.
+//! repo and no tools. The setup scan gets the project's repos and its
+//! agent's tools.
 
 use std::{sync::Arc, time::Duration};
 
@@ -12,7 +13,7 @@ use executors::adapters::{AgentRole, RunSettings, adapter_for};
 use services::services::agent_library::AgentLibrary;
 use uuid::Uuid;
 
-use crate::sandbox::{JobRun, SandboxRuntime};
+use crate::sandbox::{JobOutput, JobRun, SandboxRuntime};
 
 /// Spend limit when the agent definition sets none.
 const DEFAULT_JOB_BUDGET_USD: f64 = 0.5;
@@ -30,6 +31,9 @@ pub struct JobRequest {
     /// The first message, with everything the agent needs inline (it has no
     /// tools to read files).
     pub task: String,
+    /// Repos to clone into the job container, `(name, host checkout,
+    /// branch)`.
+    pub repos: Vec<(String, std::path::PathBuf, String)>,
 }
 
 #[derive(Clone)]
@@ -59,8 +63,8 @@ impl AgentJobs {
     }
 
     /// Creates the job row and runs it to completion. The job row records the
-    /// outcome; the result is the agent's final message.
-    pub async fn run(&self, request: JobRequest) -> (Option<Uuid>, Result<String, String>) {
+    /// outcome; the result is the agent's final message and out files.
+    pub async fn run(&self, request: JobRequest) -> (Option<Uuid>, Result<JobOutput, String>) {
         let pool = &self.db.pool;
         let agent = match self.agent_name_for(request.role).await {
             Ok(name) => match self.library.resolve(&name).await {
@@ -105,13 +109,14 @@ impl AgentJobs {
                     project: request.project.as_ref(),
                     budget_usd: Some(budget),
                     timeout: Duration::from_secs(u64::from(minutes) * 60),
+                    repos: request.repos,
                 })
                 .await
                 .map_err(|e| e.to_string())
         };
 
         let (output, error) = match &result {
-            Ok(text) => (Some(text.as_str()), None),
+            Ok(output) => (Some(output.message.as_str()), None),
             Err(e) => (None, Some(e.as_str())),
         };
         if let Err(e) = AgentJob::finish(pool, job.id, output, error).await {

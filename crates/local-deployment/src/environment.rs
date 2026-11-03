@@ -4,13 +4,18 @@
 //! for `rustup` it was never going to get.
 //!
 //! Detection is plain file checks on the host worktree; no agent, no network.
+//! On top of that comes whatever the user approved from the setup agent
+//! ([`crate::setup_scan`]): the project's real test and run commands and its
+//! notes, which beat our lockfile guesses every time.
 
 use std::path::{Path, PathBuf};
+
+use db::models::project::ProjectSettings;
 
 use crate::project_setup::{SetupOutcome, SetupReport};
 
 /// What the base image (`docker/agent/Dockerfile`) ships.
-const BASE_IMAGE_TOOLS: &str = "\
+pub(crate) const BASE_IMAGE_TOOLS: &str = "\
 - Node.js 22 with npm, pnpm and yarn (through `corepack`)\n\
 - Python 3 with pip and venv\n\
 - Rust stable (minimal profile) with cargo, clippy and rustfmt\n\
@@ -90,11 +95,13 @@ fn detect(root: &Path) -> RepoStack {
 
 /// Markdown for `/kanbain/context/environment.md`. `repos` are
 /// `(name, host worktree)` pairs; the agent sees each at `/workspace/<name>`.
-/// `setup` is what project setup did before this run.
+/// `setup` is what project setup did before this run; `settings` brings the
+/// approved setup scan's commands and notes.
 pub fn environment_md(
     repos: &[(String, PathBuf)],
     custom_image: bool,
     setup: Option<&SetupReport>,
+    settings: Option<&ProjectSettings>,
 ) -> String {
     let mut md = String::from("# Sandbox environment\n\n## Installed tools\n\n");
     md.push_str(BASE_IMAGE_TOOLS);
@@ -131,6 +138,9 @@ pub fn environment_md(
     if let Some(setup) = setup {
         md.push_str(&setup_md(setup));
     }
+    if let Some(settings) = settings {
+        md.push_str(&project_md(settings));
+    }
 
     md.push_str(
         "\n## Rules\n\n\
@@ -140,6 +150,42 @@ pub fn environment_md(
          Say exactly what is missing (e.g. \"`cargo component` is not installed\") in \
          your result and stop that line of work.\n",
     );
+    md
+}
+
+/// The approved project commands and notes. Empty when nothing was
+/// approved, so the detected guesses above stand alone.
+fn project_md(settings: &ProjectSettings) -> String {
+    let notes = settings
+        .sandbox_environment_notes
+        .as_deref()
+        .map(str::trim)
+        .filter(|n| !n.is_empty());
+    if settings.sandbox_test_commands.is_empty()
+        && settings.sandbox_run_commands.is_empty()
+        && notes.is_none()
+    {
+        return String::new();
+    }
+    let mut md = String::from(
+        "\n## Project commands\n\n\
+         Reviewed by the project's owner; prefer them over the detected ones above.\n",
+    );
+    for (title, commands) in [
+        ("Test", &settings.sandbox_test_commands),
+        ("Build and run", &settings.sandbox_run_commands),
+    ] {
+        if commands.is_empty() {
+            continue;
+        }
+        md.push_str(&format!(
+            "\n{title}:\n\n```sh\n{}\n```\n",
+            commands.join("\n")
+        ));
+    }
+    if let Some(notes) = notes {
+        md.push_str(&format!("\n## Project notes\n\n{notes}\n"));
+    }
     md
 }
 
@@ -232,6 +278,7 @@ mod tests {
             ],
             true,
             None,
+            None,
         );
         assert!(md.contains("### /workspace/docs\n\nNo known build system detected."));
         assert!(md.contains("### /workspace/api\n\n- Stack: Go\n- Test commands: `go test ./...`"));
@@ -260,7 +307,7 @@ mod tests {
             plan: plan.clone(),
             outcome: SetupOutcome::Ran,
         };
-        let md = environment_md(&repos, false, Some(&ok));
+        let md = environment_md(&repos, false, Some(&ok), None);
         assert!(md.contains("- `/workspace/web`: `npm ci`"));
         assert!(md.contains("cargo install cargo-component"));
         assert!(md.contains("Status: succeeded"));
@@ -273,9 +320,28 @@ mod tests {
                 tail: "npm ERR! boom".into(),
             },
         };
-        let md = environment_md(&repos, false, Some(&failed));
+        let md = environment_md(&repos, false, Some(&failed), None);
         assert!(md.contains("Status: **failed** ([/workspace/web] npm ci)"));
         assert!(md.contains("npm ERR! boom"));
         assert!(md.contains("node_modules"));
+    }
+
+    #[test]
+    fn approved_commands_and_notes_are_listed() {
+        let none = environment_md(&[], false, None, Some(&ProjectSettings::default()));
+        assert!(!none.contains("## Project commands"));
+
+        let settings = ProjectSettings {
+            sandbox_test_commands: vec!["cd /workspace/web && pnpm test".into()],
+            sandbox_run_commands: vec!["cd /workspace/web && pnpm dev".into()],
+            sandbox_environment_notes: Some("No Postgres in the sandbox.".into()),
+            ..Default::default()
+        };
+        let md = environment_md(&[], false, None, Some(&settings));
+        assert!(md.contains("Test:\n\n```sh\ncd /workspace/web && pnpm test\n```"));
+        assert!(md.contains("Build and run:\n\n```sh\ncd /workspace/web && pnpm dev\n```"));
+        assert!(md.contains("## Project notes\n\nNo Postgres in the sandbox."));
+        // The rules stay last.
+        assert!(md.find("## Project notes").unwrap() < md.find("## Rules").unwrap());
     }
 }

@@ -104,6 +104,9 @@ pub struct LocalContainerService {
     /// Set once the deployment is built; finished coder runs move the
     /// orchestrator on (Phase 5).
     orchestrator: Arc<std::sync::OnceLock<crate::orchestrator::OrchestratorService>>,
+    /// Set once the deployment is built; agent runs notice a changed stack
+    /// and rescan the project's sandbox setup.
+    setup_scan: Arc<std::sync::OnceLock<crate::setup_scan::SetupScanService>>,
     /// When each time-limited run gets stopped; extending moves it (D28).
     run_deadlines: Arc<std::sync::Mutex<HashMap<Uuid, DateTime<Utc>>>>,
 }
@@ -155,6 +158,7 @@ impl LocalContainerService {
             history: Arc::default(),
             planning: Arc::default(),
             orchestrator: Arc::default(),
+            setup_scan: Arc::default(),
             run_deadlines: Arc::default(),
         };
 
@@ -316,6 +320,10 @@ impl LocalContainerService {
 
     pub fn set_orchestrator(&self, orchestrator: crate::orchestrator::OrchestratorService) {
         let _ = self.orchestrator.set(orchestrator);
+    }
+
+    pub fn set_setup_scan(&self, setup_scan: crate::setup_scan::SetupScanService) {
+        let _ = self.setup_scan.set(setup_scan);
     }
 
     /// Re-check a ticket's git history in the background (D18): at run
@@ -481,6 +489,9 @@ impl LocalContainerService {
         let log = move |line: String| Self::push_run_note(store.as_ref(), &line);
         if agent_run {
             self.spawn_history_check(issue.as_ref().map(|i| i.id));
+            if let (Some(project), Some(setup_scan)) = (&project, self.setup_scan.get()) {
+                setup_scan.spawn_refresh_if_stale(project.id);
+            }
         }
         let prior_work = match &issue {
             Some(issue) => IssueHistory::find(pool, issue.id)
