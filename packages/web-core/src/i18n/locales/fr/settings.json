@@ -786,7 +786,8 @@
         "intake": "Réception",
         "history": "Historique",
         "conflict_resolver": "Résolution de conflits",
-        "reviewer": "Relecteur"
+        "reviewer": "Relecteur",
+        "triage": "Tri"
       },
       "runtimes": {
         "claude-code": "Claude Code",
@@ -798,7 +799,7 @@
         "bash": "Toute commande shell",
         "test": "Commandes de test uniquement",
         "web": "Accès web",
-        "search": "Rechercher dans le projet (KanbAIn)"
+        "search": "Rechercher dans le projet et signaler des problèmes (KanbAIn)"
       },
       "styles": {
         "title": "Blocs de style",

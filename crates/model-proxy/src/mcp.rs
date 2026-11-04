@@ -79,8 +79,11 @@ pub(crate) async fn mcp_handler(
                     "protocolVersion": version,
                     "capabilities": { "tools": { "listChanged": false } },
                     "serverInfo": { "name": "kanbain", "version": env!("CARGO_PKG_VERSION") },
-                    "instructions": "KanbAIn's search over this project's tickets, past runs and code. \
-                                     Search before exploring files, then read only the returned line ranges."
+                    "instructions": "KanbAIn's tools for this run. search_knowledge searches this \
+                                     project's tickets, past runs and code: search before exploring \
+                                     files, then read only the returned line ranges. report_problem \
+                                     files a bug you noticed outside your task as a Backlog ticket, \
+                                     unless a similar ticket exists."
                 }),
             )
         }

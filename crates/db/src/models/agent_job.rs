@@ -54,6 +54,8 @@ pub struct AgentJob {
 pub const JOB_KIND_INTAKE: &str = "intake";
 pub const JOB_KIND_HISTORY: &str = "history";
 pub const JOB_KIND_SETUP: &str = "setup";
+/// Files a problem a run reported, unless a ticket already covers it.
+pub const JOB_KIND_TRIAGE: &str = "triage";
 
 impl AgentJob {
     pub async fn create(

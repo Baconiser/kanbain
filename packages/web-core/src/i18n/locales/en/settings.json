@@ -786,7 +786,8 @@
         "intake": "Intake",
         "history": "History",
         "conflict_resolver": "Conflict Resolver",
-        "reviewer": "Reviewer"
+        "reviewer": "Reviewer",
+        "triage": "Triage"
       },
       "runtimes": {
         "claude-code": "Claude Code",
@@ -798,7 +799,7 @@
         "bash": "Any shell command",
         "test": "Test commands only",
         "web": "Web access",
-        "search": "Search the project (KanbAIn)"
+        "search": "Search the project and report problems (KanbAIn)"
       },
       "styles": {
         "title": "Style blocks",

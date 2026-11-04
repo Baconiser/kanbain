@@ -38,6 +38,9 @@ pub enum AgentRole {
     Reviewer,
     /// Scans a project and proposes its sandbox setup.
     Setup,
+    /// Files problems other agents report, unless a ticket already covers
+    /// them.
+    Triage,
 }
 
 /// Which CLI runs the agent.

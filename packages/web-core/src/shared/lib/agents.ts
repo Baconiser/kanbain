@@ -38,6 +38,7 @@ export const ROLE_HUES: Record<AgentRole, number> = {
   intake: 180,
   history: 25,
   setup: 95,
+  triage: 330,
 };
 
 export function roleColor(role: AgentRole): string {

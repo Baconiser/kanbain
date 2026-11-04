@@ -786,7 +786,8 @@
         "intake": "受付",
         "history": "履歴",
         "conflict_resolver": "コンフリクト解決",
-        "reviewer": "レビューアー"
+        "reviewer": "レビューアー",
+        "triage": "トリアージ"
       },
       "runtimes": {
         "claude-code": "Claude Code",
@@ -798,7 +799,7 @@
         "bash": "任意のシェルコマンド",
         "test": "テストコマンドのみ",
         "web": "Web アクセス",
-        "search": "プロジェクトを検索 (KanbAIn)"
+        "search": "プロジェクトを検索し問題を報告 (KanbAIn)"
       },
       "styles": {
         "title": "スタイルブロック",

@@ -1235,7 +1235,7 @@ claude_account_connected: boolean, openai_key_configured: boolean,
  */
 custom_provider_count: number, running_containers: number, };
 
-export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history" | "conflict_resolver" | "reviewer" | "setup";
+export type AgentRole = "planner" | "coder" | "tester" | "scribe" | "intake" | "history" | "conflict_resolver" | "reviewer" | "setup" | "triage";
 
 export type AgentRuntime = "claude-code" | "opencode";
 

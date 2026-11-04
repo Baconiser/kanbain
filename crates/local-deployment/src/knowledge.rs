@@ -1,5 +1,6 @@
-//! The `search_knowledge` tool for sandboxed runs (E22), served by the model
-//! proxy's `/mcp` endpoint. A run searches its ticket's project, with the
+//! KanbAIn's tools for sandboxed runs (E22), served by the model proxy's
+//! `/mcp` endpoint: `search_knowledge` and `report_problem` (see
+//! [`crate::report`]). For `search_knowledge`: a run searches its ticket's project, with the
 //! ticket's overlay, and gets locations with capped excerpts (D43). Every
 //! call is logged as a run event with its result count and excerpt bytes
 //! (the D46 measurement).
@@ -10,6 +11,7 @@ use async_trait::async_trait;
 use db::{
     DBService,
     models::{
+        agent_job::AgentJob,
         execution_process::ExecutionProcess,
         execution_process_event::{ExecutionProcessEvent, ExecutionProcessEventType},
         issue::Issue,
@@ -25,18 +27,26 @@ use model_proxy::mcp::RunTools;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
+use crate::report::{self, ProblemReports};
+
 pub const SEARCH_TOOL: &str = "search_knowledge";
 const DEFAULT_LIMIT: u32 = 8;
 const MAX_LIMIT: u32 = 20;
 
 pub struct KnowledgeTools {
     db: DBService,
-    search: SearchService,
+    /// Absent when search is off; then only `report_problem` is offered.
+    search: Option<SearchService>,
+    reports: ProblemReports,
 }
 
 impl KnowledgeTools {
-    pub fn new(db: DBService, search: SearchService) -> Self {
-        Self { db, search }
+    pub fn new(db: DBService, search: Option<SearchService>, reports: ProblemReports) -> Self {
+        Self {
+            db,
+            search,
+            reports,
+        }
     }
 }
 
@@ -91,7 +101,24 @@ pub fn format_hits(
 #[async_trait]
 impl RunTools for KnowledgeTools {
     fn definitions(&self) -> Vec<Value> {
-        vec![json!({
+        let mut definitions = vec![report::definition()];
+        if self.search.is_some() {
+            definitions.insert(0, search_definition());
+        }
+        definitions
+    }
+
+    async fn call(&self, run_id: Uuid, name: &str, arguments: Value) -> Result<String, String> {
+        match name {
+            SEARCH_TOOL => self.search_knowledge(run_id, arguments).await,
+            report::REPORT_TOOL => self.reports.hand_off(run_id, &arguments).await,
+            _ => Err(format!("Unknown tool {name}")),
+        }
+    }
+}
+
+fn search_definition() -> Value {
+    json!({
             "name": SEARCH_TOOL,
             "description": "Search this project's code, tickets, comments, prior work, earlier \
                 agent runs and issues testers found, by meaning and keywords. Returns locations \
@@ -117,13 +144,15 @@ impl RunTools for KnowledgeTools {
                 },
                 "required": ["query"]
             }
-        })]
-    }
+    })
+}
 
-    async fn call(&self, run_id: Uuid, name: &str, arguments: Value) -> Result<String, String> {
-        if name != SEARCH_TOOL {
-            return Err(format!("Unknown tool {name}"));
-        }
+impl KnowledgeTools {
+    async fn search_knowledge(&self, run_id: Uuid, arguments: Value) -> Result<String, String> {
+        let search = self
+            .search
+            .as_ref()
+            .ok_or("Search is turned off in KanbAIn's settings")?;
         let query = arguments
             .get("query")
             .and_then(Value::as_str)
@@ -142,18 +171,27 @@ impl RunTools for KnowledgeTools {
             .map(|l| l.clamp(1, MAX_LIMIT as u64) as u32)
             .unwrap_or(DEFAULT_LIMIT);
         let pool = &self.db.pool;
-        let run = ExecutionProcess::find_by_id(pool, run_id)
+        // Coding runs, or agent jobs (the triage agent searches too).
+        let issue_id = match ExecutionProcess::find_by_id(pool, run_id)
             .await
             .map_err(|e| e.to_string())?
-            .ok_or("This run is not known to KanbAIn")?;
-        let issue = match run.issue_id {
+        {
+            Some(run) => run.issue_id,
+            None => {
+                AgentJob::find_by_id(pool, run_id)
+                    .await
+                    .map_err(|e| e.to_string())?
+                    .ok_or("This run is not known to KanbAIn")?
+                    .issue_id
+            }
+        };
+        let issue = match issue_id {
             Some(id) => Issue::find_by_id(pool, id)
                 .await
                 .map_err(|e| e.to_string())?,
             None => None,
         };
-        let response = self
-            .search
+        let response = search
             .search(&SearchRequest {
                 query: query.clone(),
                 project_id: issue.as_ref().map(|i| i.project_id),

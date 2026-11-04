@@ -44,6 +44,13 @@ pub const SEARCH_GUIDANCE: &str = "Before exploring the code with Grep, Glob or 
     symbol) and short excerpts from this project's code, tickets and earlier runs. Read only \
     the line ranges you need.";
 
+/// What role prompts of agents with the `search` capability add about
+/// reporting problems they notice on the way.
+pub const REPORT_GUIDANCE: &str = "If you notice a bug or wrong code that is outside your task, \
+    do not fix it and do not ignore it: call report_problem with a short title and what is \
+    wrong. A triage agent takes it from there and files it unless a ticket already covers it, \
+    so do not search for duplicates yourself. Then carry on with your task.";
+
 /// An agent definition with its style blocks and skills loaded.
 #[derive(Debug, Clone)]
 pub struct ResolvedAgent {
@@ -63,6 +70,12 @@ impl ResolvedAgent {
         }
         if self.definition.has(Capability::Search) && !role.contains("search_knowledge") {
             parts.push(SEARCH_GUIDANCE.to_string());
+        }
+        if self.definition.has(Capability::Search)
+            && self.definition.role != AgentRole::Triage
+            && !role.contains("report_problem")
+        {
+            parts.push(REPORT_GUIDANCE.to_string());
         }
         for style in &self.styles {
             let body = style.body.trim();
@@ -261,6 +274,17 @@ pub fn default_agents() -> Vec<AgentDefinition> {
              your task to /kanbain/out. Do not change code.",
             vec![Read, Web],
         ),
+        agent(
+            "triage",
+            Triage,
+            "haiku",
+            "Files problems other agents report, unless a ticket already covers them.",
+            "You triage problems other agents noticed while working on a ticket. You check \
+             the project's backlog for a ticket that already covers the problem and decide \
+             whether to file a new ticket, add the finding to the existing one, or drop it. \
+             Do not change code.",
+            vec![Search],
+        ),
     ]
 }
 
@@ -324,6 +348,7 @@ mod tests {
             skills: vec![],
         };
         assert!(agent.system_prompt().contains("call search_knowledge"));
+        assert!(agent.system_prompt().contains("call report_problem"));
 
         let claude = claude::ClaudeCodeAdapter.launch(&agent, &RunSettings::default());
         let config = claude

@@ -41,6 +41,7 @@ pub mod orchestrator;
 pub mod planning;
 pub mod project_setup;
 pub mod pty;
+pub mod report;
 pub mod sandbox;
 pub mod search;
 pub mod setup_scan;
@@ -290,13 +291,14 @@ impl Deployment for LocalDeployment {
         if let Some(search) = &search {
             planning.set_search(search.clone());
             orchestrator.set_search(search.clone());
-            container
-                .sandbox()
-                .set_tools(std::sync::Arc::new(knowledge::KnowledgeTools::new(
-                    db.clone(),
-                    search.clone(),
-                )));
         }
+        container
+            .sandbox()
+            .set_tools(std::sync::Arc::new(knowledge::KnowledgeTools::new(
+                db.clone(),
+                search.clone(),
+                report::ProblemReports::new(db.clone(), jobs.clone()),
+            )));
 
         let events = EventService::new(db.clone(), events_msg_store, events_entry_count);
 

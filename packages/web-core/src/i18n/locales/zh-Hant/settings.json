@@ -786,7 +786,8 @@
         "intake": "受理",
         "history": "歷史",
         "conflict_resolver": "衝突解決",
-        "reviewer": "審查"
+        "reviewer": "審查",
+        "triage": "分診"
       },
       "runtimes": {
         "claude-code": "Claude Code",
@@ -798,7 +799,7 @@
         "bash": "任意 shell 指令",
         "test": "僅測試指令",
         "web": "網路存取",
-        "search": "搜尋專案 (KanbAIn)"
+        "search": "搜尋專案並回報問題 (KanbAIn)"
       },
       "styles": {
         "title": "樣式區塊",
