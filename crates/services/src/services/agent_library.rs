@@ -1146,6 +1146,7 @@ mod tests {
                 "planner",
                 "reviewer",
                 "scribe",
+                "setup",
                 "tester"
             ]
         );

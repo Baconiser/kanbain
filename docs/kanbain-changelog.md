@@ -1436,3 +1436,137 @@ Bugs the demo found and fixed on the way:
   plans with early checkpoints.
 - The board card of the parent ticket shows no testing marker; the panel
   and the Testing column do.
+
+## Phase 7: Scribe, review and changelogs (2026-11-04)
+
+**Goal:** every run leaves a readable changelog entry, a coded ticket is
+reviewed and merged from one screen, and the changelog can leave KanbAIn
+as Markdown, without KanbAIn writing anything into the project repos.
+
+### What changed
+
+- **Scribe (D25).** After each merged coder run, each tester run and each
+  merged fix run, the orchestrator starts a headless `scribe` job (the
+  `scribe` agent, Haiku by default, no repo; D34).
+  - Its task carries the run's purpose (subtask or checkpoint), the issues
+    the tester found or the fix run was sent to fix, and that merge's diff
+    on the ticket branch (`sha^1..sha`, 12 KB per file, 60 KB in total;
+    past that only file names).
+  - It answers in four sections (What changed, Why, Files, Issues found
+    and fixed). `/kanbain/out/changelog.md` wins over the final message
+    when both exist.
+  - **Files and commits come from git, never from the model.** When the
+    job fails or answers nothing, the entry is still written, with a plain
+    summary from the commit subjects and file list and the reason in
+    `scribe_error`. A changelog with holes is worse than a boring one.
+  - The job runs in the background: the orchestrator holds the ticket lock
+    and must not wait for a model.
+- **`changelog_entries`** (`issue_id`, `run_id`, `job_id`, `kind` =
+  coder|tester|fix|merge, `title`, `summary`, `files[]`, `commit_refs[]`,
+  `issues_fixed[]`, `issues_found[]`, `scribe_error`).
+  - A unique index on `(run_id, kind)` keeps a repeated end-of-run handler
+    from writing an entry twice.
+  - For a tester run, `issues_fixed` are the issues its re-test confirmed
+    fixed; for a fix run, the open issues it was sent to fix.
+  - Each entry adds a `changelog_entry` timeline event, which also
+    re-indexes the ticket: entries are a new search kind, `changelog`
+    (E6), in the UI's search and the agents' `search_knowledge`.
+- **Review tab (D26).** The ticket panel has a **Review** tab once the
+  ticket has coded work or sits in Review/Done
+  (`GET /api/issues/{id}/review`):
+  - per repo: target, commits ahead/behind, `+/−` lines, the changed files
+    (`git diff --numstat target...branch`, up to 300), "Full diff" (opens
+    the ticket workspace's diff view) and any agent rebase with its stage;
+  - acceptance criteria of the latest plan, issues found (fixed / open /
+    won't fix), the changelog (newest first, expandable), and cost: agent
+    runs plus headless jobs, against the ticket budget;
+  - **blockers** that disable Merge (coding running, a repo behind its
+    target, a rebase or merge in progress, an agent rebase running, a
+    remote target, nothing to merge) and **warnings** that don't (open
+    issues, uncommitted changes, over budget).
+  - A repo behind its target offers **Rebase with agent**, the conflict
+    resolver from 71c195aa on the ticket workspace.
+- **Merge** (`POST /api/issues/{id}/merge {push}`) squash-merges every repo
+  with new commits into its target (the existing changelog-style commit
+  message), optionally pushes the target to its configured remote (else
+  `origin`), writes a `merge` changelog entry with the merge commits and
+  messages, moves the ticket to **Done**, archives the ticket workspace
+  unless pinned, re-indexes the merged repos and the ticket (Done drops
+  the ticket overlay, D45) and runs the history check, which links the
+  merged commits to the ticket (E19). A failed push is reported per repo;
+  the merge stands.
+  - The workspace Merge button and the ticket Merge share
+    `merge_repo_into_target`.
+- **Request changes.** From the Review tab:
+  - **to the coders:** the feedback becomes an open issue (requirements,
+    high) at the final checkpoint. The orchestration reopens (In
+    progress), the checkpoint goes to a fix run in round 1, and the tester
+    checks it again like any other issue, with the usual 3 rounds and
+    Blocked past them.
+  - **to the planner:** a planner run with the feedback on top of the
+    latest plan (`PlanningService::replan`); the new version needs
+    approval, and approving it replaces the old plan's unfinished work
+    (Phase 5 rules).
+  - Both add a `changes_requested` event.
+- **Export (D11).** `GET /api/issues/{id}/changelog.md` and
+  `GET /api/projects/{id}/changelog.md` download Markdown: per ticket its
+  entries (the scribe's headings nested one level down, code fences left
+  alone), commits and issues found; per project every ticket with entries,
+  most recent change first. Buttons: "Export changelog" in the Review tab
+  and "Changelog" next to the project picker.
+- **Timeline:** `changelog_entry`, `merged` and `changes_requested`.
+
+### Fixed on the way
+
+- The services test `seeds_defaults_and_resolves` still expected the agent
+  list from before the `setup` agent and was red on `main`.
+
+### Demo (Linux dev container)
+
+`.claude/skills/run-kanbain/driver/review.mjs` with
+`mock-script-review.json` (skill §8h), against the sandbox and the scripted
+mock upstream: **43/43 PASS, no browser errors**, about 8 minutes.
+
+- REV-1 (yolo, 3 subtasks, 2 checkpoints) reaches Review. The scribe ran
+  as 5 headless Haiku jobs (3 coders, 2 testers); every entry carries its
+  text, no `scribe_error`, the files from git (`rev-shop/src/model.rs` …)
+  and its merge commit; the entries show on the timeline.
+- The Review tab: Merge enabled, cost `$0.20 of $5.00` (runs plus jobs),
+  5 changelog entries.
+- A commit on main: "rev-shop is 1 commit behind main; rebase first",
+  Merge disabled, "Rebase with agent" offered; resetting main clears it.
+- "Send to coders" with "Validate orders before saving them.": the ticket
+  goes back to In progress, a fix run applies it, the tester re-test marks
+  the feedback issue fixed, the ticket returns to Review; the fix entry
+  names the issue, the timeline has `changes_requested`.
+- Merge with push: "Merged 1 repo, pushed rev-shop." The ticket is Done,
+  main's top commit is `REV-1: Order checkout` with the work and the review
+  fix, the bare remote's main equals local main, a merge entry records the
+  commit and the tab shows "Merged (rev-shop@…)".
+- Exports: `REV-1-changelog.md` with Coder, Tester, Fix and Merge entries,
+  the scribe's sections nested, commits and files, and the feedback issue;
+  the project export nests the ticket. Both buttons download.
+
+### Not verified here
+
+- A real model as scribe: the mock answers with fixed text, so the prose
+  quality of the entries is untested.
+- "Send to planner" and "Rebase with agent" from Review have unit-level
+  coverage and reuse paths the earlier demos run (planner feedback, Phase 4;
+  conflict resolver), but this demo doesn't drive them.
+- Search over changelog entries: no embedder ran in this demo (the TEI
+  containers were off for memory), so only the indexing code path and the
+  `changelog` kind are covered by compilation and the timeline trigger.
+- Windows: push from Merge with credential helpers, and Markdown downloads
+  in the Tauri webview.
+
+### Known leftovers
+
+- The Review diff is stats and file names, with "Full diff" opening the
+  ticket workspace's diff view; there is no inline patch in the panel.
+- No `warning` colour token exists in the Tailwind config, so existing
+  `text-warning` uses elsewhere render as plain text. The new Review UI uses
+  amber and the `merged` token instead; the old uses are untouched.
+- `embeddings::client::tests::rerank_batches_once_within_one_deadline`
+  can fail under a loaded parallel `cargo test` (wall-clock assertion);
+  it passes alone.

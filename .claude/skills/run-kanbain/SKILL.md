@@ -330,6 +330,38 @@ passes. A run takes 15 to 25 minutes.
 that reports no issues, so its ticket passes two checkpoints on the way to
 Review.
 
+## 8h. Scribe, review and merge (Phase 7)
+
+After every merged coder run, tester run and fix run, the orchestrator
+starts a headless `scribe` job (Haiku, no repo) with that merge's diff. Its
+answer is stored in `changelog_entries`; files and commits come from git.
+A failed scribe still leaves an entry with a plain summary and
+`scribe_error`. The ticket panel's **Review** tab (`GET
+/api/issues/{id}/review`) shows diff stats per repo, the changelog, the
+issues found, cost, blockers and warnings. **Merge** (`POST
+/api/issues/{id}/merge {push}`) squash-merges every repo into its target,
+optionally pushes, writes a `merge` entry, moves the ticket to Done and
+re-indexes. **Request changes** sends feedback to the coders (an open
+issue at the final checkpoint, so the fix loop and the tester handle it)
+or to the planner (`PlanTrigger::Feedback`). Exports:
+`GET /api/issues/{id}/changelog.md` and `/api/projects/{id}/changelog.md`.
+
+`mock-script-review.json` is the orchestration script with the prefix
+`REV`, plus a fix-run phase and a scribe phase (last, so it wins).
+
+```bash
+python3 $D/mock_anthropic.py 18555 $D/mock-script-review.json /tmp/mock-rev.log &
+# backend with KANBAIN_ANTHROPIC_BASE_URL / ANTHROPIC_API_KEY as in section 5
+node $D/review.mjs http://localhost:$FRONTEND_PORT /tmp/shots $BACKEND_PORT \
+  $KANBAIN_LAUNCH_TOKEN /tmp/repos/rev-shop /tmp/mock-rev.log
+```
+
+It gives the repo a bare `origin`, takes REV-1 to Review, checks the
+scribe's entries, blocks Merge with a commit on main (and unblocks it),
+sends feedback to the coders and waits for the fix and re-test, merges with
+push, and checks main, the remote and both exports (API and UI downloads).
+A run takes 15 to 25 minutes.
+
 ## 8g. Workspace sidebar
 
 The workspace's right sidebar has Ticket / Git / Terminal tabs; the Ticket

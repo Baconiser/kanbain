@@ -1,31 +1,33 @@
-# Where to proceed (as of 2026-10-31, Phase 6 done)
+# Where to proceed (as of 2026-11-04, Phase 7 done)
 
 ## State
-- **Phase 6 (tester and fix loop) is complete** on branch `kanbain/phase-6`
-  (from `kanbain/workspace-ticket-sidebar`, which is 1 commit ahead of
-  `main`): `5de9874f`, `119f9dd5`, `91fc63ab`, `ad5bdce5`. **Not merged or
-  pushed** — needs your approval.
+- **Phase 7 (scribe, review and merge, changelog export)** is on branch
+  `kanbain/phase-7`, from `main` at `71c195aa` (the conflict-resolver
+  rebase). **Not merged or pushed** — needs your approval.
 - Results, bugs found on the way and open items: `docs/kanbain-changelog.md`
-  (Phase 6 entry). Demo: `.claude/skills/run-kanbain/driver/testing.mjs`
-  (41/41 PASS); `orchestration.mjs` (Phase 5) updated and passing 34/34.
-  Docs in the run-kanbain skill §8f.
-- `cargo test --workspace` 336 passed; check, lint + clippy,
-  generate-types:check, prepare-db:check, check-i18n all pass.
-- Backend, Vite and mock are stopped.
+  (Phase 7 entry). Demo: `.claude/skills/run-kanbain/driver/review.mjs`
+  with `mock-script-review.json`; docs in the run-kanbain skill §8h.
+- Two fixes to tests that were already red on `main`: the agent library
+  test now expects the `setup` agent (added in 8982b26f).
+  `embeddings::client::tests::rerank_batches_once_within_one_deadline` is
+  timing-sensitive and can fail under a parallel `cargo test` (passes
+  alone); not changed.
 
 ## Needs your decision
-1. Merge `kanbain/phase-6` (and the sidebar commit under it) into `main`?
-2. Windows CI + a Windows run (worktrees, squash, notifications).
-3. A real-model run of planner → coders → tester → fixer: all demos use
-   the scripted mock.
+1. Merge `kanbain/phase-7` into `main`?
+2. Windows CI + a Windows run (worktrees, squash merge, push from Merge,
+   notifications).
+3. A real-model run of planner → coders → tester → fixer → scribe: every
+   demo uses the scripted mock, so the scribe's prose quality is untested.
 4. OpenCode `session.prompt returned empty response body` (error.txt):
    still not investigated.
+5. The agent rebase from Review ("Rebase with agent") has not run against a
+   real model either.
 
-## Next: Phase 7 (scribe and changelogs)
-- A scribe run after each coder/tester run; `changelog_entries` with
-  `issues_fixed[]` can come from `issues_found` (status fixed, fixed_round).
-- Review screen (D26) can reuse `GET /api/issues/{id}/coding`, which now
-  carries checkpoints and issues found.
+## Next: Phase 8 (stats and charts)
+- Projects overview, issues and cost views, retrieval stats.
+- `GET /api/issues/{id}/review` already sums run and job cost per ticket;
+  `changelog_entries` and `issues_found` have what the issue charts need.
 
 ## Memory rules (16 GB container), unchanged
 - At most the embedder plus the reranker next to the backend, and only with
