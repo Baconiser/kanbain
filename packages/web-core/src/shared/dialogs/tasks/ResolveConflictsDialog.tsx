@@ -43,8 +43,10 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
     } = useWorkspaceContext();
     const { t } = useTranslation(['tasks', 'common']);
     // Conflict resolution runs as the conflict_resolver agent (Settings → Agents).
-    const { agent, isLoading: agentsLoading } =
-      useAgentForRole('conflict_resolver');
+    const { agent, isLoading: agentsLoading } = useAgentForRole(
+      'conflict_resolver',
+      workspaceId
+    );
     const agentExecutor = agent?.definition
       ? RUNTIME_EXECUTORS[agent.definition.runtime]
       : null;

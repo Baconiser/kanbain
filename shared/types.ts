@@ -70,7 +70,13 @@ search_exclude_globs: Array<string>,
  * Globs (relative to each repo) of the files the tester may add or
  * change (D23). Empty means [`DEFAULT_TEST_PATHS`].
  */
-test_paths: Array<string>, };
+test_paths: Array<string>, 
+/**
+ * Models this project's agents run on instead of their agent file's.
+ */
+agent_models: AgentModelOverrides, };
+
+export type AgentModelOverrides = { default: string | null, roles: Partial<Record<AgentRole, string>>, };
 
 export type CreateProject = { name: string, id_prefix: string | null, repo_ids: Array<string>, };
 

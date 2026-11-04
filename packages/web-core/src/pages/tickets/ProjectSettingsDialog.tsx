@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '@kanbain/ui/components/KeyboardDialog';
 import type {
+  AgentModelOverrides,
   Project,
   ProjectStatus,
   ProjectStatusKind,
@@ -30,6 +31,7 @@ import { defineModal, getErrorMessage } from '@/shared/lib/modals';
 import { projectsApi } from '@/shared/lib/ticketsApi';
 import { useProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { ProjectSetupScan } from './ProjectSetupScan';
+import { ProjectAgentModels, cleanAgentModels } from './ProjectAgentModels';
 
 export interface ProjectSettingsDialogProps {
   /** Omit to create a new project. */
@@ -325,6 +327,9 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [environmentNotes, setEnvironmentNotes] = useState(
       project?.settings.sandbox_environment_notes ?? ''
     );
+    const [agentModels, setAgentModels] = useState<AgentModelOverrides>(
+      project?.settings.agent_models ?? { default: null, roles: {} }
+    );
     // What the server last said; an approved setup scan replaces it, so Save
     // doesn't write the pre-approval settings back over it.
     const [baseSettings, setBaseSettings] = useState(project?.settings);
@@ -425,6 +430,7 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   .map((c) => c.trim())
                   .filter(Boolean),
                 sandbox_environment_notes: environmentNotes.trim() || null,
+                agent_models: cleanAgentModels(agentModels),
               },
             })
           : await projectsApi.create({
@@ -521,6 +527,10 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   />
                   Always allow git-history analysis for this project’s tickets
                 </label>
+                <ProjectAgentModels
+                  value={agentModels}
+                  onChange={setAgentModels}
+                />
                 <label className="col-span-2 flex items-center gap-base text-sm">
                   <input
                     type="checkbox"

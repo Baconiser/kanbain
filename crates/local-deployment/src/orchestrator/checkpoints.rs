@@ -444,9 +444,10 @@ impl OrchestratorService {
             .agent_name_for(role)
             .await
             .map_err(OrchestratorError::Invalid)?;
+        let project = Project::find_by_id(&self.db.pool, issue.project_id).await?;
         let agent = self
             .library
-            .get_agent(&agent_name)
+            .get_agent_for_project(&agent_name, project.as_ref().map(|p| &*p.settings))
             .await
             .map_err(|e| OrchestratorError::Invalid(format!("Agent `{agent_name}`: {e}")))?;
         let mut executor_config = ExecutorConfig::new(executor_for(agent.runtime));

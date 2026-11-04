@@ -148,12 +148,16 @@ pub async fn follow_up(
     // executor with the agent's runtime (container.rs), so the session's
     // executor must not be compared against the payload's.
     let agent_executor: Option<String> = match &payload.executor_config.agent_definition {
-        Some(name) => Some(
-            executors::adapters::executor_for(
-                deployment.agent_library().get_agent(name).await?.runtime,
-            )
-            .to_string(),
-        ),
+        Some(name) => {
+            // A project model override can move the agent to opencode.
+            let project =
+                db::models::project::Project::find_for_issue(pool, workspace.issue_id).await?;
+            let def = deployment
+                .agent_library()
+                .get_agent_for_project(name, project.as_ref().map(|p| &*p.settings))
+                .await?;
+            Some(executors::adapters::executor_for(def.runtime).to_string())
+        }
         None => None,
     };
 

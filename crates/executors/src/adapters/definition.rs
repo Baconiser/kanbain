@@ -14,6 +14,8 @@ use ts_rs::TS;
     Copy,
     PartialEq,
     Eq,
+    PartialOrd,
+    Ord,
     Hash,
     Serialize,
     Deserialize,
@@ -280,6 +282,19 @@ impl AgentDefinition {
             self.bash_allow.clone()
         })
     }
+
+    /// Runs the agent on a project's model instead of its own. Claude Code
+    /// only speaks Anthropic, so a `provider/model` moves it to opencode.
+    pub fn with_model_override(&mut self, model: &str) {
+        let model = model.trim();
+        if model.is_empty() {
+            return;
+        }
+        self.model = model.to_string();
+        if self.runtime == AgentRuntime::ClaudeCode && model.contains('/') {
+            self.runtime = AgentRuntime::Opencode;
+        }
+    }
 }
 
 /// A reusable block appended to agents' system prompts, stored as
@@ -371,6 +386,43 @@ limits: { max_steps: 40, budget_usd: 2, wall_minutes: 30 }
             "name: x\nrole: coder\nruntime: claude-code\nmodel: openai/gpt-5\n",
         );
         assert!(err.is_err());
+    }
+
+    #[test]
+    fn model_override_switches_runtime_only_when_needed() {
+        let base = AgentDefinition::from_yaml(
+            "name: c\nrole: coder\nruntime: claude-code\nmodel: sonnet\n",
+        )
+        .unwrap();
+
+        let mut def = base.clone();
+        def.with_model_override("haiku");
+        assert_eq!(
+            (def.model.as_str(), def.runtime),
+            ("haiku", AgentRuntime::ClaudeCode)
+        );
+
+        for model in ["openai/gpt-5", "groq/llama-3"] {
+            let mut def = base.clone();
+            def.with_model_override(model);
+            assert_eq!(
+                (def.model.as_str(), def.runtime),
+                (model, AgentRuntime::Opencode)
+            );
+            assert!(def.validate().is_ok());
+        }
+
+        let mut def = base.clone();
+        def.runtime = AgentRuntime::Opencode;
+        def.with_model_override("opus");
+        assert_eq!(
+            (def.model.as_str(), def.runtime),
+            ("opus", AgentRuntime::Opencode)
+        );
+
+        let mut def = base.clone();
+        def.with_model_override("  ");
+        assert_eq!(def, base);
     }
 
     #[test]

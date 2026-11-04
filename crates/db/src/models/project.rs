@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
+use executors::adapters::definition::AgentRole;
 use serde::{Deserialize, Serialize};
 use serde_with::rust::double_option;
 use sqlx::{FromRow, SqlitePool, types::Json};
@@ -62,6 +65,38 @@ pub struct ProjectSettings {
     /// change (D23). Empty means [`DEFAULT_TEST_PATHS`].
     #[serde(default)]
     pub test_paths: Vec<String>,
+    /// Models this project's agents run on instead of their agent file's.
+    #[serde(default)]
+    pub agent_models: AgentModelOverrides,
+}
+
+/// Per-project agent models: one per role, then a default for the rest.
+/// The model string picks the provider (`sonnet`, `openai/gpt-5`,
+/// `<provider>/<model>`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+pub struct AgentModelOverrides {
+    #[serde(default)]
+    pub default: Option<String>,
+    #[serde(default)]
+    #[ts(type = "Partial<Record<AgentRole, string>>")]
+    pub roles: BTreeMap<AgentRole, String>,
+}
+
+impl AgentModelOverrides {
+    /// The model `role` runs on in this project, or `None` for the agent
+    /// file's own.
+    pub fn model_for(&self, role: AgentRole) -> Option<&str> {
+        self.roles
+            .get(&role)
+            .map(|m| m.trim())
+            .filter(|m| !m.is_empty())
+            .or_else(|| {
+                self.default
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|m| !m.is_empty())
+            })
+    }
 }
 
 /// Where tests live in the common languages: test directories, then the
@@ -181,6 +216,21 @@ impl Project {
         )
         .fetch_all(pool)
         .await
+    }
+
+    /// The project of a ticket, e.g. a workspace's `issue_id`; `None`
+    /// without a ticket.
+    pub async fn find_for_issue(
+        pool: &SqlitePool,
+        issue_id: Option<Uuid>,
+    ) -> Result<Option<Self>, sqlx::Error> {
+        let Some(id) = issue_id else {
+            return Ok(None);
+        };
+        match super::issue::Issue::find_by_id(pool, id).await? {
+            Some(issue) => Self::find_by_id(pool, issue.project_id).await,
+            None => Ok(None),
+        }
     }
 
     pub async fn find_by_id(pool: &SqlitePool, id: Uuid) -> Result<Option<Self>, sqlx::Error> {
@@ -395,7 +445,26 @@ impl ProjectRepo {
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_id_prefix;
+    use super::{AgentModelOverrides, AgentRole, ProjectSettings, normalize_id_prefix};
+
+    #[test]
+    fn role_model_beats_project_default() {
+        let settings: ProjectSettings = serde_json::from_str(
+            r#"{"agent_models":{"default":"haiku","roles":{"coder":"openai/gpt-5","tester":" "}}}"#,
+        )
+        .unwrap();
+        let models = &settings.agent_models;
+        assert_eq!(models.model_for(AgentRole::Coder), Some("openai/gpt-5"));
+        assert_eq!(models.model_for(AgentRole::Tester), Some("haiku"));
+        assert_eq!(models.model_for(AgentRole::Planner), Some("haiku"));
+        assert_eq!(
+            AgentModelOverrides::default().model_for(AgentRole::Planner),
+            None
+        );
+        // Rows saved before the field existed still load.
+        let old: ProjectSettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.agent_models, AgentModelOverrides::default());
+    }
 
     #[test]
     fn id_prefix_is_normalized() {

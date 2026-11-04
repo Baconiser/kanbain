@@ -75,6 +75,9 @@ pub struct ExportQuery {
 #[derive(Debug, Deserialize)]
 pub struct ForRoleQuery {
     pub role: AgentRole,
+    /// Apply the model override of this workspace's project.
+    #[serde(default)]
+    pub workspace_id: Option<uuid::Uuid>,
 }
 
 /// The agent a role resolves to, for system-initiated runs (conflict
@@ -91,7 +94,19 @@ async fn agent_for_role(
 ) -> Result<ResponseJson<ApiResponse<AgentForRole>>, ApiError> {
     let library = deployment.agent_library();
     let name = library.agent_name_for_role(query.role).await?;
-    let definition = library.get_agent(&name).await?;
+    let project = match query.workspace_id {
+        Some(id) => {
+            let pool = &deployment.db().pool;
+            match db::models::workspace::Workspace::find_by_id(pool, id).await? {
+                Some(ws) => db::models::project::Project::find_for_issue(pool, ws.issue_id).await?,
+                None => None,
+            }
+        }
+        None => None,
+    };
+    let definition = library
+        .get_agent_for_project(&name, project.as_ref().map(|p| &*p.settings))
+        .await?;
     Ok(ResponseJson(ApiResponse::success(AgentForRole {
         name,
         definition,

@@ -431,6 +431,24 @@ impl LocalContainerService {
         .await;
     }
 
+    /// The workspace's ticket and its project; both `None` for workspaces
+    /// without a ticket.
+    async fn ticket_for_workspace(
+        &self,
+        workspace: &Workspace,
+    ) -> Result<(Option<Issue>, Option<Project>), ContainerError> {
+        let pool = &self.db.pool;
+        let issue = match workspace.issue_id {
+            Some(id) => Issue::find_by_id(pool, id).await?,
+            None => None,
+        };
+        let project = match &issue {
+            Some(issue) => Project::find_by_id(pool, issue.project_id).await?,
+            None => None,
+        };
+        Ok((issue, project))
+    }
+
     /// Put the run into the workspace's sandbox container: image, container,
     /// code, ticket context and proxy tokens. Agent runs get the smaller of
     /// the run budget and what is left of the ticket budget.
@@ -445,14 +463,7 @@ impl LocalContainerService {
     ) -> Result<(SandboxTarget, Option<f64>), ContainerError> {
         let pool = &self.db.pool;
         let agent_run = execution_process.run_reason == ExecutionProcessRunReason::CodingAgent;
-        let issue = match workspace.issue_id {
-            Some(id) => Issue::find_by_id(pool, id).await?,
-            None => None,
-        };
-        let project = match &issue {
-            Some(issue) => Project::find_by_id(pool, issue.project_id).await?,
-            None => None,
-        };
+        let (issue, project) = self.ticket_for_workspace(workspace).await?;
         let settings = self.config.read().await.sandbox.clone();
 
         // Scripts get no model budget at all; an agent definition's budget
@@ -1876,12 +1887,16 @@ impl ContainerService for LocalContainerService {
                     "Agent `{name}` runs in the sandbox; turn the sandbox on in Settings → Sandbox"
                 )));
             }
-            Some(name) => Some(
-                self.agent_library
-                    .resolve(&name)
-                    .await
-                    .map_err(|e| ContainerError::Other(anyhow!("Agent `{name}`: {e}")))?,
-            ),
+            Some(name) => {
+                // The project's model for this role, if it sets one.
+                let (_, project) = self.ticket_for_workspace(workspace).await?;
+                Some(
+                    self.agent_library
+                        .resolve_for_project(&name, project.as_ref().map(|p| &*p.settings))
+                        .await
+                        .map_err(|e| ContainerError::Other(anyhow!("Agent `{name}`: {e}")))?,
+                )
+            }
             None => None,
         };
 

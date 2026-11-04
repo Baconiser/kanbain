@@ -116,7 +116,13 @@ async fn trigger_pr_description_follow_up(
         .agent_library()
         .agent_name_for_role(executors::adapters::AgentRole::Scribe)
         .await?;
-    let agent_def = deployment.agent_library().get_agent(&agent_name).await?;
+    let project =
+        db::models::project::Project::find_for_issue(&deployment.db().pool, workspace.issue_id)
+            .await?;
+    let agent_def = deployment
+        .agent_library()
+        .get_agent_for_project(&agent_name, project.as_ref().map(|p| &*p.settings))
+        .await?;
     let mut executor_config = executors::profile::ExecutorConfig::new(
         executors::adapters::executor_for(agent_def.runtime),
     );

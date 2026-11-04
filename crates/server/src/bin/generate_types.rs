@@ -14,6 +14,7 @@ fn generate_types_content() -> String {
         db::models::repo::Repo::decl(),
         db::models::project::Project::decl(),
         db::models::project::ProjectSettings::decl(),
+        db::models::project::AgentModelOverrides::decl(),
         db::models::project::CreateProject::decl(),
         db::models::project::UpdateProject::decl(),
         db::models::project::ProjectRepo::decl(),

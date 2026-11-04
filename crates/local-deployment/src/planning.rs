@@ -605,7 +605,7 @@ impl PlanningService {
             .map_err(PlanningError::Invalid)?;
         let agent = self
             .library
-            .get_agent(&agent_name)
+            .get_agent_for_project(&agent_name, Some(&*project.settings))
             .await
             .map_err(|e| PlanningError::Invalid(format!("Agent `{agent_name}`: {e}")))?;
         self.wait_for_history(issue_id).await;

@@ -860,9 +860,14 @@ export const agentLibraryApi = {
     return handleApiResponse<AgentSummary[]>(response);
   },
 
-  forRole: async (role: AgentRole): Promise<AgentForRole> => {
+  forRole: async (
+    role: AgentRole,
+    workspaceId?: string
+  ): Promise<AgentForRole> => {
+    const params = new URLSearchParams({ role });
+    if (workspaceId) params.set('workspace_id', workspaceId);
     const response = await makeRequest(
-      libraryPath(`/for-role?role=${encodeURIComponent(role)}`),
+      libraryPath(`/for-role?${params.toString()}`),
       { cache: 'no-store' }
     );
     return handleApiResponse<AgentForRole>(response);

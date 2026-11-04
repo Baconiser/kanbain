@@ -20,7 +20,10 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
-use db::models::agent_library::{AgentDefinitionRow, SkillRow, StyleBlockRow};
+use db::models::{
+    agent_library::{AgentDefinitionRow, SkillRow, StyleBlockRow},
+    project::ProjectSettings,
+};
 use executors::adapters::{
     AgentDefinition, AgentRole, ResolvedAgent, Skill, SkillFile, StyleBlock, default_agents,
     definition::{skill_frontmatter, validate_name},
@@ -806,6 +809,31 @@ impl AgentLibrary {
         })
     }
 
+    /// [`Self::resolve`] with the project's model override for the agent's
+    /// role applied (and its runtime switched when the model needs it).
+    pub async fn resolve_for_project(
+        &self,
+        name: &str,
+        project: Option<&ProjectSettings>,
+    ) -> Result<ResolvedAgent> {
+        let mut agent = self.resolve(name).await?;
+        apply_project_model(&mut agent.definition, project);
+        Ok(agent)
+    }
+
+    /// The definition an agent runs with in a project: only the model and
+    /// runtime differ from [`Self::get_agent`]. For callers that pick the
+    /// session's executor before the launch.
+    pub async fn get_agent_for_project(
+        &self,
+        name: &str,
+        project: Option<&ProjectSettings>,
+    ) -> Result<AgentDefinition> {
+        let mut definition = self.get_agent(name).await?;
+        apply_project_model(&mut definition, project);
+        Ok(definition)
+    }
+
     // ---- import / export ----
 
     /// Import a zip archive (a library export, skill folders, or agent and
@@ -1113,6 +1141,13 @@ fn plan_import(entries: Vec<(String, Vec<u8>)>, fallback_name: Option<&str>) -> 
     }
     plan.skills.retain(|name, _| validate_name(name).is_ok());
     plan
+}
+
+/// Puts a project's model for the agent's role on the definition.
+pub fn apply_project_model(definition: &mut AgentDefinition, project: Option<&ProjectSettings>) {
+    if let Some(model) = project.and_then(|p| p.agent_models.model_for(definition.role)) {
+        definition.with_model_override(model);
+    }
 }
 
 #[cfg(test)]

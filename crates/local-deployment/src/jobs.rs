@@ -67,7 +67,11 @@ impl AgentJobs {
     pub async fn run(&self, request: JobRequest) -> (Option<Uuid>, Result<JobOutput, String>) {
         let pool = &self.db.pool;
         let agent = match self.agent_name_for(request.role).await {
-            Ok(name) => match self.library.resolve(&name).await {
+            Ok(name) => match self
+                .library
+                .resolve_for_project(&name, request.project.as_ref().map(|p| &*p.settings))
+                .await
+            {
                 Ok(agent) => agent,
                 Err(e) => return (None, Err(format!("Agent {name}: {e}"))),
             },

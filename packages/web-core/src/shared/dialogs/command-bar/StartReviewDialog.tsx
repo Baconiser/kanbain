@@ -37,7 +37,10 @@ const StartReviewDialogImpl = create<StartReviewDialogProps>(
     const { selectedSessionId, selectSession } = useWorkspaceContext();
     const { t } = useTranslation(['tasks', 'common']);
     // Reviews run as the reviewer agent (Settings → Agents).
-    const { agent, isLoading: agentsLoading } = useAgentForRole('reviewer');
+    const { agent, isLoading: agentsLoading } = useAgentForRole(
+      'reviewer',
+      workspaceId
+    );
     const agentExecutor = agent?.definition
       ? RUNTIME_EXECUTORS[agent.definition.runtime]
       : null;

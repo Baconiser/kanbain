@@ -12,6 +12,8 @@ export const agentLibraryKeys = {
   skills: ['agent-library', 'skills'] as const,
   skillFiles: (name: string) =>
     ['agent-library', 'skills', name, 'files'] as const,
+  forRole: (role: AgentRole, workspaceId: string) =>
+    ['agent-library', 'for-role', role, workspaceId] as const,
 };
 
 /** The library changes on disk too (file watcher), so refetch on focus. */
@@ -36,15 +38,28 @@ export function useAgents() {
 /**
  * The agent a role resolves to (named after the role, else the first valid
  * definition with that role), for system-initiated runs like conflict
- * resolution and review. Null when no agent has the role.
+ * resolution and review. Null when no agent has the role. With a workspace,
+ * the definition carries its project's model override (which can also move
+ * it to the opencode runtime).
  */
-export function useAgentForRole(role: AgentRole | null) {
+export function useAgentForRole(
+  role: AgentRole | null,
+  workspaceId?: string | null
+) {
   const { data: agents = [], isLoading } = useAgents();
-  const agent = useMemo(
+  const local = useMemo(
     () => (role ? agentForRole(agents, role) : null),
     [agents, role]
   );
-  return { agent, isLoading: role != null && isLoading };
+  const project = useQuery({
+    queryKey: agentLibraryKeys.forRole(role ?? 'coder', workspaceId ?? ''),
+    queryFn: () => agentLibraryApi.forRole(role!, workspaceId!),
+    enabled: role != null && !!workspaceId,
+    ...LIVE,
+  });
+  const agent = workspaceId ? (project.data ?? null) : local;
+  const loading = workspaceId ? project.isLoading : isLoading;
+  return { agent, isLoading: role != null && loading };
 }
 
 export function useStyles() {
