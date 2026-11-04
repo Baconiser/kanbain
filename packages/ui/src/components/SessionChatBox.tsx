@@ -169,6 +169,8 @@ interface SessionChatBoxProps<TExecutor extends string = string> {
   reviewComments?: ReviewCommentsProps;
   toolbarActions?: ToolbarActionsProps;
   modelSelector?: ReactNode;
+  /** Extra banner above the input, e.g. a running conflict resolution. */
+  banner?: ReactNode;
   error?: string | null;
   repoIds?: string[];
   agent?: TExecutor | null;
@@ -234,6 +236,7 @@ export function SessionChatBox<TExecutor extends string = string>({
   reviewComments,
   toolbarActions,
   modelSelector,
+  banner,
   error,
   repoIds,
   agent,
@@ -579,6 +582,10 @@ export function SessionChatBox<TExecutor extends string = string>({
   // Banner content
   const renderBanner = () => {
     const banners: ReactNode[] = [];
+
+    if (banner) {
+      banners.push(<div key="custom">{banner}</div>);
+    }
 
     // Review comments banner
     if (reviewComments && reviewComments.count > 0) {

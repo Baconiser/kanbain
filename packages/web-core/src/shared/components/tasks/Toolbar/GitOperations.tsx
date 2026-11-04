@@ -273,6 +273,21 @@ function GitOperations({
         const commitsAhead = selectedRepoStatus?.commits_ahead ?? 0;
         const commitsBehind = selectedRepoStatus?.commits_behind ?? 0;
 
+        const resolution = selectedRepoStatus?.conflict_resolution;
+        if (
+          resolution &&
+          ['queued', 'rebasing', 'syncing'].includes(resolution.stage)
+        ) {
+          return (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-sky-100/60 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300">
+              <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+              {t('git.states.agentRebasing', {
+                target: resolution.target_branch,
+              })}
+            </span>
+          );
+        }
+
         if (hasConflictsCalculated) {
           return (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100/60 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">

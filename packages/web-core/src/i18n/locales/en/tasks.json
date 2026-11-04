@@ -230,6 +230,7 @@
       "merging": "Merging...",
       "merge": "Merge",
       "rebasing": "Rebasing...",
+      "agentRebasing": "Agent rebasing onto {{target}}",
       "rebase": "Rebase",
       "pushed": "Pushed!",
       "pushing": "Pushing...",
@@ -330,7 +331,7 @@
   "resolveConflicts": {
     "dialog": {
       "title": "Resolve Conflicts",
-      "description": "Conflicts were detected. Choose how you want the agent to resolve them.",
+      "description": "The agent rebases your committed branch onto {{target}} in the sandbox and resolves the conflicts there.",
       "newSession": "Start a new session",
       "resolve": "Resolve Conflicts",
       "resolving": "Starting...",
@@ -341,7 +342,30 @@
       "agentLabel": "Agent",
       "loadingAgents": "Loading agents…",
       "agentDetail": "{{name}} · {{runtime}} · {{model}}",
-      "noAgent": "No agent with the conflict_resolver role. Create one in Settings → Agents."
+      "noAgent": "No agent with the conflict_resolver role. Create one in Settings → Agents.",
+      "howItWorks": "Any half-done rebase here is aborted first. The agent gets your ticket plus the tickets behind the conflicting changes on {{target}}, so it knows what both sides were for."
+    },
+    "progress": {
+      "steps": {
+        "found": "Conflict found",
+        "handoff": "Handed to agent",
+        "rebasing": "Rebasing onto {{target}}",
+        "syncing": "Bringing back",
+        "ready": "Ready to merge"
+      },
+      "detail": {
+        "queued": "Waiting for the resolver run to start…",
+        "stale": "The resolver never started. Click Retry to hand it off again.",
+        "rebasing_zero": "The agent is rebasing {{branch}} onto {{target}} in the sandbox.",
+        "rebasing_one": "The agent is rebasing {{branch}} onto {{target}} in the sandbox and resolving {{count}} predicted conflict:",
+        "rebasing_other": "The agent is rebasing {{branch}} onto {{target}} in the sandbox and resolving {{count}} predicted conflicts:",
+        "syncing": "The run finished. Bringing the rebased branch back and checking it…",
+        "resolved": "Rebased onto {{target}} and verified. Ready to merge."
+      },
+      "yourBranch": "your branch",
+      "failed": "The conflict resolution failed.",
+      "retry": "Retry",
+      "dismiss": "Dismiss"
     }
   },
   "rebaseInProgress": {

@@ -803,14 +803,11 @@ export const Actions = {
         if (isRunning) return;
 
         // Show resolve conflicts dialog
-        const workspace = await getWorkspace(ctx.queryClient, workspaceId);
         const result = await ResolveConflictsDialog.show({
           workspaceId,
-          conflictOp: repoStatus.conflict_op ?? 'merge',
-          sourceBranch: workspace.branch,
+          repoId: repoStatus.repo_id,
           targetBranch: repoStatus.target_branch_name,
           conflictedFiles: repoStatus.conflicted_files ?? [],
-          repoName: repoStatus.repo_name,
         });
 
         if (result.action === 'resolved') {

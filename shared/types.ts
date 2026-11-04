@@ -245,6 +245,10 @@ skip_auto_install: boolean, };
 
 export type ProjectSetupScan = { project_id: string, status: SetupScanStatus, job_id: string | null, setup_script: string | null, test_commands: string[], run_commands: string[], environment_md: string | null, skip_auto_install: boolean, summary: string | null, stack_hash: string, error: string | null, started_at: string, finished_at: string | null, decided_at: string | null, };
 
+export type ConflictResolutionStage = "queued" | "rebasing" | "syncing" | "resolved" | "failed";
+
+export type ConflictResolution = { id: string, workspace_id: string, repo_id: string, execution_process_id: string | null, target_branch: string, target_oid: string, branch_oid: string, predicted_files: string[], stage: ConflictResolutionStage, error: string | null, created_at: string, updated_at: string, };
+
 export type SetupScanView = { scan: ProjectSetupScan | null, 
 /**
  * The repos' stack differs from the one the approved setup was made
@@ -939,6 +943,14 @@ export type ContinueRebaseRequest = { repo_id: string, };
 
 export type AbortConflictsRequest = { repo_id: string, };
 
+export type ResolveConflictsRequest = { repo_id: string, };
+
+export type ResolveConflictsResponse = { resolution: ConflictResolution, 
+/**
+ * The follow-up prompt for the conflict-resolver run.
+ */
+prompt: string, };
+
 export type GitOperationError = { "type": "merge_conflicts", message: string, op: ConflictOp, conflicted_files: Array<string>, target_branch: string, } | { "type": "rebase_in_progress" };
 
 export type PushError = { "type": "force_push_required" };
@@ -979,7 +991,11 @@ export type CreateWorkspaceFromPrResponse = { workspace: Workspace, };
 
 export type CreateFromPrError = { "type": "pr_not_found" } | { "type": "branch_fetch_failed", message: string, } | { "type": "cli_not_installed", provider: ProviderKind, } | { "type": "auth_failed", message: string, } | { "type": "unsupported_provider" };
 
-export type RepoBranchStatus = { repo_id: string, repo_name: string, commits_behind: number | null, commits_ahead: number | null, has_uncommitted_changes: boolean | null, head_oid: string | null, uncommitted_count: number | null, untracked_count: number | null, target_branch_name: string, remote_commits_behind: number | null, remote_commits_ahead: number | null, merges: Array<Merge>, is_rebase_in_progress: boolean, conflict_op: ConflictOp | null, conflicted_files: Array<string>, is_target_remote: boolean, };
+export type RepoBranchStatus = { repo_id: string, repo_name: string, 
+/**
+ * The latest agent rebase of this repo, if there ever was one.
+ */
+conflict_resolution: ConflictResolution | null, commits_behind: number | null, commits_ahead: number | null, has_uncommitted_changes: boolean | null, head_oid: string | null, uncommitted_count: number | null, untracked_count: number | null, target_branch_name: string, remote_commits_behind: number | null, remote_commits_ahead: number | null, merges: Array<Merge>, is_rebase_in_progress: boolean, conflict_op: ConflictOp | null, conflicted_files: Array<string>, is_target_remote: boolean, };
 
 export type UpdateWorkspace = { archived: boolean | null, pinned: boolean | null, name: string | null, };
 

@@ -76,6 +76,8 @@ import {
   PushWorkspaceRequest,
   RepoBranchStatus,
   AbortConflictsRequest,
+  ResolveConflictsRequest,
+  ResolveConflictsResponse,
   ContinueRebaseRequest,
   Session,
   Workspace,
@@ -531,6 +533,21 @@ export const workspacesApi = {
       }
     );
     return handleApiResponse<void>(response);
+  },
+
+  /** Hand a conflicted rebase to the resolver; returns its prompt. */
+  resolveConflicts: async (
+    workspaceId: string,
+    data: ResolveConflictsRequest
+  ): Promise<ResolveConflictsResponse> => {
+    const response = await makeRequest(
+      `/api/workspaces/${workspaceId}/git/conflicts/resolve`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }
+    );
+    return handleApiResponse<ResolveConflictsResponse>(response);
   },
 
   continueRebase: async (

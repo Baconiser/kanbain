@@ -224,6 +224,25 @@ pub struct PrepareRun<'a> {
     pub prior_work: Option<&'a str>,
     /// More `/kanbain/context` files by name (`related.md` for planners).
     pub extra_context: Vec<(String, String)>,
+    /// A conflict-resolver run: the host's branch wins over whatever the
+    /// container has, and the rebase target comes along.
+    pub rebase: Option<RebaseSetup<'a>>,
+}
+
+/// What a resolver run needs in its clone besides its own branch.
+pub struct RebaseSetup<'a> {
+    pub repo_name: &'a str,
+    /// Full ref of the target, e.g. `refs/heads/main`.
+    pub target_ref: &'a str,
+}
+
+/// How a repo came back from the sandbox after a run.
+#[derive(Debug, Clone, Default)]
+pub struct RepoSync {
+    pub repo: String,
+    /// The rebase/merge the agent left half-done and that got aborted.
+    pub aborted_op: Option<String>,
+    pub error: Option<String>,
 }
 
 fn random_token(prefix: &str) -> String {
@@ -624,6 +643,32 @@ impl SandboxRuntime {
 
         for repo in run.repos {
             let host_worktree = run.workspace_root.join(&repo.name);
+            if let Some(rebase) = run.rebase.as_ref().filter(|r| r.repo_name == repo.name) {
+                // No merging of histories here: the host branch is the
+                // committed truth and the container's copy may be junk from
+                // an earlier confused run.
+                transfer::reset_to_host(
+                    &ready.docker,
+                    &container,
+                    &host_worktree,
+                    &repo.name,
+                    &run.workspace.branch,
+                )
+                .await?;
+                transfer::send_ref(
+                    &ready.docker,
+                    &container,
+                    &host_worktree,
+                    &repo.name,
+                    rebase.target_ref,
+                )
+                .await?;
+                log(format!(
+                    "Copied {} ({} and {}) into the sandbox for the rebase",
+                    repo.name, run.workspace.branch, rebase.target_ref
+                ));
+                continue;
+            }
             if transfer::sync_branch_in(
                 &ready.docker,
                 &container,
@@ -721,6 +766,15 @@ impl SandboxRuntime {
             for (name, contents) in &run.extra_context {
                 files.push(FileEntry::new(name, contents.as_str()).owned_by_root());
             }
+            ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
+        } else if !run.extra_context.is_empty() {
+            // No ticket, but the run still has its own context (a resolver
+            // rebasing a plain workspace).
+            let files = run
+                .extra_context
+                .iter()
+                .map(|(name, contents)| FileEntry::new(name, contents.as_str()).owned_by_root())
+                .collect();
             ready.docker.copy_in(&container, CONTEXT_DIR, files).await?;
         }
 
@@ -1235,11 +1289,12 @@ impl SandboxRuntime {
         workspace_root: &Path,
         sync_out: bool,
         commit_message: &str,
-    ) {
+    ) -> Vec<RepoSync> {
+        let mut reports = Vec::new();
         let active = self.inner.runs.lock().await.remove(&execution_id);
         self.inner.proxy.revoke_run(execution_id);
         let Some(active) = active else {
-            return;
+            return reports;
         };
         self.inner
             .egress_grants
@@ -1247,7 +1302,7 @@ impl SandboxRuntime {
             .unwrap()
             .remove(&active.egress_token);
         let Some(ready) = self.inner.ready.as_ref() else {
-            return;
+            return reports;
         };
         let container = &active.container;
         let pool = &self.inner.db.pool;
@@ -1255,7 +1310,13 @@ impl SandboxRuntime {
         if sync_out {
             for repo in repos {
                 let host_worktree = workspace_root.join(&repo.name);
+                let mut report = RepoSync {
+                    repo: repo.name.clone(),
+                    ..Default::default()
+                };
                 let result = async {
+                    report.aborted_op =
+                        transfer::abort_in_progress(&ready.docker, container, &repo.name).await?;
                     let committed =
                         transfer::commit_all(&ready.docker, container, &repo.name, commit_message)
                             .await?;
@@ -1281,9 +1342,15 @@ impl SandboxRuntime {
                     }),
                     Err(e) => {
                         tracing::error!("Bringing {} back from the sandbox failed: {e}", repo.name);
+                        report.error = Some(e.to_string());
                         json!({"action": "sync_out", "repo": repo.name, "error": e.to_string()})
                     }
                 };
+                let mut payload = payload;
+                if let Some(op) = &report.aborted_op {
+                    payload["aborted_op"] = json!(op);
+                }
+                reports.push(report);
                 let _ = ExecutionProcessEvent::create(
                     pool,
                     execution_id,
@@ -1317,6 +1384,7 @@ impl SandboxRuntime {
                 )
                 .await;
         }
+        reports
     }
 
     /// Forward the local ports a sandboxed dev server announces in its log

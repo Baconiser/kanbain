@@ -2,6 +2,7 @@ pub mod agent_job;
 pub mod agent_library;
 pub mod attachment_text;
 pub mod coding_agent_turn;
+pub mod conflict_resolution;
 pub mod execution_process;
 pub mod execution_process_event;
 pub mod execution_process_logs;

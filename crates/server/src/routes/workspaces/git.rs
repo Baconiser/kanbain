@@ -10,6 +10,7 @@ use axum::{
     routing::{get, post},
 };
 use db::models::{
+    conflict_resolution::ConflictResolution,
     issue::Issue,
     merge::{Merge, MergeStatus, PrMerge, PullRequestInfo},
     orchestration::{OrchestrationSubtask, SubtaskStatus, TicketOrchestration},
@@ -21,6 +22,7 @@ use db::models::{
 };
 use deployment::Deployment;
 use git::{ConflictOp, GitCliError, GitServiceError};
+use local_deployment::conflict_resolution::{self, ConflictResolutionError};
 use serde::{Deserialize, Serialize};
 use services::services::container::ContainerService;
 use ts_rs::TS;
@@ -101,6 +103,20 @@ pub struct RepoBranchStatus {
     pub repo_name: String,
     #[serde(flatten)]
     pub status: BranchStatus,
+    /// The latest agent rebase of this repo, if there ever was one.
+    pub conflict_resolution: Option<ConflictResolution>,
+}
+
+#[derive(Debug, Deserialize, Serialize, TS)]
+pub struct ResolveConflictsRequest {
+    pub repo_id: Uuid,
+}
+
+#[derive(Debug, Serialize, TS)]
+pub struct ResolveConflictsResponse {
+    pub resolution: ConflictResolution,
+    /// The follow-up prompt for the conflict-resolver run.
+    pub prompt: String,
 }
 
 #[derive(Deserialize, Debug, TS)]
@@ -148,6 +164,7 @@ pub fn router() -> Router<DeploymentImpl> {
         .route("/rebase", post(rebase_workspace))
         .route("/rebase/continue", post(continue_workspace_rebase))
         .route("/conflicts/abort", post(abort_workspace_conflicts))
+        .route("/conflicts/resolve", post(resolve_workspace_conflicts))
         .route("/target-branch", axum::routing::put(change_target_branch))
         .route("/branch", axum::routing::put(rename_branch))
 }
@@ -405,6 +422,13 @@ pub async fn get_workspace_branch_status(
         .await?;
     let workspace_dir = PathBuf::from(&container_ref);
 
+    let mut resolutions: HashMap<Uuid, ConflictResolution> =
+        ConflictResolution::latest_for_workspace(pool, workspace.id)
+            .await?
+            .into_iter()
+            .map(|r| (r.repo_id, r))
+            .collect();
+
     let all_merges = Merge::find_by_workspace_id(pool, workspace.id).await?;
     let merges_by_repo: HashMap<Uuid, Vec<Merge>> =
         all_merges
@@ -503,6 +527,7 @@ pub async fn get_workspace_branch_status(
         };
 
         results.push(RepoBranchStatus {
+            conflict_resolution: resolutions.remove(&repo.id),
             repo_id: repo.id,
             repo_name: repo.name,
             status: BranchStatus {
@@ -771,6 +796,54 @@ pub async fn rebase_workspace(
     }
 
     Ok(ResponseJson(ApiResponse::success(())))
+}
+
+/// Hand a conflicted rebase to the conflict-resolver agent: abort the
+/// host's stopped attempt, record the hand-off and return the prompt. The
+/// client then starts the resolver run with it; the sandbox redoes the
+/// rebase on the committed branch.
+#[axum::debug_handler]
+pub async fn resolve_workspace_conflicts(
+    Extension(workspace): Extension<Workspace>,
+    State(deployment): State<DeploymentImpl>,
+    Json(payload): Json<ResolveConflictsRequest>,
+) -> Result<ResponseJson<ApiResponse<ResolveConflictsResponse>>, ApiError> {
+    let pool = &deployment.db().pool;
+
+    let workspace_repo =
+        WorkspaceRepo::find_by_workspace_and_repo_id(pool, workspace.id, payload.repo_id)
+            .await?
+            .ok_or(RepoError::NotFound)?;
+    let repo = Repo::find_by_id(pool, payload.repo_id)
+        .await?
+        .ok_or(RepoError::NotFound)?;
+
+    let container_ref = deployment
+        .container()
+        .ensure_container_exists(&workspace)
+        .await?;
+    let worktree_path = Path::new(&container_ref).join(&repo.name);
+
+    let begun = conflict_resolution::begin(
+        pool,
+        &workspace,
+        &repo,
+        &workspace_repo.target_branch,
+        &worktree_path,
+    )
+    .await
+    .map_err(|e| match e {
+        ConflictResolutionError::Database(e) => ApiError::Database(e),
+        ConflictResolutionError::Git(e) => ApiError::Conflict(e.to_string()),
+        other => ApiError::BadRequest(other.to_string()),
+    })?;
+
+    Ok(ResponseJson(ApiResponse::success(
+        ResolveConflictsResponse {
+            resolution: begun.resolution,
+            prompt: begun.prompt,
+        },
+    )))
 }
 
 #[axum::debug_handler]

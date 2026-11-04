@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useDropzone } from 'react-dropzone';
 import {
@@ -33,6 +33,7 @@ import { useWorkspaceBranch } from '../model/hooks/useWorkspaceBranch';
 import { useApprovalMutation } from '../model/hooks/useApprovalMutation';
 import { useApprovals } from '@/shared/hooks/useApprovals';
 import { ResolveConflictsDialog } from '@/shared/dialogs/tasks/ResolveConflictsDialog';
+import { ConflictResolutionProgress } from '@/shared/components/ConflictResolutionProgress';
 import { workspaceSummaryKeys } from '@/shared/hooks/workspaceSummaryKeys';
 import { buildAgentPrompt } from '@/shared/lib/promptMessage';
 import { formatDateShortWithTime } from '@/shared/lib/date';
@@ -346,13 +347,42 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
     if (!workspaceId || !repoWithConflicts) return;
     ResolveConflictsDialog.show({
       workspaceId,
-      conflictOp: repoWithConflicts.conflict_op ?? 'rebase',
-      sourceBranch: attemptBranch,
+      repoId: repoWithConflicts.repo_id,
       targetBranch: repoWithConflicts.target_branch_name,
       conflictedFiles: repoWithConflicts.conflicted_files ?? [],
-      repoName: repoWithConflicts.repo_name,
     });
-  }, [workspaceId, repoWithConflicts, attemptBranch]);
+  }, [workspaceId, repoWithConflicts]);
+
+  // The agent rebase to show: anything in flight, a failure until it is
+  // dismissed, or a success until the branch gets merged or falls behind.
+  const [dismissedResolutionId, setDismissedResolutionId] = useState<
+    string | null
+  >(null);
+  const shownResolution = useMemo(() => {
+    for (const repo of branchStatus ?? []) {
+      const r = repo.conflict_resolution;
+      if (!r || r.id === dismissedResolutionId) continue;
+      if (r.stage === 'resolved') {
+        const mergedSince = repo.merges?.some(
+          (m) => Date.parse(m.created_at) > Date.parse(r.updated_at)
+        );
+        if (mergedSince || (repo.commits_behind ?? 0) > 0) continue;
+      }
+      return { repo, resolution: r };
+    }
+    return null;
+  }, [branchStatus, dismissedResolutionId]);
+
+  const handleRetryResolution = useCallback(() => {
+    if (!workspaceId || !shownResolution) return;
+    const { repo, resolution } = shownResolution;
+    ResolveConflictsDialog.show({
+      workspaceId,
+      repoId: repo.repo_id,
+      targetBranch: repo.target_branch_name,
+      conflictedFiles: resolution.predicted_files,
+    });
+  }, [workspaceId, shownResolution]);
 
   // User profiles, config preference, and latest executor from processes
   const { profiles, config, capabilities } = useUserSystem();
@@ -1045,6 +1075,18 @@ export function SessionChatBoxContainer(props: SessionChatBoxContainerProps) {
       }}
       onPrCommentClick={
         actionCtx.hasOpenPR ? handleInsertPrComments : undefined
+      }
+      banner={
+        shownResolution ? (
+          <ConflictResolutionProgress
+            resolution={shownResolution.resolution}
+            branch={attemptBranch}
+            onRetry={handleRetryResolution}
+            onDismiss={() =>
+              setDismissedResolutionId(shownResolution.resolution.id)
+            }
+          />
+        ) : undefined
       }
       stats={{
         filesChanged,

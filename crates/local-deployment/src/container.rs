@@ -14,6 +14,7 @@ use db::{
     DBService,
     models::{
         coding_agent_turn::CodingAgentTurn,
+        conflict_resolution::{ConflictResolution, ConflictResolutionStage},
         execution_process::{
             ExecutionContext, ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus,
         },
@@ -69,8 +70,8 @@ use uuid::Uuid;
 use workspace_manager::{RepoWorkspaceInput, WorkspaceError, WorkspaceManager};
 
 use crate::{
-    command, copy,
-    sandbox::{PrepareRun, SandboxRuntime},
+    command, conflict_resolution, copy,
+    sandbox::{PrepareRun, RebaseSetup, SandboxRuntime},
 };
 
 const WORKSPACE_TOUCH_DEBOUNCE: Duration = Duration::from_mins(2);
@@ -516,6 +517,49 @@ impl LocalContainerService {
             }
             _ => Vec::new(),
         };
+        let mut extra_context = extra_context;
+
+        // A conflict-resolver run picks up the hand-off the Resolve button
+        // recorded: the host branch wins, the target comes along, and
+        // `rebase.md` explains both sides.
+        let resolution = match agent_role {
+            Some(AgentRole::ConflictResolver) if agent_run => {
+                ConflictResolution::find_queued(pool, workspace.id).await?
+            }
+            _ => None,
+        };
+        let rebase_repo = resolution
+            .as_ref()
+            .and_then(|r| repos.iter().find(|repo| repo.id == r.repo_id));
+        let mut target_ref = None;
+        if let (Some(resolution), Some(repo)) = (&resolution, rebase_repo) {
+            let worktree = workspace_root.join(&repo.name);
+            target_ref = conflict_resolution::full_ref(&worktree, &resolution.target_branch);
+            if target_ref.is_none() {
+                let error = format!("Branch `{}` no longer exists", resolution.target_branch);
+                ConflictResolution::set_stage(
+                    pool,
+                    resolution.id,
+                    ConflictResolutionStage::Failed,
+                    Some(&error),
+                )
+                .await?;
+                return Err(ContainerError::Other(anyhow!(error)));
+            }
+            ConflictResolution::start_run(pool, resolution.id, execution_process.id).await?;
+            extra_context.extend(
+                conflict_resolution::context_files(pool, workspace, repo, resolution, &worktree)
+                    .await,
+            );
+        }
+        let rebase = match (rebase_repo, target_ref.as_deref()) {
+            (Some(repo), Some(target_ref)) => Some(RebaseSetup {
+                repo_name: &repo.name,
+                target_ref,
+            }),
+            _ => None,
+        };
+
         let target = self
             .sandbox
             .prepare(
@@ -530,11 +574,26 @@ impl LocalContainerService {
                     budget_usd: budget,
                     prior_work: prior_work.as_deref(),
                     extra_context,
+                    rebase,
                 },
                 &log,
             )
-            .await
-            .map_err(|e| ContainerError::Other(anyhow!(e)))?;
+            .await;
+        let target = match target {
+            Ok(target) => target,
+            Err(e) => {
+                if let (Some(resolution), Some(_)) = (&resolution, rebase_repo) {
+                    let _ = ConflictResolution::set_stage(
+                        pool,
+                        resolution.id,
+                        ConflictResolutionStage::Failed,
+                        Some(&format!("The sandbox could not be prepared: {e}")),
+                    )
+                    .await;
+                }
+                return Err(ContainerError::Other(anyhow!(e)));
+            }
+        };
         Ok((target, budget))
     }
 
@@ -573,7 +632,23 @@ impl LocalContainerService {
         };
         let sync_out = ctx.execution_process.run_reason != ExecutionProcessRunReason::DevServer;
         let message = self.get_commit_message(ctx).await;
-        self.sandbox
+        let pool = &self.db.pool;
+        let resolution = ConflictResolution::find_by_execution(pool, ctx.execution_process.id)
+            .await
+            .ok()
+            .flatten()
+            .filter(|r| r.stage == ConflictResolutionStage::Rebasing);
+        if let Some(resolution) = &resolution {
+            let _ = ConflictResolution::set_stage(
+                pool,
+                resolution.id,
+                ConflictResolutionStage::Syncing,
+                None,
+            )
+            .await;
+        }
+        let reports = self
+            .sandbox
             .finish(
                 ctx.execution_process.id,
                 &ctx.workspace,
@@ -583,6 +658,29 @@ impl LocalContainerService {
                 &message,
             )
             .await;
+        if let Some(resolution) = &resolution {
+            match ctx.repos.iter().find(|r| r.id == resolution.repo_id) {
+                Some(repo) => {
+                    conflict_resolution::finish(
+                        pool,
+                        resolution,
+                        &repo.name,
+                        &workspace_root.join(&repo.name),
+                        &reports,
+                    )
+                    .await
+                }
+                None => {
+                    let _ = ConflictResolution::set_stage(
+                        pool,
+                        resolution.id,
+                        ConflictResolutionStage::Failed,
+                        Some("The repository is no longer part of this workspace"),
+                    )
+                    .await;
+                }
+            }
+        }
         if sync_out {
             self.spawn_history_check(ctx.workspace.issue_id);
         }

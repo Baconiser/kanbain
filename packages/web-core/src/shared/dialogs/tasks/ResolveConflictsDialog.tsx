@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Dialog,
@@ -14,36 +14,26 @@ import { Switch } from '@kanbain/ui/components/Switch';
 import { useAgentForRole } from '@/shared/hooks/useAgentLibrary';
 import { useWorkspaceContext } from '@/shared/hooks/useWorkspaceContext';
 import { workspaceSessionKeys } from '@/shared/hooks/workspaceSessionKeys';
-import { sessionsApi } from '@/shared/lib/api';
+import { sessionsApi, workspacesApi } from '@/shared/lib/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { create, useModal } from '@ebay/nice-modal-react';
 import { defineModal } from '@/shared/lib/modals';
-import { buildResolveConflictsInstructions } from '@/shared/lib/conflicts';
 import { RUNTIME_EXECUTORS } from '@/shared/lib/agents';
 import { toPrettyCase } from '@/shared/lib/string';
-import type { ConflictOp } from 'shared/types';
 
 export interface ResolveConflictsDialogProps {
   workspaceId: string;
-  conflictOp: ConflictOp;
-  sourceBranch: string | null;
+  repoId: string;
   targetBranch: string;
+  /** Files the host's own attempt stopped on, shown as a heads-up. */
   conflictedFiles: string[];
-  repoName?: string;
 }
 
 export type ResolveConflictsDialogResult =
   { action: 'resolved'; sessionId?: string } | { action: 'cancelled' };
 
 const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
-  ({
-    workspaceId,
-    conflictOp,
-    sourceBranch,
-    targetBranch,
-    conflictedFiles,
-    repoName,
-  }) => {
+  ({ workspaceId, repoId, targetBranch, conflictedFiles }) => {
     const modal = useModal();
     const queryClient = useQueryClient();
     const {
@@ -79,19 +69,6 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
       agent?.definition && agentExecutor && !isSubmitting
     );
 
-    // Build the conflict resolution instructions
-    const conflictInstructions = useMemo(
-      () =>
-        buildResolveConflictsInstructions(
-          sourceBranch,
-          targetBranch,
-          conflictedFiles,
-          conflictOp,
-          repoName
-        ),
-      [sourceBranch, targetBranch, conflictedFiles, conflictOp, repoName]
-    );
-
     const handleSubmit = useCallback(async () => {
       if (!agent?.definition || !agentExecutor) return;
 
@@ -99,6 +76,13 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
       setError(null);
 
       try {
+        // The backend aborts any half-done rebase here, records the hand-off
+        // and writes the prompt; the resolver run redoes the rebase in the
+        // sandbox on the committed branch.
+        const { prompt } = await workspacesApi.resolveConflicts(workspaceId, {
+          repo_id: repoId,
+        });
+
         let targetSessionId = selectedSessionId;
         const creatingNewSession = createNewSession || !selectedSessionId;
 
@@ -121,7 +105,7 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
         // Send follow-up with conflict resolution instructions; the agent
         // definition decides runtime, model and prompts.
         await sessionsApi.followUp(targetSessionId, {
-          prompt: conflictInstructions,
+          prompt,
           executor_config: {
             executor: agentExecutor,
             agent_definition: agent.name,
@@ -157,7 +141,11 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
         modal.hide();
       } catch (err) {
         console.error('Failed to resolve conflicts:', err);
-        setError('Failed to start conflict resolution. Please try again.');
+        setError(
+          err instanceof Error && err.message
+            ? err.message
+            : 'Failed to start conflict resolution. Please try again.'
+        );
       } finally {
         setIsSubmitting(false);
       }
@@ -167,7 +155,7 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
       selectedSessionId,
       createNewSession,
       workspaceId,
-      conflictInstructions,
+      repoId,
       queryClient,
       selectSession,
       modal,
@@ -197,10 +185,9 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
               {t('resolveConflicts.dialog.title', 'Resolve Conflicts')}
             </DialogTitle>
             <DialogDescription>
-              {t(
-                'resolveConflicts.dialog.description',
-                'Conflicts were detected. Choose how you want the agent to resolve them.'
-              )}
+              {t('resolveConflicts.dialog.description', {
+                target: targetBranch,
+              })}
             </DialogDescription>
           </DialogHeader>
 
@@ -229,6 +216,12 @@ const ResolveConflictsDialogImpl = create<ResolveConflictsDialogProps>(
                 </ul>
               )}
             </div>
+
+            <p className="text-sm text-muted-foreground">
+              {t('resolveConflicts.dialog.howItWorks', {
+                target: targetBranch,
+              })}
+            </p>
 
             {error && <div className="text-sm text-destructive">{error}</div>}
 

@@ -124,11 +124,9 @@ function RebaseDialogContent({
         // Rebase in progress WITH conflicts -> show resolve conflicts dialog
         ResolveConflictsDialog.show({
           workspaceId: workspaceId,
-          conflictOp: repoStatus.conflict_op ?? 'rebase',
-          sourceBranch: workspace?.branch ?? null,
+          repoId,
           targetBranch: repoStatus.target_branch_name,
           conflictedFiles: repoStatus.conflicted_files ?? [],
-          repoName: repoStatus.repo_name,
         });
       } else {
         // Rebase in progress WITHOUT conflicts -> show simpler dialog
@@ -192,11 +190,9 @@ function RebaseDialogContent({
         if (activeWorkspaceId === workspaceId) {
           await ResolveConflictsDialog.show({
             workspaceId: workspaceId,
-            conflictOp: errorData.op,
-            sourceBranch: workspace?.branch ?? null,
+            repoId,
             targetBranch: errorData.target_branch,
             conflictedFiles: errorData.conflicted_files,
-            repoName: undefined,
           });
         }
         return;

@@ -28,6 +28,7 @@ use worktree_manager::WorktreeManager;
 use crate::{container::LocalContainerService, pty::PtyService};
 pub mod claude_login;
 mod command;
+pub mod conflict_resolution;
 pub mod container;
 mod copy;
 pub mod environment;

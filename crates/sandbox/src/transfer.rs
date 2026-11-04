@@ -108,6 +108,128 @@ pub async fn push_branch(
     container_head(sandbox, container, repo_name, branch).await
 }
 
+/// Copy the host's `full_ref` (e.g. `refs/heads/main`) into the container
+/// clone under the same name, without checking it out, so the agent can
+/// say `git rebase main` and mean the host's main. The clone must exist.
+pub async fn send_ref(
+    sandbox: &dyn Sandbox,
+    container: &str,
+    host_worktree: &Path,
+    repo_name: &str,
+    full_ref: &str,
+) -> Result<()> {
+    let bundle = temp_path(repo_name, "ref");
+    host_git(
+        host_worktree,
+        &["bundle", "create", path_str(&bundle)?, full_ref],
+    )
+    .await?;
+    let contents = tokio::fs::read(&bundle).await;
+    let _ = tokio::fs::remove_file(&bundle).await;
+    let bundle_name = format!("{repo_name}-ref.bundle");
+    sandbox
+        .copy_in(
+            container,
+            BUNDLE_IN_DIR,
+            vec![FileEntry::new(&bundle_name, contents?)],
+        )
+        .await?;
+    let bundle_path = format!("{BUNDLE_IN_DIR}/{bundle_name}");
+    let dir = container_repo_dir(repo_name);
+    let refspec = format!("+{full_ref}:{full_ref}");
+    let result = exec_ok(
+        sandbox,
+        container,
+        &["git", "-C", &dir, "fetch", "-q", &bundle_path, &refspec],
+        &agent(),
+    )
+    .await;
+    let _ = sandbox
+        .exec(container, &["rm", "-f", &bundle_path], &agent())
+        .await;
+    result.map(|_| ())
+}
+
+/// Abort whatever rebase, merge, cherry-pick or revert the container clone
+/// is stuck in. Returns the operation that got aborted.
+///
+/// An agent that quits mid-rebase leaves a detached HEAD, unmerged index
+/// entries and conflict markers lying around. Committing that with
+/// `add -A` would bake the markers into history, so it gets rolled back.
+pub async fn abort_in_progress(
+    sandbox: &dyn Sandbox,
+    container: &str,
+    repo_name: &str,
+) -> Result<Option<String>> {
+    let dir = container_repo_dir(repo_name);
+    let script = r#"cd "$1" 2>/dev/null || exit 0
+g=$(git rev-parse --git-dir 2>/dev/null) || exit 0
+if [ -d "$g/rebase-merge" ] || [ -d "$g/rebase-apply" ]; then
+  git rebase --abort >/dev/null 2>&1 || git rebase --quit >/dev/null 2>&1; echo rebase
+elif git rev-parse -q --verify MERGE_HEAD >/dev/null; then
+  git merge --abort >/dev/null 2>&1; echo merge
+elif git rev-parse -q --verify CHERRY_PICK_HEAD >/dev/null; then
+  git cherry-pick --abort >/dev/null 2>&1; echo cherry-pick
+elif git rev-parse -q --verify REVERT_HEAD >/dev/null; then
+  git revert --abort >/dev/null 2>&1; echo revert
+fi"#;
+    let out = exec_ok(
+        sandbox,
+        container,
+        &["sh", "-c", script, "sh", &dir],
+        &agent(),
+    )
+    .await?;
+    let op = out.stdout_str().trim().to_string();
+    Ok((!op.is_empty()).then_some(op))
+}
+
+/// Make the container's `branch` exactly the host's: abort any half-done
+/// operation, throw away uncommitted edits and commits only the container
+/// had, then check out the host head. For runs where the host is the
+/// truth (the conflict resolver), not a guess. Returns the container head.
+pub async fn reset_to_host(
+    sandbox: &dyn Sandbox,
+    container: &str,
+    host_worktree: &Path,
+    repo_name: &str,
+    branch: &str,
+) -> Result<String> {
+    let dir = container_repo_dir(repo_name);
+    let exists = sandbox
+        .exec(container, &["test", "-d", &format!("{dir}/.git")], &agent())
+        .await?
+        .exit_code
+        == 0;
+    if exists {
+        abort_in_progress(sandbox, container, repo_name).await?;
+        exec_ok(
+            sandbox,
+            container,
+            &["git", "-C", &dir, "reset", "-q", "--hard"],
+            &agent(),
+        )
+        .await?;
+    }
+    push_branch(sandbox, container, host_worktree, repo_name, branch).await?;
+    exec_ok(
+        sandbox,
+        container,
+        &[
+            "git",
+            "-C",
+            &dir,
+            "reset",
+            "-q",
+            "--hard",
+            &format!("refs/heads/{branch}"),
+        ],
+        &agent(),
+    )
+    .await?;
+    container_head(sandbox, container, repo_name, branch).await
+}
+
 /// Make the container's clone match the host worktree before a run.
 ///
 /// - Container missing the repo, or behind the host: push the host branch.
@@ -122,6 +244,16 @@ pub async fn sync_branch_in(
     repo_name: &str,
     branch: &str,
 ) -> Result<bool> {
+    // Mid-rebase the branch ref still points at the old tip and the
+    // conflicts live in the host's index, which a bundle never carries.
+    // Shipping that would hand the agent a clean, stale clone and a prompt
+    // about conflicts it can't see. Say so instead of pretending.
+    if let Some(op) = host_op_in_progress(host_worktree).await {
+        return Err(SandboxError::Other(format!(
+            "The host worktree is in the middle of a {op}. Finish or abort it \
+             first, or use Resolve conflicts, which redoes it in the sandbox."
+        )));
+    }
     let host_head = host_git(host_worktree, &["rev-parse", "HEAD"]).await?;
     let Ok(container_head) = container_head(sandbox, container, repo_name, branch).await else {
         push_branch(sandbox, container, host_worktree, repo_name, branch).await?;
@@ -368,6 +500,36 @@ fn path_str(path: &Path) -> Result<&str> {
 }
 
 /// Run git on the host and return trimmed stdout.
+/// The rebase, merge, cherry-pick or revert the host worktree is stuck in.
+pub async fn host_op_in_progress(dir: &Path) -> Option<&'static str> {
+    for name in ["rebase-merge", "rebase-apply"] {
+        if let Ok(path) = host_git(dir, &["rev-parse", "--git-path", name]).await {
+            let path = PathBuf::from(path);
+            let path = if path.is_relative() {
+                dir.join(path)
+            } else {
+                path
+            };
+            if path.exists() {
+                return Some("rebase");
+            }
+        }
+    }
+    for (head, op) in [
+        ("MERGE_HEAD", "merge"),
+        ("CHERRY_PICK_HEAD", "cherry-pick"),
+        ("REVERT_HEAD", "revert"),
+    ] {
+        if host_git(dir, &["rev-parse", "-q", "--verify", head])
+            .await
+            .is_ok()
+        {
+            return Some(op);
+        }
+    }
+    None
+}
+
 async fn host_git(dir: &Path, args: &[&str]) -> Result<String> {
     let mut cmd = Command::new("git");
     crate::hide_console(&mut cmd).arg("-C").arg(dir).args(args);
@@ -400,6 +562,39 @@ mod tests {
             String::from_utf8_lossy(&out.stderr)
         );
         String::from_utf8_lossy(&out.stdout).trim().to_string()
+    }
+
+    #[tokio::test]
+    async fn host_op_in_progress_sees_a_stopped_rebase() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
+        let id = ["-c", "user.name=t", "-c", "user.email=t@t"];
+        let commit = |file: &str, body: &str| {
+            std::fs::write(dir.join(file), body).unwrap();
+            git_sync(dir, &["add", "-A"]);
+            git_sync(dir, &[&id[..], &["commit", "-q", "-m", body]].concat());
+        };
+        git_sync(dir, &["init", "-q", "-b", "main"]);
+        commit("f", "base");
+        git_sync(dir, &["switch", "-q", "-c", "feature"]);
+        commit("f", "feature");
+        git_sync(dir, &["switch", "-q", "main"]);
+        commit("f", "main");
+        git_sync(dir, &["switch", "-q", "feature"]);
+        assert_eq!(host_op_in_progress(dir).await, None);
+
+        let rebase = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(id)
+            .args(["rebase", "main"])
+            .output()
+            .unwrap();
+        assert!(!rebase.status.success(), "the rebase should stop on f");
+        assert_eq!(host_op_in_progress(dir).await, Some("rebase"));
+
+        git_sync(dir, &["rebase", "--abort"]);
+        assert_eq!(host_op_in_progress(dir).await, None);
     }
 
     /// A host repo with a conflicted merge in progress, plus a "container"

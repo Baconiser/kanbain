@@ -555,8 +555,19 @@ impl GitCli {
     pub fn is_rebase_in_progress(&self, worktree_path: &Path) -> Result<bool, GitCliError> {
         let rebase_merge = self.git(worktree_path, ["rev-parse", "--git-path", "rebase-merge"])?;
         let rebase_apply = self.git(worktree_path, ["rev-parse", "--git-path", "rebase-apply"])?;
-        let rm_exists = std::path::Path::new(rebase_merge.trim()).exists();
-        let ra_exists = std::path::Path::new(rebase_apply.trim()).exists();
+        // `--git-path` answers relative to the repo for a main checkout
+        // (`.git/rebase-merge`) and absolute for linked worktrees. Checking
+        // the relative one against our own cwd always said "no rebase".
+        let resolve = |p: &str| {
+            let p = Path::new(p.trim());
+            if p.is_relative() {
+                worktree_path.join(p)
+            } else {
+                p.to_path_buf()
+            }
+        };
+        let rm_exists = resolve(&rebase_merge).exists();
+        let ra_exists = resolve(&rebase_apply).exists();
         Ok(rm_exists || ra_exists)
     }
 
@@ -694,6 +705,37 @@ impl GitCli {
         self.git(worktree_path, ["revert", "--abort"]).map(|_| ())
     }
 
+    /// Files a merge of `theirs` into `ours` would conflict on, worked out
+    /// in the object database alone (`git merge-tree --write-tree`, git
+    /// 2.38+), so no worktree gets dragged into a half-merged state just to
+    /// ask the question. `None` when this git can't answer (too old, or the
+    /// refs are bogus): callers fall back to guessing.
+    pub fn predict_conflicts(
+        &self,
+        repo_path: &Path,
+        ours: &str,
+        theirs: &str,
+    ) -> Result<Option<Vec<String>>, GitCliError> {
+        use utils::command_ext::NoWindowExt;
+        let git = resolve_executable_path_blocking("git").ok_or(GitCliError::NotAvailable)?;
+        let out = Command::new(git)
+            .arg("-C")
+            .arg(repo_path)
+            .args([
+                "merge-tree",
+                "--write-tree",
+                "--name-only",
+                "--no-messages",
+                ours,
+                theirs,
+            ])
+            .stdin(Stdio::null())
+            .no_window()
+            .output()
+            .map_err(|e| GitCliError::CommandFailed(e.to_string()))?;
+        Ok(parse_merge_tree(out.status.code(), &out.stdout))
+    }
+
     /// List files currently in a conflicted (unmerged) state in the worktree.
     pub fn get_conflicted_files(&self, worktree_path: &Path) -> Result<Vec<String>, GitCliError> {
         // `--diff-filter=U` lists paths with unresolved conflicts
@@ -706,6 +748,41 @@ impl GitCli {
             }
         }
         Ok(files)
+    }
+}
+
+/// `git merge-tree --write-tree --name-only --no-messages` output: exit 0
+/// is a clean merge, exit 1 lists the conflicted paths after the tree id,
+/// anything else means git couldn't answer.
+fn parse_merge_tree(code: Option<i32>, stdout: &[u8]) -> Option<Vec<String>> {
+    match code {
+        Some(0) => Some(vec![]),
+        Some(1) => Some(
+            String::from_utf8_lossy(stdout)
+                .lines()
+                .skip(1)
+                .map(str::trim)
+                .take_while(|line| !line.is_empty())
+                .map(str::to_string)
+                .collect(),
+        ),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod merge_tree_tests {
+    use super::parse_merge_tree;
+
+    #[test]
+    fn parses_clean_conflicted_and_broken_output() {
+        assert_eq!(parse_merge_tree(Some(0), b"abc123\n"), Some(vec![]));
+        assert_eq!(
+            parse_merge_tree(Some(1), b"abc123\nsrc/app.rs\ntests/x.rs\n"),
+            Some(vec!["src/app.rs".to_string(), "tests/x.rs".to_string()])
+        );
+        assert_eq!(parse_merge_tree(Some(129), b"usage: ..."), None);
+        assert_eq!(parse_merge_tree(None, b""), None);
     }
 }
 
