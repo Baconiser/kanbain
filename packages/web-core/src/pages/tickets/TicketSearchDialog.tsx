@@ -30,6 +30,7 @@ export const KIND_LABELS: Record<string, string> = {
   run: 'Run',
   plan: 'Plan',
   issue_found: 'Issue found',
+  changelog: 'Changelog',
   code: 'Code',
 };
 

@@ -16,6 +16,7 @@ import { ProjectSettingsDialog } from './ProjectSettingsDialog';
 import { TicketBoard } from './TicketBoard';
 import { TicketPanel } from './TicketPanel';
 import { ticketMatchesQuery } from './ticketIds';
+import { reviewApi } from '@/shared/lib/ticketsApi';
 import { onOpenTicketRequest, takeOpenTicketRequest } from './openTicket';
 
 const PROJECT_STORAGE_KEY = 'kanbain.tickets.projectId';
@@ -159,6 +160,23 @@ export function TicketsPage() {
           onClick={() => void ProjectSettingsDialog.show({ project })}
         >
           <GearSixIcon className="size-icon-sm" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          data-testid="project-changelog-export"
+          title="Download the project's changelog as Markdown"
+          onClick={() =>
+            reviewApi
+              .exportProject(project.id)
+              .catch((err: unknown) =>
+                showError(
+                  err instanceof Error ? err.message : 'Changelog export failed'
+                )
+              )
+          }
+        >
+          Changelog
         </Button>
         <Button size="sm" variant="ghost" onClick={() => void createProject()}>
           <PlusIcon className="mr-half size-icon-xs" />

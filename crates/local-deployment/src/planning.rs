@@ -1012,6 +1012,42 @@ impl PlanningService {
     }
 
     /// Sends the newest plan back; the planner revises it in its session.
+    /// Review sent a coded ticket back to the planner (Phase 7, D26): a
+    /// planner run with the feedback, on top of the latest plan. The new
+    /// version goes through approval again; approving it replaces the old
+    /// plan's unfinished work.
+    pub async fn replan(
+        &self,
+        issue_id: Uuid,
+        feedback: &str,
+    ) -> Result<IssuePlanning, PlanningError> {
+        let pool = &self.db.pool;
+        let feedback = feedback.trim();
+        if feedback.is_empty() {
+            return Err(PlanningError::Invalid(
+                "Say what the planner should change".to_string(),
+            ));
+        }
+        let version = Plan::latest(pool, issue_id)
+            .await?
+            .map(|p| p.version)
+            .ok_or_else(|| {
+                PlanningError::Invalid("This ticket has no plan to revise".to_string())
+            })?;
+        sqlx::query("INSERT OR IGNORE INTO issue_planning (issue_id) VALUES (?)")
+            .bind(issue_id)
+            .execute(pool)
+            .await?;
+        self.start(
+            issue_id,
+            PlanTrigger::Feedback {
+                version,
+                feedback: feedback.to_string(),
+            },
+        )
+        .await
+    }
+
     pub async fn send_back(&self, plan_id: Uuid, feedback: &str) -> Result<Plan, PlanningError> {
         let pool = &self.db.pool;
         let feedback = feedback.trim();
@@ -1049,7 +1085,7 @@ impl PlanningService {
 
 /// Moves a ticket to its project's first status of `kind`, if it has one
 /// and isn't there yet.
-pub(crate) async fn move_to_kind(pool: &sqlx::SqlitePool, issue: &Issue, kind: ProjectStatusKind) {
+pub async fn move_to_kind(pool: &sqlx::SqlitePool, issue: &Issue, kind: ProjectStatusKind) {
     let Ok(Some(status)) = ProjectStatus::find_first_of_kind(pool, issue.project_id, kind).await
     else {
         return;

@@ -79,6 +79,14 @@ pub enum IssueEventType {
     /// You marked an issue found won't fix, or opened it again (`status`,
     /// `description`).
     IssueFoundUpdated,
+    /// The scribe wrote a changelog entry for a run (`entry`, `kind`,
+    /// `title`), or the merge into the target was recorded (Phase 7).
+    ChangelogEntry,
+    /// The ticket was merged into its target (`repos`, `pushed`).
+    Merged,
+    /// You requested changes in review (`to`: coders or planner,
+    /// `feedback`).
+    ChangesRequested,
     RunStarted,
     RunFinished,
 }

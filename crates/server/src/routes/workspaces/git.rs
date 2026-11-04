@@ -216,16 +216,35 @@ pub async fn merge_workspace(
         ));
     }
 
+    merge_repo_into_target(&deployment, &workspace, &workspace_repo, &repo).await?;
+
+    if !workspace.pinned
+        && let Err(e) = deployment.container().archive_workspace(workspace.id).await
+    {
+        tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
+    }
+
+    Ok(ResponseJson(ApiResponse::success(())))
+}
+
+/// Squash-merges one repo of a workspace into its target branch and
+/// records the merge. Returns the merge commit and its message. Shared by
+/// the workspace Merge button and the ticket review (Phase 7).
+pub(crate) async fn merge_repo_into_target(
+    deployment: &DeploymentImpl,
+    workspace: &Workspace,
+    workspace_repo: &WorkspaceRepo,
+    repo: &Repo,
+) -> Result<(String, String), ApiError> {
     let container_ref = deployment
         .container()
-        .ensure_container_exists(&workspace)
+        .ensure_container_exists(workspace)
         .await?;
-    let workspace_path = Path::new(&container_ref);
-    let worktree_path = workspace_path.join(repo.name);
+    let worktree_path = Path::new(&container_ref).join(&repo.name);
 
     let commit_message = merge_commit_message(
-        &deployment,
-        &workspace,
+        deployment,
+        workspace,
         &repo.path,
         &workspace_repo.target_branch,
     )
@@ -240,21 +259,14 @@ pub async fn merge_workspace(
     )?;
 
     Merge::create_direct(
-        pool,
+        &deployment.db().pool,
         workspace.id,
         workspace_repo.repo_id,
         &workspace_repo.target_branch,
         &merge_commit_id,
     )
     .await?;
-
-    if !workspace.pinned
-        && let Err(e) = deployment.container().archive_workspace(workspace.id).await
-    {
-        tracing::error!("Failed to archive workspace {}: {}", workspace.id, e);
-    }
-
-    Ok(ResponseJson(ApiResponse::success(())))
+    Ok((merge_commit_id, commit_message))
 }
 
 /// A changelog instead of "Plan KAN-12 (kanbain <uuid>)": the ticket id and

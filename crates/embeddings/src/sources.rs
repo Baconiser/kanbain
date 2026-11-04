@@ -6,10 +6,11 @@
 use std::collections::HashSet;
 
 use db::models::{
-    attachment_text::AttachmentText, coding_agent_turn::CodingAgentTurn,
-    execution_process::ExecutionProcess, execution_process_repo_state::ExecutionProcessRepoState,
-    file::File, issue::Issue, issue_comment::IssueComment, issue_description::IssueDescription,
-    issue_found::IssueFound, issue_history::IssueHistory, plan::Plan, project::Project, repo::Repo,
+    attachment_text::AttachmentText, changelog_entry::ChangelogEntry,
+    coding_agent_turn::CodingAgentTurn, execution_process::ExecutionProcess,
+    execution_process_repo_state::ExecutionProcessRepoState, file::File, issue::Issue,
+    issue_comment::IssueComment, issue_description::IssueDescription, issue_found::IssueFound,
+    issue_history::IssueHistory, plan::Plan, project::Project, repo::Repo,
 };
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -23,6 +24,7 @@ pub const KIND_PRIOR_WORK: &str = "prior_work";
 pub const KIND_RUN: &str = "run";
 pub const KIND_PLAN: &str = "plan";
 pub const KIND_ISSUE_FOUND: &str = "issue_found";
+pub const KIND_CHANGELOG: &str = "changelog";
 
 /// Text kinds this phase indexes; E21 lists more for later phases.
 pub const TEXT_KINDS: &[&str] = &[
@@ -33,6 +35,7 @@ pub const TEXT_KINDS: &[&str] = &[
     KIND_RUN,
     KIND_PLAN,
     KIND_ISSUE_FOUND,
+    KIND_CHANGELOG,
 ];
 
 /// One source to store.
@@ -254,6 +257,25 @@ pub async fn ticket_sources(
                 found.category.to_string().replace('_', " "),
                 found.status,
                 found.description
+            ),
+        ));
+    }
+
+    // Changelog entries and merge messages (Phase 7): what each run did
+    // and why, with the files, so "who changed the login form" finds it.
+    for entry in ChangelogEntry::find_by_issue(pool, issue.id).await? {
+        let files = if entry.files.0.is_empty() {
+            String::new()
+        } else {
+            format!("\n\nFiles: {}", entry.files.0.join(", "))
+        };
+        sources.extend(source(
+            KIND_CHANGELOG,
+            entry.id.to_string(),
+            &header,
+            &format!(
+                "Changelog ({}): {}\n\n{}{files}",
+                entry.kind, entry.title, entry.summary
             ),
         ));
     }

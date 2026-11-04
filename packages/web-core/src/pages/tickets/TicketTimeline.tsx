@@ -154,6 +154,18 @@ export function describeEvent(event: IssueEvent): string {
         return `Coding could not start: ${str(p.error)}`;
       return 'Coding stopped';
     }
+    case 'changelog_entry':
+      return p.error
+        ? `Changelog entry (plain, the scribe failed): ${str(p.title)}`
+        : `Changelog entry written: ${str(p.title)}`;
+    case 'merged': {
+      const repos = Array.isArray(p.repos) ? p.repos.length : 0;
+      const pushed = Array.isArray(p.pushed) ? p.pushed.length : 0;
+      const failed = Array.isArray(p.push_errors) ? p.push_errors.length : 0;
+      return `Merged ${repos} repo${repos === 1 ? '' : 's'} into the target${pushed ? `, pushed ${pushed}` : ''}${failed ? `, ${failed} push${failed === 1 ? '' : 'es'} failed` : ''}`;
+    }
+    case 'changes_requested':
+      return `Changes requested from the ${p.to === 'planner' ? 'planner' : 'coders'}: ${str(p.feedback)}`;
     case 'run_started':
       return `Run started${p.agent ? ` (${str(p.agent)})` : ''}`;
     case 'run_finished':

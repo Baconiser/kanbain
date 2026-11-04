@@ -140,7 +140,7 @@ actor: string, payload: Record<string, unknown>,
  */
 occurred_at: string, created_at: string, };
 
-export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", coding_started = "coding_started", subtask_started = "subtask_started", subtask_merged = "subtask_merged", merge_conflict = "merge_conflict", subtask_failed = "subtask_failed", subtask_stopped = "subtask_stopped", coding_finished = "coding_finished", tester_started = "tester_started", tests_finished = "tests_finished", fix_started = "fix_started", fix_merged = "fix_merged", checkpoint_passed = "checkpoint_passed", checkpoint_failed = "checkpoint_failed", issue_found_updated = "issue_found_updated", run_started = "run_started", run_finished = "run_finished" }
+export enum IssueEventType { created = "created", status_changed = "status_changed", title_changed = "title_changed", priority_changed = "priority_changed", external_id_changed = "external_id_changed", mode_changed = "mode_changed", description_version = "description_version", comment = "comment", attachment_added = "attachment_added", intake = "intake", history_check = "history_check", history_analysis = "history_analysis", prior_commit = "prior_commit", planning_started = "planning_started", plan_questions = "plan_questions", plan_version = "plan_version", plan_approved = "plan_approved", plan_rejected = "plan_rejected", planning_failed = "planning_failed", coding_started = "coding_started", subtask_started = "subtask_started", subtask_merged = "subtask_merged", merge_conflict = "merge_conflict", subtask_failed = "subtask_failed", subtask_stopped = "subtask_stopped", coding_finished = "coding_finished", tester_started = "tester_started", tests_finished = "tests_finished", fix_started = "fix_started", fix_merged = "fix_merged", checkpoint_passed = "checkpoint_passed", checkpoint_failed = "checkpoint_failed", issue_found_updated = "issue_found_updated", changelog_entry = "changelog_entry", merged = "merged", changes_requested = "changes_requested", run_started = "run_started", run_finished = "run_finished" }
 
 export type AgentJob = { id: string, project_id: string | null, issue_id: string | null, kind: string, agent_def_id: string | null, model: string | null, status: AgentJobStatus, container_id: string | null, output: string | null, error: string | null, tokens_in: number, tokens_out: number, tokens_cache_read: number, tokens_cache_write: number, cost_usd: number, model_calls: number, budget_usd: number | null, started_at: string | null, completed_at: string | null, created_at: string, };
 
@@ -248,6 +248,85 @@ export type ProjectSetupScan = { project_id: string, status: SetupScanStatus, jo
 export type ConflictResolutionStage = "queued" | "rebasing" | "syncing" | "resolved" | "failed";
 
 export type ConflictResolution = { id: string, workspace_id: string, repo_id: string, execution_process_id: string | null, target_branch: string, target_oid: string, branch_oid: string, predicted_files: string[], stage: ConflictResolutionStage, error: string | null, created_at: string, updated_at: string, };
+
+export type ChangelogKind = "coder" | "tester" | "fix" | "merge";
+
+export type CommitRef = { repo: string, sha: string, };
+
+export type ChangelogEntry = { id: string, issue_id: string, run_id: string | null, job_id: string | null, kind: ChangelogKind, title: string, summary: string, 
+/**
+ * `repo/path` per changed file.
+ */
+files: string[], commit_refs: CommitRef[], 
+/**
+ * Issues found this run fixed (tester: confirmed by the re-test; fix
+ * run: the open issues it was sent to fix).
+ */
+issues_fixed: string[], 
+/**
+ * Issues a tester run found.
+ */
+issues_found: string[], scribe_error: string | null, created_at: string, };
+
+export type ReviewFile = { path: string, 
+/**
+ * `None` for binary files.
+ */
+added: number | null, removed: number | null, };
+
+export type ReviewRepo = { repo_id: string, repo_name: string, target_branch: string, is_target_remote: boolean, commits_ahead: number, commits_behind: number, lines_added: number, lines_removed: number, files_changed: number, 
+/**
+ * The first [`MAX_FILES`] changed files.
+ */
+files: Array<ReviewFile>, 
+/**
+ * The ticket worktree is mid-rebase/merge or has unmerged files.
+ */
+has_conflicts: boolean, conflict_resolution: ConflictResolution | null, 
+/**
+ * The latest merge commit into the target, if it was merged.
+ */
+merged_commit: string | null, };
+
+export type ReviewCost = { 
+/**
+ * Agent runs (planner, coders, testers, fixers, manual).
+ */
+runs_usd: number, 
+/**
+ * Headless jobs (intake, history, scribe).
+ */
+jobs_usd: number, total_usd: number, budget_usd: number | null, };
+
+export type ReviewView = { workspace_id: string | null, branch: string | null, plan_version: number | null, acceptance_criteria: Array<string>, coding_status: OrchestrationStatus | null, repos: Array<ReviewRepo>, changelog: Array<ChangelogEntry>, issues_found: Array<IssueFound>, cost: ReviewCost, 
+/**
+ * Everything on the branch is in the target already.
+ */
+merged: boolean, 
+/**
+ * Why Merge is off (besides `merged`); empty when it may merge.
+ */
+blockers: Array<string>, 
+/**
+ * Worth knowing before merging, but not stopping it.
+ */
+warnings: Array<string>, };
+
+export type MergeTicketRequest = { 
+/**
+ * Push the target branch to its remote afterwards.
+ */
+push: boolean, };
+
+export type MergeTicketResponse = { merged: Array<CommitRef>, 
+/**
+ * One line per repo whose push failed; the merge itself stands.
+ */
+push_errors: Array<string>, pushed: Array<string>, };
+
+export type ChangesTarget = "coders" | "planner";
+
+export type RequestChangesRequest = { to: ChangesTarget, feedback: string, };
 
 export type SetupScanView = { scan: ProjectSetupScan | null, 
 /**

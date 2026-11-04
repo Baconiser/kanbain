@@ -27,6 +27,7 @@ pub mod plans;
 pub mod preview;
 pub mod projects;
 pub mod repo;
+pub mod review;
 pub mod sandbox;
 pub mod scratch;
 pub mod search;
@@ -53,6 +54,7 @@ pub fn router(deployment: DeploymentImpl) -> IntoMakeService<Router> {
         .merge(plans::router())
         .merge(setup_scan::router())
         .merge(orchestration::router())
+        .merge(review::router())
         .merge(logs::router())
         .merge(search::router())
         .merge(export::router())

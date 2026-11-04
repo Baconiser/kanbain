@@ -109,7 +109,7 @@ impl RunTools for KnowledgeTools {
                         "type": "array",
                         "items": {
                             "type": "string",
-                            "enum": ["code", "ticket", "comment", "attachment", "prior_work", "run", "plan", "issue_found"]
+                            "enum": ["code", "ticket", "comment", "attachment", "prior_work", "run", "plan", "issue_found", "changelog"]
                         },
                         "description": "Limit the results to these kinds."
                     },

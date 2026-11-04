@@ -15,6 +15,7 @@
 //!   checkpoint fails and the ticket goes to Blocked.
 
 use db::models::{
+    changelog_entry::ChangelogKind,
     execution_process::{ExecutionProcess, ExecutionProcessStatus},
     execution_process_event::{ExecutionProcessEvent, ExecutionProcessEventType},
     issue::Issue,
@@ -47,7 +48,7 @@ use uuid::Uuid;
 
 use super::{
     MAX_FIX_ROUNDS, MergeOutcome, OrchestratorError, OrchestratorService, render_conflict,
-    sync_error, workspace_cost,
+    scribe::ScribeInput, sync_error, workspace_cost,
 };
 
 /// One checkpoint as the ticket panel shows it.
@@ -755,7 +756,10 @@ impl OrchestratorService {
                 self.fail_check_locked(row, &e).await;
                 false
             }
-            Ok(()) if fixer => self.fix_finished_locked(row, workspace_id).await?,
+            Ok(()) if fixer => {
+                self.fix_finished_locked(row, process.id, workspace_id)
+                    .await?
+            }
             Ok(()) => {
                 self.tester_finished_locked(row, process, workspace_id)
                     .await?
@@ -886,6 +890,38 @@ impl OrchestratorService {
         )
         .await;
 
+        let all = IssueFound::find_by_issue(pool, issue.id).await?;
+        self.spawn_scribe(ScribeInput {
+            issue_id: issue.id,
+            run_id: Some(process.id),
+            kind: ChangelogKind::Tester,
+            title: if row.round > 0 {
+                format!("Re-test of checkpoint {n}: {}", row.what)
+            } else {
+                format!("Tests for checkpoint {n}: {}", row.what)
+            },
+            what: row.what.clone(),
+            commits: commits.clone(),
+            ticket_root: std::path::PathBuf::from(
+                ticket_ws.container_ref.clone().unwrap_or_default(),
+            ),
+            issues_fixed: all
+                .iter()
+                .filter(|i| {
+                    i.checkpoint == Some(row.position)
+                        && i.status == IssueFoundStatus::Fixed
+                        && i.fixed_round == Some(issue.fix_round)
+                        && issue.fix_round > 0
+                })
+                .cloned()
+                .collect(),
+            issues_found: all
+                .iter()
+                .filter(|i| i.run_id == Some(process.id))
+                .cloned()
+                .collect(),
+        });
+
         let open = IssueFound::open_at(pool, issue.id, row.position).await?;
         if open.is_empty() {
             OrchestrationCheckpoint::set_status(pool, row.id, CheckpointStatus::Passed, None)
@@ -943,6 +979,7 @@ impl OrchestratorService {
     async fn fix_finished_locked(
         &self,
         row: &OrchestrationCheckpoint,
+        run_id: Uuid,
         workspace_id: Uuid,
     ) -> Result<bool, OrchestratorError> {
         let pool = &self.db.pool;
@@ -980,6 +1017,23 @@ impl OrchestratorService {
                 return Ok(false);
             }
         };
+        let targeted = IssueFound::open_at(pool, issue.id, row.position).await?;
+        self.spawn_scribe(ScribeInput {
+            issue_id: issue.id,
+            run_id: Some(run_id),
+            kind: ChangelogKind::Fix,
+            title: format!(
+                "Fixes for checkpoint {n} (fix round {}): {}",
+                issue.fix_round, row.what
+            ),
+            what: row.what.clone(),
+            commits: commits.clone(),
+            ticket_root: std::path::PathBuf::from(
+                ticket_ws.container_ref.clone().unwrap_or_default(),
+            ),
+            issues_fixed: targeted,
+            issues_found: vec![],
+        });
         self.event(
             issue.id,
             IssueEventType::FixMerged,

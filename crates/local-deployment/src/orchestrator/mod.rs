@@ -29,6 +29,7 @@ use std::{
 use db::{
     DBService,
     models::{
+        changelog_entry::ChangelogKind,
         execution_process::{ExecutionProcess, ExecutionProcessRunReason, ExecutionProcessStatus},
         execution_process_event::{ExecutionProcessEvent, ExecutionProcessEventType},
         issue::{CreateIssue, Issue},
@@ -81,6 +82,7 @@ use crate::{
 };
 
 mod checkpoints;
+mod scribe;
 pub use checkpoints::{CheckpointView, test_path_matcher};
 
 /// Fix rounds per ticket before it goes to Blocked (D24): merge-conflict
@@ -1289,14 +1291,14 @@ impl OrchestratorService {
         let plan = Plan::find_by_id(pool, o.plan_id)
             .await?
             .ok_or(OrchestratorError::NotFound)?;
-        let title = plan
+        let planned = plan
             .plan
             .0
             .subtasks
             .iter()
-            .find(|s| s.id == row.plan_subtask_id)
-            .map(|s| s.title.clone())
-            .unwrap_or_default();
+            .find(|s| s.id == row.plan_subtask_id);
+        let title = planned.map(|s| s.title.clone()).unwrap_or_default();
+        let description = planned.map(|s| s.description.clone()).unwrap_or_default();
         let ticket_ws = match self.ticket_workspace(&o).await {
             Ok(ws) => ws,
             Err(e) => return self.fail_locked(row, &e.to_string()).await,
@@ -1337,6 +1339,19 @@ impl OrchestratorService {
                        "commits": commits}),
             )
             .await;
+            if !commits.is_empty() {
+                self.spawn_scribe(scribe::ScribeInput {
+                    issue_id: row.issue_id,
+                    run_id: row.execution_process_id,
+                    kind: ChangelogKind::Coder,
+                    title: format!("Subtask {}: {title}", row.plan_subtask_id),
+                    what: description,
+                    commits,
+                    ticket_root: PathBuf::from(ticket_ws.container_ref.clone().unwrap_or_default()),
+                    issues_fixed: vec![],
+                    issues_found: vec![],
+                });
+            }
             return Ok(());
         }
 
@@ -1809,6 +1824,62 @@ impl OrchestratorService {
         self.tick_locked(row.issue_id).await?;
         drop(guard);
         self.view(row.issue_id).await
+    }
+
+    /// Review sent the ticket back to the coders (Phase 7, D26). The
+    /// feedback becomes an open issue at the final checkpoint, so its fixer
+    /// works on it and its tester checks it, with the normal three rounds.
+    pub async fn request_changes(
+        &self,
+        issue_id: Uuid,
+        feedback: &str,
+    ) -> Result<OrchestrationView, OrchestratorError> {
+        let pool = &self.db.pool;
+        let feedback = feedback.trim();
+        if feedback.is_empty() {
+            return Err(OrchestratorError::Invalid(
+                "Say what the coders should change".into(),
+            ));
+        }
+        let lock = self.lock_for(issue_id);
+        let guard = lock.lock().await;
+        let Some(o) = TicketOrchestration::find(pool, issue_id).await? else {
+            return Err(OrchestratorError::Invalid(
+                "The orchestrator never coded this ticket; send it to the planner".into(),
+            ));
+        };
+        if o.status == OrchestrationStatus::Running {
+            return Err(OrchestratorError::Invalid(
+                "Coding is still running; wait for it or stop it first".into(),
+            ));
+        }
+        let Some(last) = OrchestrationCheckpoint::find_by_issue(pool, issue_id)
+            .await?
+            .into_iter()
+            .max_by_key(|c| c.position)
+        else {
+            return Err(OrchestratorError::Invalid(
+                "This ticket has no checkpoint to send feedback to".into(),
+            ));
+        };
+        IssueFound::create_review(pool, issue_id, last.position, feedback).await?;
+        self.reopen_locked(issue_id).await?;
+        // Round 1 of 3 for the feedback; reopen reset the ticket to 0.
+        Issue::set_fix_round(pool, issue_id, 1).await?;
+        OrchestrationCheckpoint::next_run(pool, last.id, CheckpointStatus::Fixing, last.round + 1)
+            .await?;
+        self.event(
+            issue_id,
+            IssueEventType::ChangesRequested,
+            "user",
+            json!({"to": "coders", "feedback": feedback, "checkpoint": last.position + 1}),
+        )
+        .await;
+        drop(guard);
+        let service = self.clone();
+        let checkpoint = last.id;
+        tokio::spawn(async move { service.launch_check(checkpoint).await });
+        self.view(issue_id).await
     }
 
     /// Marks an issue found as won't fix (or opens it again). A won't-fix

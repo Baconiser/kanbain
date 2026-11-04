@@ -46,6 +46,7 @@ import { useIssueTimeline } from '@/shared/hooks/useTicketStreams';
 import { CollapsibleSection } from './CollapsibleSection';
 import { TicketAttachments } from './TicketAttachments';
 import { TicketCoding } from './TicketCoding';
+import { TicketReview } from './TicketReview';
 import { TicketComments } from './TicketComments';
 import { TicketDescription } from './TicketDescription';
 import { TicketHistory } from './TicketHistory';
@@ -63,7 +64,7 @@ const RELATIONSHIP_LABELS: Record<IssueRelationshipType, string> = {
 // Long sub-ticket lists show this many until expanded.
 const SUB_TICKETS_SHOWN = 5;
 
-type TabId = 'overview' | 'plan' | 'coding' | 'activity';
+type TabId = 'overview' | 'plan' | 'coding' | 'review' | 'activity';
 const TAB_STORAGE_KEY = 'kanbain.ticketPanel.tab';
 
 function readStoredTab(): TabId {
@@ -73,6 +74,7 @@ function readStoredTab(): TabId {
       stored === 'overview' ||
       stored === 'plan' ||
       stored === 'coding' ||
+      stored === 'review' ||
       stored === 'activity'
     ) {
       return stored;
@@ -282,7 +284,25 @@ export function TicketPanel({
   );
   // Nothing to code before a plan is approved.
   const hasCoding = codingEvents > 0;
-  const activeTab: TabId = tab === 'coding' && !hasCoding ? 'overview' : tab;
+  const reviewEvents = timeline.events.filter(
+    (e) =>
+      e.event_type === 'changelog_entry' ||
+      e.event_type === 'merged' ||
+      e.event_type === 'changes_requested' ||
+      e.event_type === 'coding_finished' ||
+      e.event_type === 'fix_merged'
+  ).length;
+  const statusKind = board.statuses.find((s) => s.id === issue.status_id)?.kind;
+  // Review once there is coded work, or the ticket sits in Review/Done.
+  const hasReview =
+    hasCoding ||
+    reviewEvents > 0 ||
+    statusKind === 'review' ||
+    statusKind === 'done';
+  const activeTab: TabId =
+    (tab === 'coding' && !hasCoding) || (tab === 'review' && !hasReview)
+      ? 'overview'
+      : tab;
 
   const update = useCallback(
     (data: UpdateIssue) =>
@@ -624,6 +644,14 @@ export function TicketPanel({
               onClick={() => setTab('coding')}
             />
           )}
+          {hasReview && (
+            <TabButton
+              label="Review"
+              active={activeTab === 'review'}
+              attention={statusKind === 'review'}
+              onClick={() => setTab('review')}
+            />
+          )}
           <TabButton
             label="Activity"
             active={activeTab === 'activity'}
@@ -910,6 +938,21 @@ export function TicketPanel({
             onOpenWorkspace={openWorkspace}
             onError={onError}
           />
+        </div>
+
+        <div
+          role="tabpanel"
+          hidden={activeTab !== 'review'}
+          className={tabPanelClass(activeTab === 'review')}
+        >
+          {hasReview && (
+            <TicketReview
+              issueId={issue.id}
+              refreshKey={reviewEvents}
+              onOpenWorkspace={openWorkspace}
+              onError={onError}
+            />
+          )}
         </div>
 
         <div

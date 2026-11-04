@@ -329,6 +329,31 @@ impl IssueFound {
         Ok(results)
     }
 
+    /// Review feedback as an open issue at a checkpoint (Phase 7): its
+    /// fixer works on it and its tester checks it like any other issue.
+    pub async fn create_review(
+        pool: &SqlitePool,
+        issue_id: Uuid,
+        checkpoint: i64,
+        feedback: &str,
+    ) -> Result<Uuid, sqlx::Error> {
+        let id = Uuid::new_v4();
+        sqlx::query(
+            r#"INSERT INTO issues_found (id, issue_id, run_id, checkpoint, file, line,
+                                        severity, category, description)
+               VALUES ($1, $2, NULL, $3, NULL, NULL, $4, $5, $6)"#,
+        )
+        .bind(id)
+        .bind(issue_id)
+        .bind(checkpoint)
+        .bind(IssueSeverity::High)
+        .bind(IssueCategory::Requirements)
+        .bind(format!("Review feedback: {feedback}"))
+        .execute(pool)
+        .await?;
+        Ok(id)
+    }
+
     pub async fn set_status(
         pool: &SqlitePool,
         id: Uuid,

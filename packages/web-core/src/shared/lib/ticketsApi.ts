@@ -29,6 +29,9 @@ import type {
   IssueDescription,
   IssueEvent,
   IssueFoundStatus,
+  MergeTicketResponse,
+  RequestChangesRequest,
+  ReviewView,
   IssueRelationship,
   IntakeView,
   IssueHistoryView,
@@ -179,6 +182,49 @@ export const codingApi = {
     ),
   setIssueFoundStatus: (id: string, status: IssueFoundStatus) =>
     request<OrchestrationView>(`/api/issues-found/${id}`, 'PUT', { status }),
+};
+
+/** Fetches a Markdown export and hands it to the browser as a download. */
+async function downloadMarkdown(url: string, fallbackName: string) {
+  const response = await makeLocalApiRequest(url, { method: 'GET' });
+  if (!response.ok) {
+    throw new Error(`Export failed (${response.status})`);
+  }
+  const disposition = response.headers.get('Content-Disposition') ?? '';
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+  const blob = await response.blob();
+  const objectUrl = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = name;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+export const reviewApi = {
+  get: (issueId: string) =>
+    request<ReviewView>(`/api/issues/${issueId}/review`),
+  merge: (issueId: string, push: boolean) =>
+    request<MergeTicketResponse>(`/api/issues/${issueId}/merge`, 'POST', {
+      push,
+    }),
+  requestChanges: (issueId: string, data: RequestChangesRequest) =>
+    request<void>(`/api/issues/${issueId}/request-changes`, 'POST', data),
+  exportTicket: (issueId: string) =>
+    downloadMarkdown(
+      `/api/issues/${issueId}/changelog.md`,
+      'ticket-changelog.md'
+    ),
+  exportProject: (projectId: string) =>
+    downloadMarkdown(
+      `/api/projects/${projectId}/changelog.md`,
+      'project-changelog.md'
+    ),
 };
 
 export const searchApi = {

@@ -26,6 +26,7 @@ use workspace_manager::WorkspaceManager;
 use worktree_manager::WorktreeManager;
 
 use crate::{container::LocalContainerService, pty::PtyService};
+pub mod changelog;
 pub mod claude_login;
 mod command;
 pub mod conflict_resolution;
