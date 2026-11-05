@@ -51,6 +51,13 @@ pub const REPORT_GUIDANCE: &str = "If you notice a bug or wrong code that is out
     wrong. A triage agent takes it from there and files it unless a ticket already covers it, \
     so do not search for duplicates yourself. Then carry on with your task.";
 
+/// What role prompts of sandboxed agents with KanbAIn's tools add about
+/// asking for missing tools.
+pub const SETUP_REQUEST_GUIDANCE: &str = "If a tool, test runner, browser or CLI your task \
+    needs is missing from the sandbox, do not search the filesystem for it or improvise \
+    workarounds: call request_setup once per missing thing. The project's owner adds it for \
+    later runs; in this run, finish what you can without it and say what you could not do.";
+
 /// An agent definition with its style blocks and skills loaded.
 #[derive(Debug, Clone)]
 pub struct ResolvedAgent {
@@ -76,6 +83,12 @@ impl ResolvedAgent {
             && !role.contains("report_problem")
         {
             parts.push(REPORT_GUIDANCE.to_string());
+        }
+        if self.definition.has(Capability::Search)
+            && self.definition.role != AgentRole::Triage
+            && !role.contains("request_setup")
+        {
+            parts.push(SETUP_REQUEST_GUIDANCE.to_string());
         }
         for style in &self.styles {
             let body = style.body.trim();
@@ -349,6 +362,7 @@ mod tests {
         };
         assert!(agent.system_prompt().contains("call search_knowledge"));
         assert!(agent.system_prompt().contains("call report_problem"));
+        assert!(agent.system_prompt().contains("call request_setup"));
 
         let claude = claude::ClaudeCodeAdapter.launch(&agent, &RunSettings::default());
         let config = claude

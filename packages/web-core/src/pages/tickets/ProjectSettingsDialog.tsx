@@ -32,6 +32,11 @@ import { projectsApi } from '@/shared/lib/ticketsApi';
 import { useProjectBoard } from '@/shared/hooks/useTicketStreams';
 import { ProjectSetupScan } from './ProjectSetupScan';
 import { ProjectAgentModels, cleanAgentModels } from './ProjectAgentModels';
+import {
+  type RoleSetup,
+  RoleSetupEditor,
+  cleanRoleSetup,
+} from './ProjectRoleSetup';
 
 export interface ProjectSettingsDialogProps {
   /** Omit to create a new project. */
@@ -327,6 +332,9 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
     const [environmentNotes, setEnvironmentNotes] = useState(
       project?.settings.sandbox_environment_notes ?? ''
     );
+    const [roleSetup, setRoleSetup] = useState<RoleSetup>(
+      project?.settings.sandbox_role_setup ?? {}
+    );
     const [agentModels, setAgentModels] = useState<AgentModelOverrides>(
       project?.settings.agent_models ?? { default: null, roles: {} }
     );
@@ -385,6 +393,7 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
       setTestCommands(s.sandbox_test_commands.join('\n'));
       setRunCommands(s.sandbox_run_commands.join('\n'));
       setEnvironmentNotes(s.sandbox_environment_notes ?? '');
+      setRoleSetup(s.sandbox_role_setup);
     };
 
     const save = async () => {
@@ -430,6 +439,7 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                   .map((c) => c.trim())
                   .filter(Boolean),
                 sandbox_environment_notes: environmentNotes.trim() || null,
+                sandbox_role_setup: cleanRoleSetup(roleSetup),
                 agent_models: cleanAgentModels(agentModels),
               },
             })
@@ -614,6 +624,23 @@ const ProjectSettingsDialogImpl = create<ProjectSettingsDialogProps>(
                     placeholder={'cargo install cargo-component'}
                     value={setupCommands}
                     onChange={(e) => setSetupCommands(e.target.value)}
+                  />
+                </div>
+                <div className="col-span-2 flex flex-col gap-half">
+                  <Label>Role setup (one role’s runs only)</Label>
+                  <p className="text-xs text-low">
+                    Runs after the setup commands, in that role’s runs only: a
+                    tester’s headless browser shouldn’t slow down every coder.
+                    Agents that miss something ask for it; their requests show
+                    up under Setup agent above.
+                  </p>
+                  <RoleSetupEditor
+                    // Remount when an approval swaps the commands in, so
+                    // the roles it filled open up.
+                    key={JSON.stringify(baseSettings?.sandbox_role_setup ?? {})}
+                    idPrefix="project-role-setup"
+                    value={roleSetup}
+                    onChange={setRoleSetup}
                   />
                 </div>
                 <label className="col-span-2 flex items-center gap-base text-sm">

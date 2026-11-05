@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+
 use chrono::{DateTime, Utc};
+use executors::adapters::definition::AgentRole;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool, Type, types::Json};
 use strum_macros::{Display, EnumString};
@@ -30,6 +33,10 @@ pub struct SetupProposal {
     pub environment_md: String,
     /// Skip KanbAIn's own lockfile installs; the script does it all.
     pub skip_auto_install: bool,
+    /// Commands only one role's runs get, after `setup_script`.
+    #[serde(default)]
+    #[ts(type = "Partial<Record<AgentRole, string>>")]
+    pub role_setup: BTreeMap<AgentRole, String>,
 }
 
 /// A project's latest setup scan (one row per project).
@@ -45,6 +52,11 @@ pub struct ProjectSetupScan {
     pub run_commands: Json<Vec<String>>,
     pub environment_md: Option<String>,
     pub skip_auto_install: bool,
+    #[ts(type = "Partial<Record<AgentRole, string>>")]
+    pub role_setup: Json<BTreeMap<AgentRole, String>>,
+    /// Setup requests this scan answered; approving resolves them.
+    #[ts(type = "string[]")]
+    pub request_ids: Json<Vec<Uuid>>,
     pub summary: Option<String>,
     pub stack_hash: String,
     pub error: Option<String>,
@@ -61,6 +73,7 @@ impl ProjectSetupScan {
             run_commands: self.run_commands.0.clone(),
             environment_md: self.environment_md.clone().unwrap_or_default(),
             skip_auto_install: self.skip_auto_install,
+            role_setup: self.role_setup.0.clone(),
         }
     }
 
@@ -72,24 +85,29 @@ impl ProjectSetupScan {
     }
 
     /// Claims a new scan, replacing the previous proposal. False while one
-    /// is already scanning.
+    /// is already scanning. `request_ids` are the setup requests it answers.
     pub async fn begin(
         pool: &SqlitePool,
         project_id: Uuid,
         stack_hash: &str,
+        request_ids: &[Uuid],
     ) -> Result<bool, sqlx::Error> {
         let result = sqlx::query(
-            r#"INSERT INTO project_setup_scans (project_id, stack_hash) VALUES ($1, $2)
+            r#"INSERT INTO project_setup_scans (project_id, stack_hash, request_ids)
+               VALUES ($1, $2, $3)
                ON CONFLICT(project_id) DO UPDATE SET
                    status = 'scanning', job_id = NULL, setup_script = NULL,
                    test_commands = '[]', run_commands = '[]', environment_md = NULL,
-                   skip_auto_install = 0, summary = NULL, stack_hash = excluded.stack_hash,
+                   skip_auto_install = 0, role_setup = '{}',
+                   request_ids = excluded.request_ids, summary = NULL,
+                   stack_hash = excluded.stack_hash,
                    error = NULL, started_at = datetime('now', 'subsec'),
                    finished_at = NULL, decided_at = NULL
                WHERE project_setup_scans.status != 'scanning'"#,
         )
         .bind(project_id)
         .bind(stack_hash)
+        .bind(Json(request_ids))
         .execute(pool)
         .await?;
         Ok(result.rows_affected() > 0)
@@ -117,7 +135,7 @@ impl ProjectSetupScan {
         sqlx::query(
             r#"UPDATE project_setup_scans SET status = 'ready', setup_script = $2,
                    test_commands = $3, run_commands = $4, environment_md = $5,
-                   skip_auto_install = $6, summary = $7, error = NULL,
+                   skip_auto_install = $6, summary = $7, role_setup = $8, error = NULL,
                    finished_at = datetime('now', 'subsec')
                WHERE project_id = $1"#,
         )
@@ -128,6 +146,7 @@ impl ProjectSetupScan {
         .bind(&proposal.environment_md)
         .bind(proposal.skip_auto_install)
         .bind(summary)
+        .bind(Json(&proposal.role_setup))
         .execute(pool)
         .await?;
         Ok(())
@@ -162,7 +181,8 @@ impl ProjectSetupScan {
             Some(p) => sqlx::query(
                 r#"UPDATE project_setup_scans SET status = $2, setup_script = $3,
                        test_commands = $4, run_commands = $5, environment_md = $6,
-                       skip_auto_install = $7, decided_at = datetime('now', 'subsec')
+                       skip_auto_install = $7, role_setup = $8,
+                       decided_at = datetime('now', 'subsec')
                    WHERE project_id = $1 AND status = 'ready'"#,
             )
             .bind(project_id)
@@ -171,7 +191,8 @@ impl ProjectSetupScan {
             .bind(Json(&p.test_commands))
             .bind(Json(&p.run_commands))
             .bind(&p.environment_md)
-            .bind(p.skip_auto_install),
+            .bind(p.skip_auto_install)
+            .bind(Json(&p.role_setup)),
             None => sqlx::query(
                 r#"UPDATE project_setup_scans SET status = $2,
                        decided_at = datetime('now', 'subsec')

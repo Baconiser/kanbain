@@ -28,6 +28,7 @@ pub mod repo;
 pub mod requests;
 pub mod scratch;
 pub mod session;
+pub mod setup_request;
 pub mod tag;
 pub mod ticket_intake;
 pub mod workspace;

@@ -83,7 +83,8 @@ pub(crate) async fn mcp_handler(
                                      project's tickets, past runs and code: search before exploring \
                                      files, then read only the returned line ranges. report_problem \
                                      files a bug you noticed outside your task as a Backlog ticket, \
-                                     unless a similar ticket exists."
+                                     unless a similar ticket exists. request_setup asks the \
+                                     project's owner for a tool missing from the sandbox."
                 }),
             )
         }

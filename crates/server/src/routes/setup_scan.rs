@@ -1,5 +1,6 @@
 //! The setup agent's sandbox setup proposal for a project: start a scan,
-//! review it, approve (with edits) or discard it.
+//! review it, approve (with edits) or discard it. Plus the setup requests
+//! agents made, which the next scan answers or the user dismisses.
 
 use axum::{
     Json, Router,
@@ -83,6 +84,17 @@ async fn approve_setup_scan(
     Ok(ResponseJson(ApiResponse::success(project)))
 }
 
+async fn dismiss_setup_request(
+    Path((project_id, request_id)): Path<(Uuid, Uuid)>,
+    State(deployment): State<DeploymentImpl>,
+) -> Result<ResponseJson<ApiResponse<()>>, ApiError> {
+    deployment
+        .setup_scan()
+        .dismiss_request(project_id, request_id)
+        .await?;
+    Ok(ResponseJson(ApiResponse::success(())))
+}
+
 async fn discard_setup_scan(
     Path(project_id): Path<Uuid>,
     State(deployment): State<DeploymentImpl>,
@@ -105,5 +117,9 @@ pub fn router() -> Router<DeploymentImpl> {
         .route(
             "/projects/{project_id}/setup-scan/discard",
             post(discard_setup_scan),
+        )
+        .route(
+            "/projects/{project_id}/setup-requests/{request_id}/dismiss",
+            post(dismiss_setup_request),
         )
 }

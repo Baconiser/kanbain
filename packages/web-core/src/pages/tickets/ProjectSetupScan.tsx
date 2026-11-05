@@ -5,6 +5,7 @@ import type {
   Project,
   ProjectSetupScan as SetupScan,
   SetupProposal,
+  SetupRequest,
   SetupScanResponse,
 } from 'shared/types';
 import { MarkdownPreview } from '@/shared/components/MarkdownPreview';
@@ -12,6 +13,13 @@ import { useUserSystem } from '@/shared/hooks/useUserSystem';
 import { getErrorMessage } from '@/shared/lib/modals';
 import { getActualTheme } from '@/shared/lib/theme';
 import { projectsApi } from '@/shared/lib/ticketsApi';
+import { roleColor } from '@/shared/lib/agents';
+import {
+  type RoleSetup,
+  RoleSetupEditor,
+  cleanRoleSetup,
+  roleName,
+} from './ProjectRoleSetup';
 
 const POLL_MS = 3000;
 const textareaClass =
@@ -84,6 +92,13 @@ export function ProjectSetupScan({
 
   if (!view) return null;
   const job = view.job;
+  const requests = view.requests;
+  // Requests the running or ready scan already answers; the rest wait for
+  // the next one.
+  const answered = new Set(
+    status === 'scanning' || status === 'ready' ? (scan?.request_ids ?? []) : []
+  );
+  const unanswered = requests.filter((r) => !answered.has(r.id)).length;
 
   return (
     <div
@@ -107,11 +122,24 @@ export function ProjectSetupScan({
         >
           {status === 'scanning'
             ? 'Scanning…'
-            : scan
-              ? 'Scan again'
-              : 'Scan project'}
+            : unanswered > 0
+              ? `Answer ${unanswered} request${unanswered === 1 ? '' : 's'}`
+              : scan
+                ? 'Scan again'
+                : 'Scan project'}
         </Button>
       </div>
+
+      {requests.length > 0 && (
+        <SetupRequests
+          requests={requests}
+          answered={answered}
+          busy={busy}
+          onDismiss={(id) =>
+            void act(() => projectsApi.dismissSetupRequest(projectId, id))
+          }
+        />
+      )}
 
       {view.stack_changed && status !== 'scanning' && status !== 'ready' && (
         <p className="text-sm text-warning">
@@ -193,6 +221,7 @@ function ProposalEditor({
   const [runs, setRuns] = useState(scan.run_commands.join('\n'));
   const [notes, setNotes] = useState(scan.environment_md ?? '');
   const [skipInstall, setSkipInstall] = useState(scan.skip_auto_install);
+  const [roleSetup, setRoleSetup] = useState<RoleSetup>(scan.role_setup);
 
   return (
     <div className="flex flex-col gap-base">
@@ -245,6 +274,16 @@ function ProposalEditor({
           onChange={(e) => setNotes(e.target.value)}
         />
       </div>
+      <div className="flex flex-col gap-half">
+        <Label>
+          Role setup (runs after setup.sh, in that role’s runs only)
+        </Label>
+        <RoleSetupEditor
+          idPrefix="setup-scan-role"
+          value={roleSetup}
+          onChange={setRoleSetup}
+        />
+      </div>
       <label className="flex items-center gap-base text-sm">
         <input
           type="checkbox"
@@ -273,12 +312,78 @@ function ProposalEditor({
               run_commands: lines(runs),
               environment_md: notes,
               skip_auto_install: skipInstall,
+              role_setup: cleanRoleSetup(roleSetup),
             })
           }
         >
           Approve setup
         </Button>
       </div>
+    </div>
+  );
+}
+
+interface SetupRequestsProps {
+  requests: SetupRequest[];
+  /** Requests the current scan already covers. */
+  answered: Set<string>;
+  busy: boolean;
+  onDismiss: (id: string) => void;
+}
+
+/** What agents found missing in their sandbox and asked for. */
+function SetupRequests({
+  requests,
+  answered,
+  busy,
+  onDismiss,
+}: SetupRequestsProps) {
+  return (
+    <div className="flex flex-col gap-half" data-testid="setup-requests">
+      <p className="text-sm">
+        Agents asked for {requests.length} thing
+        {requests.length === 1 ? '' : 's'} their sandbox is missing. The setup
+        agent answers them with role setup commands for you to approve.
+      </p>
+      <ul className="flex flex-col gap-half">
+        {requests.map((request) => (
+          <li
+            key={request.id}
+            className="flex items-start justify-between gap-base rounded-sm border border-border px-base py-half"
+            style={
+              request.role
+                ? { borderLeft: `3px solid ${roleColor(request.role)}` }
+                : undefined
+            }
+          >
+            <div className="flex min-w-0 flex-col gap-half">
+              <span className="text-sm font-medium">
+                {request.need}
+                <span className="ml-base text-xs font-normal text-low">
+                  {request.role ? roleName(request.role) : 'unknown role'}
+                  {request.agent &&
+                  request.agent.replace(/-/g, '_') !== request.role
+                    ? ` · ${request.agent}`
+                    : ''}
+                  {answered.has(request.id) ? ' · in this proposal' : ''}
+                </span>
+              </span>
+              <span className="text-xs text-low">{request.reason}</span>
+              {request.suggestion && (
+                <code className="break-all text-xs">{request.suggestion}</code>
+              )}
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => onDismiss(request.id)}
+            >
+              Dismiss
+            </Button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

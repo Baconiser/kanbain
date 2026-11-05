@@ -21,7 +21,7 @@ use db::{
     },
 };
 use executors::{
-    adapters::{AGENT_DIR, AgentLaunch, SKILLS_DIR, headless},
+    adapters::{AGENT_DIR, AgentLaunch, AgentRole, SKILLS_DIR, headless},
     env::{SANDBOX_PID_DIR, SandboxTarget},
     versions::{CLAUDE_CODE_PACKAGE, CLAUDE_CODE_VERSION, OPENCODE_PACKAGE, OPENCODE_VERSION},
 };
@@ -227,6 +227,9 @@ pub struct PrepareRun<'a> {
     /// A conflict-resolver run: the host's branch wins over whatever the
     /// container has, and the rebase target comes along.
     pub rebase: Option<RebaseSetup<'a>>,
+    /// The agent's role, for the role's own setup commands. `None` for
+    /// scripts and agents KanbAIn doesn't know.
+    pub role: Option<AgentRole>,
 }
 
 /// What a resolver run needs in its clone besides its own branch.
@@ -735,7 +738,7 @@ impl SandboxRuntime {
         let setup = crate::project_setup::run(
             &ready.docker,
             &container,
-            crate::project_setup::plan(&repo_roots, run.project.map(|p| &*p.settings)),
+            crate::project_setup::plan(&repo_roots, run.project.map(|p| &*p.settings), run.role),
             proxy_env.iter().chain(&build_env).cloned().collect(),
             log,
         )

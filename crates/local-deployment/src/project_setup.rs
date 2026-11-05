@@ -11,6 +11,14 @@
 //! volume, never in the repo, so it dies together with the `node_modules` it
 //! vouches for.
 //!
+//! On top of the shared setup, one agent role can get its own commands
+//! ([`ProjectSettings::sandbox_role_setup`]): a tester's headless browser
+//! shouldn't slow down every coder run. They run after the shared setup with
+//! their own hash file per role, so a coder run and a tester run taking
+//! turns in the same container don't keep reinstalling each other's stuff.
+//! The role hash covers the shared inputs too: a lockfile bump can change
+//! what `npx playwright install` has to fetch.
+//!
 //! Package caches sit on per-project named volumes ([`cache_volumes`]), so a
 //! fresh container installs near-offline. Host `node_modules`/`target` are
 //! deliberately NOT mounted: wrong-platform native binaries on macOS and
@@ -23,6 +31,7 @@ use std::{
 };
 
 use db::models::project::{Project, ProjectSettings};
+use executors::adapters::AgentRole;
 use sandbox::{AGENT_USER, ExecOptions, FileEntry, NamedVolume, Sandbox, WORKSPACE_DIR};
 
 /// Root-owned: the agent can read and run the scripts but not rewrite them
@@ -70,6 +79,35 @@ pub struct SetupPlan {
     pub project_commands: Option<String>,
     /// Every repo of the run: their lockfiles feed the hash.
     pub repos: Vec<String>,
+    /// Commands only this run's role gets, after everything above.
+    pub role: Option<RoleSetup>,
+}
+
+/// Roles whose runs go through workspace setup, so role setup applies to
+/// them. Headless jobs (intake, scribe, setup, triage, history) don't.
+pub const SETUP_ROLES: &[AgentRole] = &[
+    AgentRole::Planner,
+    AgentRole::Coder,
+    AgentRole::Tester,
+    AgentRole::Reviewer,
+    AgentRole::ConflictResolver,
+];
+
+/// One role's own setup commands.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleSetup {
+    pub role: AgentRole,
+    pub commands: String,
+}
+
+impl RoleSetup {
+    fn script_name(&self) -> String {
+        format!("role-{}.sh", self.role)
+    }
+
+    fn hash_name(&self) -> String {
+        format!("role-{}.sha", self.role)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,7 +128,10 @@ pub enum SetupOutcome {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SetupReport {
     pub plan: SetupPlan,
+    /// The shared setup (lockfile installs and project commands).
     pub outcome: SetupOutcome,
+    /// The role's own commands; `None` when the plan has none.
+    pub role_outcome: Option<SetupOutcome>,
 }
 
 impl SetupReport {
@@ -152,8 +193,13 @@ fn detect_steps(root: &Path) -> Vec<String> {
     steps
 }
 
-/// The setup for a run's repos, `(name, host worktree)` pairs.
-pub fn plan(repos: &[(String, PathBuf)], settings: Option<&ProjectSettings>) -> SetupPlan {
+/// The setup for a run's repos, `(name, host worktree)` pairs. `role` picks
+/// the role's own commands out of the settings.
+pub fn plan(
+    repos: &[(String, PathBuf)],
+    settings: Option<&ProjectSettings>,
+    role: Option<AgentRole>,
+) -> SetupPlan {
     let auto_install = !settings.is_some_and(|s| s.sandbox_setup_skip_install);
     let steps = if auto_install {
         repos
@@ -173,10 +219,18 @@ pub fn plan(repos: &[(String, PathBuf)], settings: Option<&ProjectSettings>) -> 
         .map(str::trim)
         .filter(|c| !c.is_empty())
         .map(str::to_string);
+    let role = role.and_then(|role| {
+        let commands = settings?.sandbox_role_setup.get(&role)?.trim();
+        (!commands.is_empty()).then(|| RoleSetup {
+            role,
+            commands: commands.to_string(),
+        })
+    });
     SetupPlan {
         steps,
         project_commands,
         repos: repos.iter().map(|(name, _)| name.clone()).collect(),
+        role,
     }
 }
 
@@ -186,7 +240,12 @@ fn sh_quote(s: &str) -> String {
 }
 
 impl SetupPlan {
+    /// Nothing at all to run, shared or role.
     pub fn is_empty(&self) -> bool {
+        self.shared_is_empty() && self.role.is_none()
+    }
+
+    fn shared_is_empty(&self) -> bool {
         self.steps.is_empty() && self.project_commands.is_none()
     }
 
@@ -266,26 +325,46 @@ pub async fn run(
         return SetupReport {
             plan,
             outcome: SetupOutcome::NothingToDo,
+            role_outcome: None,
         };
     }
-    let outcome = match run_inner(docker, container, &plan, env, log).await {
-        Ok(outcome) => outcome,
-        Err(e) => SetupOutcome::Failed {
-            failed_steps: Vec::new(),
-            tail: e.to_string(),
-        },
-    };
-    if let SetupOutcome::Failed { failed_steps, tail } = &outcome {
-        log(format!(
-            "Project setup failed{}. The agent starts anyway.\n{tail}",
-            if failed_steps.is_empty() {
-                String::new()
+    let (outcome, role_outcome) = match run_inner(docker, container, &plan, env, log).await {
+        Ok(outcomes) => outcomes,
+        Err(e) => {
+            // Prep itself died (copy-in, hashing): neither half ran.
+            let failed = SetupOutcome::Failed {
+                failed_steps: Vec::new(),
+                tail: e.to_string(),
+            };
+            let role = plan.role.as_ref().map(|_| failed.clone());
+            let shared = if plan.shared_is_empty() {
+                SetupOutcome::NothingToDo
             } else {
-                format!(": {}", failed_steps.join(", "))
-            }
-        ));
+                failed
+            };
+            (shared, role)
+        }
+    };
+    for (what, outcome) in [
+        ("Project setup", Some(&outcome)),
+        ("Role setup", role_outcome.as_ref()),
+    ] {
+        if let Some(SetupOutcome::Failed { failed_steps, tail }) = outcome {
+            log(format!(
+                "{what} failed{}. The agent starts anyway.\n{tail}",
+                if failed_steps.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {}", failed_steps.join(", "))
+                }
+            ));
+        }
     }
-    SetupReport { plan, outcome }
+    SetupReport {
+        plan,
+        outcome,
+        role_outcome,
+    }
 }
 
 async fn run_inner(
@@ -294,7 +373,7 @@ async fn run_inner(
     plan: &SetupPlan,
     env: Vec<(String, String)>,
     log: &(dyn Fn(String) + Send + Sync),
-) -> Result<SetupOutcome, sandbox::SandboxError> {
+) -> Result<(SetupOutcome, Option<SetupOutcome>), sandbox::SandboxError> {
     let mut script = FileEntry::new(SETUP_SCRIPT, plan.script()).owned_by_root();
     script.mode = 0o755;
     // Always written, even empty, so removing the commands changes the hash.
@@ -303,6 +382,10 @@ async fn run_inner(
         plan.project_commands.clone().unwrap_or_default(),
     )
     .owned_by_root();
+    let mut files = vec![script, project];
+    if let Some(role) = &plan.role {
+        files.push(FileEntry::new(role.script_name(), role.commands.as_str()).owned_by_root());
+    }
     // `docker exec` runs with umask 000, so a plain mkdir hands the agent a
     // world-writable dir it could delete the hash from. Root owns it, so
     // chmod works even without capabilities.
@@ -320,9 +403,7 @@ async fn run_inner(
         },
     )
     .await?;
-    docker
-        .copy_in(container, STATE_DIR, vec![script, project])
-        .await?;
+    docker.copy_in(container, STATE_DIR, files).await?;
 
     let agent = ExecOptions {
         user: Some(AGENT_USER.into()),
@@ -340,27 +421,115 @@ async fn run_inner(
     let mut lines = hashes.lines().map(str::trim);
     let current = lines.next().unwrap_or_default().to_string();
     let stored = lines.next().unwrap_or_default();
+
+    let shared = if plan.shared_is_empty() {
+        SetupOutcome::NothingToDo
+    } else if !current.is_empty() && current == stored {
+        SetupOutcome::UpToDate
+    } else {
+        log("Dependency files changed; running project setup".into());
+        let outcome = run_script(
+            docker,
+            container,
+            &["bash", &format!("{STATE_DIR}/{SETUP_SCRIPT}")],
+            &ExecOptions {
+                env: env.clone(),
+                ..agent.clone()
+            },
+            log,
+        )
+        .await?;
+        if outcome == SetupOutcome::Ran {
+            write_hash(docker, container, HASH_FILE, &current).await?;
+            log("Project setup finished".into());
+        }
+        outcome
+    };
+
+    let Some(role) = &plan.role else {
+        return Ok((shared, None));
+    };
+    let role_outcome = run_role(docker, container, role, &current, env, agent, log).await?;
+    Ok((shared, Some(role_outcome)))
+}
+
+/// The role's commands, when they or the shared inputs moved since they
+/// last went through in this container.
+async fn run_role(
+    docker: &dyn Sandbox,
+    container: &str,
+    role: &RoleSetup,
+    shared_hash: &str,
+    env: Vec<(String, String)>,
+    agent: ExecOptions,
+    log: &(dyn Fn(String) + Send + Sync),
+) -> Result<SetupOutcome, sandbox::SandboxError> {
+    let script = format!("{STATE_DIR}/{}", role.script_name());
+    let hash_file = format!("{STATE_DIR}/{}", role.hash_name());
+    let hashes = sandbox::exec_ok(
+        docker,
+        container,
+        &[
+            "sh",
+            "-c",
+            &format!(
+                "{{ echo {}; cat {script}; }} | sha256sum | cut -d' ' -f1; \
+                 cat {hash_file} 2>/dev/null || true",
+                sh_quote(shared_hash)
+            ),
+        ],
+        &agent,
+    )
+    .await?
+    .stdout_str();
+    let mut lines = hashes.lines().map(str::trim);
+    let current = lines.next().unwrap_or_default().to_string();
+    let stored = lines.next().unwrap_or_default();
     if !current.is_empty() && current == stored {
         return Ok(SetupOutcome::UpToDate);
     }
 
-    log("Dependency files changed; running project setup".into());
-    let script_path = format!("{STATE_DIR}/{SETUP_SCRIPT}");
-    let output = tokio::time::timeout(
-        SETUP_TIMEOUT,
-        docker.exec(
-            container,
-            &["bash", &script_path],
-            &ExecOptions { env, ..agent },
-        ),
+    log(format!("Running the {} setup", role.role));
+    // `-e` like the project commands; one failure is the whole role failing,
+    // reported as a single step.
+    let outcome = run_script(
+        docker,
+        container,
+        &["bash", "-e", &script],
+        &ExecOptions { env, ..agent },
+        log,
     )
-    .await
-    .map_err(|_| {
-        sandbox::SandboxError::Other(format!(
-            "Project setup did not finish within {} minutes",
-            SETUP_TIMEOUT.as_secs() / 60
-        ))
-    })??;
+    .await?;
+    let outcome = match outcome {
+        SetupOutcome::Failed { tail, .. } => SetupOutcome::Failed {
+            failed_steps: vec![format!("{} setup", role.role)],
+            tail,
+        },
+        other => other,
+    };
+    if outcome == SetupOutcome::Ran {
+        write_hash(docker, container, &role.hash_name(), &current).await?;
+        log(format!("The {} setup finished", role.role));
+    }
+    Ok(outcome)
+}
+
+/// Runs one setup script with the setup timeout: `Ran` or `Failed`.
+async fn run_script(
+    docker: &dyn Sandbox,
+    container: &str,
+    command: &[&str],
+    options: &ExecOptions,
+    log: &(dyn Fn(String) + Send + Sync),
+) -> Result<SetupOutcome, sandbox::SandboxError> {
+    let output = tokio::time::timeout(SETUP_TIMEOUT, docker.exec(container, command, options))
+        .await
+        .map_err(|_| {
+            sandbox::SandboxError::Other(format!(
+                "Setup did not finish within {} minutes",
+                SETUP_TIMEOUT.as_secs() / 60
+            ))
+        })??;
 
     let stdout = output.stdout_str();
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -378,16 +547,22 @@ async fn run_inner(
             tail: tail(&format!("{stdout}\n{stderr}"), 20),
         });
     }
+    Ok(SetupOutcome::Ran)
+}
 
+async fn write_hash(
+    docker: &dyn Sandbox,
+    container: &str,
+    name: &str,
+    hash: &str,
+) -> Result<(), sandbox::SandboxError> {
     docker
         .copy_in(
             container,
             STATE_DIR,
-            vec![FileEntry::new(HASH_FILE, format!("{current}\n")).owned_by_root()],
+            vec![FileEntry::new(name, format!("{hash}\n")).owned_by_root()],
         )
-        .await?;
-    log("Project setup finished".into());
-    Ok(SetupOutcome::Ran)
+        .await
 }
 
 fn tail(text: &str, lines: usize) -> String {
@@ -483,7 +658,7 @@ mod tests {
         std::fs::write(dir.path().join("Cargo.toml"), "").unwrap();
         let repos = [repo(&dir, "api")];
 
-        let auto = plan(&repos, None);
+        let auto = plan(&repos, None, None);
         assert_eq!(
             auto.steps,
             vec![SetupStep {
@@ -498,7 +673,7 @@ mod tests {
             sandbox_setup_commands: Some("  cargo install cargo-component \n".into()),
             ..Default::default()
         };
-        let custom = plan(&repos, Some(&settings));
+        let custom = plan(&repos, Some(&settings), None);
         assert!(custom.steps.is_empty());
         assert_eq!(
             custom.project_commands.as_deref(),
@@ -511,7 +686,40 @@ mod tests {
             sandbox_setup_commands: Some("   ".into()),
             ..Default::default()
         };
-        assert!(plan(&repos, Some(&blank)).is_empty());
+        assert!(plan(&repos, Some(&blank), None).is_empty());
+    }
+
+    #[test]
+    fn role_commands_only_for_their_role() {
+        let dir = tempfile::tempdir().unwrap();
+        let repos = [repo(&dir, "web")];
+        let settings = ProjectSettings {
+            sandbox_role_setup: [
+                (
+                    AgentRole::Tester,
+                    " npx playwright install chromium \n".to_string(),
+                ),
+                (AgentRole::Reviewer, "   ".to_string()),
+            ]
+            .into(),
+            ..Default::default()
+        };
+        let tester = plan(&repos, Some(&settings), Some(AgentRole::Tester));
+        assert_eq!(
+            tester.role,
+            Some(RoleSetup {
+                role: AgentRole::Tester,
+                commands: "npx playwright install chromium".into()
+            })
+        );
+        // Role commands alone are still something to do.
+        assert!(tester.shared_is_empty() && !tester.is_empty());
+        assert_eq!(tester.role.unwrap().script_name(), "role-tester.sh");
+
+        assert!(plan(&repos, Some(&settings), Some(AgentRole::Coder)).is_empty());
+        // Blank commands don't count.
+        assert!(plan(&repos, Some(&settings), Some(AgentRole::Reviewer)).is_empty());
+        assert!(plan(&repos, Some(&settings), None).is_empty());
     }
 
     #[test]
@@ -523,6 +731,7 @@ mod tests {
             }],
             project_commands: Some("echo hi".into()),
             repos: vec!["it's".into()],
+            role: None,
         };
         let script = plan.script();
         assert!(
@@ -548,6 +757,7 @@ mod tests {
                 ..Default::default()
             },
             outcome,
+            role_outcome: None,
         };
         assert!(report(SetupOutcome::Ran).installed_js("web"));
         assert!(report(SetupOutcome::UpToDate).installed_js("web"));
@@ -650,6 +860,7 @@ mod tests {
             }],
             project_commands: Some(commands.into()),
             repos: vec!["app".into()],
+            role: None,
         };
         let runs = || async {
             sandbox::exec_ok(
@@ -706,6 +917,68 @@ mod tests {
             SetupOutcome::Failed { .. }
         ));
         assert_eq!(runs().await, 4);
+
+        // Role setup: runs once, survives another role taking a turn, and
+        // reruns when the shared inputs move.
+        let role_plan = |role: AgentRole| SetupPlan {
+            repos: vec!["app".into()],
+            role: Some(RoleSetup {
+                role,
+                commands: format!("echo {role} >> /workspace/app/roles.txt"),
+            }),
+            ..Default::default()
+        };
+        let role_runs = || async {
+            sandbox::exec_ok(
+                &docker,
+                &container,
+                &[
+                    "sh",
+                    "-c",
+                    "cat /workspace/app/roles.txt 2>/dev/null || true",
+                ],
+                &agent,
+            )
+            .await
+            .unwrap()
+            .stdout_str()
+        };
+        let tester = setup(role_plan(AgentRole::Tester)).await;
+        assert_eq!(tester.outcome, SetupOutcome::NothingToDo);
+        assert_eq!(tester.role_outcome, Some(SetupOutcome::Ran));
+        assert_eq!(
+            setup(role_plan(AgentRole::Coder)).await.role_outcome,
+            Some(SetupOutcome::Ran)
+        );
+        assert_eq!(
+            setup(role_plan(AgentRole::Tester)).await.role_outcome,
+            Some(SetupOutcome::UpToDate)
+        );
+        assert_eq!(role_runs().await, "tester\ncoder\n");
+        sandbox::exec_ok(
+            &docker,
+            &container,
+            &["sh", "-c", "echo v3 > /workspace/app/go.sum"],
+            &agent,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            setup(role_plan(AgentRole::Tester)).await.role_outcome,
+            Some(SetupOutcome::Ran)
+        );
+        let broken = SetupPlan {
+            role: Some(RoleSetup {
+                role: AgentRole::Reviewer,
+                commands: "false\necho never >> /workspace/app/roles.txt".into(),
+            }),
+            ..role_plan(AgentRole::Reviewer)
+        };
+        assert!(matches!(
+            setup(broken).await.role_outcome,
+            Some(SetupOutcome::Failed { failed_steps, .. }) if failed_steps == ["reviewer setup"]
+        ));
+        assert_eq!(role_runs().await, "tester\ncoder\ntester\n");
 
         docker.remove(&container).await.unwrap();
     }

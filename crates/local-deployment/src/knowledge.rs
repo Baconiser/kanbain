@@ -1,6 +1,6 @@
 //! KanbAIn's tools for sandboxed runs (E22), served by the model proxy's
-//! `/mcp` endpoint: `search_knowledge` and `report_problem` (see
-//! [`crate::report`]). For `search_knowledge`: a run searches its ticket's project, with the
+//! `/mcp` endpoint: `search_knowledge`, `report_problem` (see
+//! [`crate::report`]) and `request_setup` (see [`crate::setup_request`]). For `search_knowledge`: a run searches its ticket's project, with the
 //! ticket's overlay, and gets locations with capped excerpts (D43). Every
 //! call is logged as a run event with its result count and excerpt bytes
 //! (the D46 measurement).
@@ -27,7 +27,10 @@ use model_proxy::mcp::RunTools;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-use crate::report::{self, ProblemReports};
+use crate::{
+    report::{self, ProblemReports},
+    setup_request::{self, SetupRequests},
+};
 
 pub const SEARCH_TOOL: &str = "search_knowledge";
 const DEFAULT_LIMIT: u32 = 8;
@@ -35,17 +38,25 @@ const MAX_LIMIT: u32 = 20;
 
 pub struct KnowledgeTools {
     db: DBService,
-    /// Absent when search is off; then only `report_problem` is offered.
+    /// Absent when search is off; then only `report_problem` and
+    /// `request_setup` are offered.
     search: Option<SearchService>,
     reports: ProblemReports,
+    setup: SetupRequests,
 }
 
 impl KnowledgeTools {
-    pub fn new(db: DBService, search: Option<SearchService>, reports: ProblemReports) -> Self {
+    pub fn new(
+        db: DBService,
+        search: Option<SearchService>,
+        reports: ProblemReports,
+        setup: SetupRequests,
+    ) -> Self {
         Self {
             db,
             search,
             reports,
+            setup,
         }
     }
 }
@@ -101,7 +112,7 @@ pub fn format_hits(
 #[async_trait]
 impl RunTools for KnowledgeTools {
     fn definitions(&self) -> Vec<Value> {
-        let mut definitions = vec![report::definition()];
+        let mut definitions = vec![report::definition(), setup_request::definition()];
         if self.search.is_some() {
             definitions.insert(0, search_definition());
         }
@@ -112,6 +123,7 @@ impl RunTools for KnowledgeTools {
         match name {
             SEARCH_TOOL => self.search_knowledge(run_id, arguments).await,
             report::REPORT_TOOL => self.reports.hand_off(run_id, &arguments).await,
+            setup_request::REQUEST_TOOL => self.setup.request(run_id, &arguments).await,
             _ => Err(format!("Unknown tool {name}")),
         }
     }

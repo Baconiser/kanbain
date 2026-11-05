@@ -14,6 +14,7 @@ use super::{
     project_setup_scan::{ProjectSetupScan, SetupProposal, SetupScanStatus},
     project_status::{DEFAULT_STATUSES, ProjectStatus, ProjectStatusKind},
     project_tag::{CreateProjectTag, IssueTag, ProjectTag},
+    setup_request::{CreateSetupRequest, SetupRequest, SetupRequestStatus},
 };
 
 async fn pool() -> SqlitePool {
@@ -936,9 +937,17 @@ async fn setup_scan_lifecycle() {
     let p = project(&pool, None).await;
     assert!(ProjectSetupScan::find(&pool, p.id).await.unwrap().is_none());
 
-    assert!(ProjectSetupScan::begin(&pool, p.id, "s1").await.unwrap());
+    assert!(
+        ProjectSetupScan::begin(&pool, p.id, "s1", &[])
+            .await
+            .unwrap()
+    );
     // One scan at a time.
-    assert!(!ProjectSetupScan::begin(&pool, p.id, "s2").await.unwrap());
+    assert!(
+        !ProjectSetupScan::begin(&pool, p.id, "s2", &[])
+            .await
+            .unwrap()
+    );
     // Nothing to decide while it scans.
     assert!(
         !ProjectSetupScan::decide(&pool, p.id, SetupScanStatus::Discarded, None)
@@ -952,6 +961,11 @@ async fn setup_scan_lifecycle() {
         run_commands: vec!["pnpm dev".into()],
         environment_md: "notes".into(),
         skip_auto_install: true,
+        role_setup: [(
+            executors::adapters::AgentRole::Tester,
+            "npx playwright install chromium".to_string(),
+        )]
+        .into(),
     };
     ProjectSetupScan::set_ready(&pool, p.id, &proposal, Some("done"))
         .await
@@ -977,7 +991,11 @@ async fn setup_scan_lifecycle() {
     assert!(scan.decided_at.is_some());
 
     // A new scan replaces the old proposal; a restart fails it.
-    assert!(ProjectSetupScan::begin(&pool, p.id, "s2").await.unwrap());
+    assert!(
+        ProjectSetupScan::begin(&pool, p.id, "s2", &[])
+            .await
+            .unwrap()
+    );
     let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(scan.status, SetupScanStatus::Scanning);
     assert!(scan.setup_script.is_none() && scan.decided_at.is_none());
@@ -985,4 +1003,78 @@ async fn setup_scan_lifecycle() {
     let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
     assert_eq!(scan.status, SetupScanStatus::Failed);
     assert_eq!(scan.error.as_deref(), Some("Interrupted by an app restart"));
+}
+
+#[tokio::test]
+async fn setup_requests_wait_until_decided() {
+    use executors::adapters::AgentRole;
+
+    let pool = pool().await;
+    let p = project(&pool, None).await;
+    let other = project(&pool, None).await;
+    let request = |need: &str| CreateSetupRequest {
+        project_id: p.id,
+        issue_id: None,
+        execution_process_id: None,
+        role: Some(AgentRole::Tester),
+        agent: Some("tester".into()),
+        need: need.into(),
+        reason: "e2e tests".into(),
+        suggestion: None,
+    };
+    let browser = SetupRequest::create(&pool, &request("Chromium"))
+        .await
+        .unwrap();
+    assert_eq!(browser.role.0, Some(AgentRole::Tester));
+    assert_eq!(browser.status, SetupRequestStatus::Pending);
+    let vitest = SetupRequest::create(&pool, &request("vitest"))
+        .await
+        .unwrap();
+
+    // The scan remembers what it answered.
+    assert!(
+        ProjectSetupScan::begin(&pool, p.id, "s1", &[browser.id])
+            .await
+            .unwrap()
+    );
+    let scan = ProjectSetupScan::find(&pool, p.id).await.unwrap().unwrap();
+    assert_eq!(scan.request_ids.0, vec![browser.id]);
+
+    // Another project can't decide these.
+    assert_eq!(
+        SetupRequest::decide(&pool, other.id, &[browser.id], SetupRequestStatus::Resolved)
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        SetupRequest::decide(&pool, p.id, &[browser.id], SetupRequestStatus::Resolved)
+            .await
+            .unwrap(),
+        1
+    );
+    // Decided once, for good.
+    assert_eq!(
+        SetupRequest::decide(&pool, p.id, &[browser.id], SetupRequestStatus::Dismissed)
+            .await
+            .unwrap(),
+        0
+    );
+    let pending = SetupRequest::find_pending(&pool, p.id).await.unwrap();
+    assert_eq!(
+        pending.iter().map(|r| r.id).collect::<Vec<_>>(),
+        vec![vitest.id]
+    );
+
+    // A role name that no longer exists reads as unknown, not as an error.
+    sqlx::query("UPDATE setup_requests SET role = 'gone' WHERE id = $1")
+        .bind(vitest.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    let vitest = SetupRequest::find_by_id(&pool, vitest.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(vitest.role.0, None);
 }

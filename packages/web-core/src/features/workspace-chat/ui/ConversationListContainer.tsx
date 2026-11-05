@@ -42,6 +42,7 @@ import { useSetTokenUsageInfo } from '../model/contexts/EntriesContext';
 import type { WorkspaceWithSession } from '@/shared/types/attempt';
 import type { RepoWithTargetBranch } from 'shared/types';
 import { ChatEmptyState } from '@kanbain/ui/components/ChatEmptyState';
+import { useSandboxStatus } from '@/shared/hooks/useSandboxStatus';
 import { ChatScriptPlaceholder } from '@kanbain/ui/components/ChatScriptPlaceholder';
 import { ScriptFixerDialog } from '@/shared/dialogs/scripts/ScriptFixerDialog';
 
@@ -195,6 +196,9 @@ export const ConversationList = forwardRef<
   // Use ref to access current repos without causing callback recreation
   const reposRef = useRef(repos);
   reposRef.current = repos;
+
+  const { data: sandboxStatus } = useSandboxStatus();
+  const sandboxEnabled = sandboxStatus?.enabled ?? false;
 
   // Check if any repo has setup or cleanup scripts configured
   const hasSetupScript = repos.some((repo) => repo.setup_script);
@@ -552,9 +556,11 @@ export const ConversationList = forwardRef<
   // Determine if there are entries to show placeholders
   const hasEntries = conversationRows.length > 0;
 
-  // Show placeholders only if script not configured AND not already run AND first turn
+  // Show placeholders only if script not configured AND not already run AND first turn.
+  // Sandboxed runs get the project's sandbox setup (lockfile installs, setup
+  // and role commands) before every agent, so "no setup script" is a lie there.
   const showSetupPlaceholder =
-    !hasSetupScript && !hasSetupScriptRun && hasEntries;
+    !sandboxEnabled && !hasSetupScript && !hasSetupScriptRun && hasEntries;
   const showCleanupPlaceholder =
     !hasCleanupScript &&
     !hasCleanupScriptRun &&

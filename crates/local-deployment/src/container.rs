@@ -586,6 +586,7 @@ impl LocalContainerService {
                     prior_work: prior_work.as_deref(),
                     extra_context,
                     rebase,
+                    role: agent_role,
                 },
                 &log,
             )

@@ -69,6 +69,8 @@ fn generate_types_content() -> String {
         db::models::project_setup_scan::SetupScanStatus::decl(),
         db::models::project_setup_scan::SetupProposal::decl(),
         db::models::project_setup_scan::ProjectSetupScan::decl(),
+        db::models::setup_request::SetupRequestStatus::decl(),
+        db::models::setup_request::SetupRequest::decl(),
         db::models::conflict_resolution::ConflictResolutionStage::decl(),
         db::models::conflict_resolution::ConflictResolution::decl(),
         db::models::changelog_entry::ChangelogKind::decl(),

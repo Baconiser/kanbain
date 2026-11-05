@@ -58,6 +58,11 @@ sandbox_environment_notes: string | null,
  */
 sandbox_setup_stack: string | null, 
 /**
+ * Extra setup commands for one agent role only (a tester's browser,
+ * say), run after the shared setup in that role's runs.
+ */
+sandbox_role_setup: Partial<Record<AgentRole, string>>, 
+/**
  * Let code go to a code embedder that is not on this machine or its
  * private network (E9). Off by default.
  */
@@ -247,9 +252,25 @@ setup_script: string, test_commands: Array<string>, run_commands: Array<string>,
 /**
  * Skip KanbAIn's own lockfile installs; the script does it all.
  */
-skip_auto_install: boolean, };
+skip_auto_install: boolean, 
+/**
+ * Commands only one role's runs get, after `setup_script`.
+ */
+role_setup: Partial<Record<AgentRole, string>>, };
 
-export type ProjectSetupScan = { project_id: string, status: SetupScanStatus, job_id: string | null, setup_script: string | null, test_commands: string[], run_commands: string[], environment_md: string | null, skip_auto_install: boolean, summary: string | null, stack_hash: string, error: string | null, started_at: string, finished_at: string | null, decided_at: string | null, };
+export type ProjectSetupScan = { project_id: string, status: SetupScanStatus, job_id: string | null, setup_script: string | null, test_commands: string[], run_commands: string[], environment_md: string | null, skip_auto_install: boolean, role_setup: Partial<Record<AgentRole, string>>, 
+/**
+ * Setup requests this scan answered; approving resolves them.
+ */
+request_ids: string[], summary: string | null, stack_hash: string, error: string | null, started_at: string, finished_at: string | null, decided_at: string | null, };
+
+export type SetupRequestStatus = "pending" | "resolved" | "dismissed";
+
+export type SetupRequest = { id: string, project_id: string, issue_id: string | null, execution_process_id: string | null, 
+/**
+ * Role of the run that asked; `None` when its agent is unknown.
+ */
+role: AgentRole | null, agent: string | null, need: string, reason: string, suggestion: string | null, status: SetupRequestStatus, created_at: string, resolved_at: string | null, };
 
 export type ConflictResolutionStage = "queued" | "rebasing" | "syncing" | "resolved" | "failed";
 
@@ -343,7 +364,11 @@ stack_changed: boolean,
 /**
  * What KanbAIn installs by itself, as `[repo] command`.
  */
-auto_steps: Array<string>, };
+auto_steps: Array<string>, 
+/**
+ * Setup requests from agents that wait for the user.
+ */
+requests: Array<SetupRequest>, };
 
 export type SetupScanResponse = { job: AgentJob | null, scan: ProjectSetupScan | null, 
 /**
@@ -354,7 +379,11 @@ stack_changed: boolean,
 /**
  * What KanbAIn installs by itself, as `[repo] command`.
  */
-auto_steps: Array<string>, };
+auto_steps: Array<string>, 
+/**
+ * Setup requests from agents that wait for the user.
+ */
+requests: Array<SetupRequest>, };
 
 export type OrchestrationStatus = "running" | "stopped" | "blocked" | "done";
 

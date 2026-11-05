@@ -14,8 +14,13 @@
 //! manifest, switched package manager, bumped toolchain pin), the scan runs
 //! again by itself and the fresh proposal waits for review. One rescan per
 //! fingerprint, so a stack the agent can't figure out doesn't loop forever.
+//!
+//! Agents that find something missing mid-run ask for it with
+//! `request_setup` ([`crate::setup_request`]). The next scan gets the
+//! pending requests in its task and answers them with role-only commands
+//! (`roles/<role>.sh`); approving that proposal resolves them.
 
-use std::path::PathBuf;
+use std::{collections::BTreeMap, path::PathBuf};
 
 use db::{
     DBService,
@@ -23,6 +28,7 @@ use db::{
         agent_job::JOB_KIND_SETUP,
         project::{Project, ProjectRepo, ProjectSettings, UpdateProject},
         project_setup_scan::{ProjectSetupScan, SetupProposal, SetupScanStatus},
+        setup_request::{SetupRequest, SetupRequestStatus},
     },
 };
 use executors::adapters::{AgentRole, headless::extract_json_object};
@@ -110,6 +116,8 @@ pub struct SetupScanView {
     pub stack_changed: bool,
     /// What KanbAIn installs by itself, as `[repo] command`.
     pub auto_steps: Vec<String>,
+    /// Setup requests from agents that wait for the user.
+    pub requests: Vec<SetupRequest>,
 }
 
 /// Fingerprint of the repos' stacks: which stack files exist at each root,
@@ -146,6 +154,7 @@ pub fn scan_task(
     repos: &[String],
     auto_steps: &[String],
     settings: &ProjectSettings,
+    requests: &[SetupRequest],
 ) -> String {
     let mut task = format!(
         "Work out how to set up the project \"{project_name}\" in KanbAIn's sandbox, so \
@@ -184,6 +193,46 @@ pub fn scan_task(
             current.trim()
         ));
     }
+    let current_roles: Vec<_> = settings
+        .sandbox_role_setup
+        .iter()
+        .filter(|(_, commands)| !commands.trim().is_empty())
+        .collect();
+    if !current_roles.is_empty() {
+        task.push_str("The project's current role setups (kept unless you replace them):\n");
+        for (role, commands) in current_roles {
+            task.push_str(&format!("\n{role}:\n```sh\n{}\n```\n", commands.trim()));
+        }
+        task.push('\n');
+    }
+    if !requests.is_empty() {
+        task.push_str(
+            "Agents working on this project found these missing in their sandbox and asked \
+             for them. Answer each one: add what installs it to the role's setup file (or to \
+             setup.sh if every role needs it), or explain in your summary why it can't be \
+             done without the user (system packages need a project Dockerfile, hosts need \
+             allowing).\n",
+        );
+        for request in requests {
+            let role = request
+                .role
+                .0
+                .map(|r| r.to_string())
+                .unwrap_or_else(|| "unknown role".into());
+            task.push_str(&format!(
+                "\n- **{}** (asked by a {role} agent): {}\n",
+                request.need,
+                request.reason.replace('\n', " ")
+            ));
+            if let Some(suggestion) = &request.suggestion {
+                task.push_str(&format!(
+                    "  Its suggestion: `{}`\n",
+                    suggestion.replace('\n', "; ")
+                ));
+            }
+        }
+        task.push('\n');
+    }
     task.push_str(
         "Read the manifests, lockfiles, toolchain pins, CI workflows (.github/workflows, \
          .gitlab-ci.yml), Makefiles, Dockerfiles and READMEs. Use the web only for what the \
@@ -204,7 +253,23 @@ pub fn scan_task(
          first. `run`: how to build or start the project (dev server, CLI). Set \
          `skip_auto_install` to true only when KanbAIn's installs above are wrong for this \
          project and setup.sh installs the dependencies itself.\n\n\
-         3. /kanbain/out/environment.md: short notes for the agents that work on this \
+         3. /kanbain/out/roles/<role>.sh, only for roles that need something the others \
+         don't (a headless browser or e2e runner for `tester`, say). Same rules as \
+         setup.sh; it runs after setup.sh in that role's runs only. Roles: ",
+    );
+    task.push_str(
+        &project_setup::SETUP_ROLES
+            .iter()
+            .map(|r| format!("`{r}`"))
+            .collect::<Vec<_>>()
+            .join(", "),
+    );
+    task.push_str(
+        ". Browsers for Playwright install without root with `npx playwright install \
+         chromium` (its system libraries may still be missing, and downloads from outside \
+         the package registries need their host allowed; say so). Write an empty file \
+         to drop a current role setup; leave a role out to keep it as it is.\n\n\
+         4. /kanbain/out/environment.md: short notes for the agents that work on this \
          project: how the repos fit together, how to build and test, required environment \
          variables, services that are not available in the sandbox (databases, browsers) and \
          how tests cope without them, and known traps. Facts from the repos only; no \
@@ -251,9 +316,12 @@ pub fn read_proposal(
     let script = file("setup.sh");
     let commands = file("commands.json");
     let notes = file("environment.md");
-    if script.is_none() && commands.is_none() && notes.is_none() {
+    let role_setup = role_scripts(files);
+    if script.is_none() && commands.is_none() && notes.is_none() && role_setup.is_empty() {
         return Err(
-            "The setup agent wrote none of setup.sh, commands.json and environment.md".to_string(),
+            "The setup agent wrote none of setup.sh, commands.json, roles/<role>.sh and \
+             environment.md"
+                .to_string(),
         );
     }
     let commands = match commands.filter(|c| !c.is_empty()) {
@@ -261,15 +329,8 @@ pub fn read_proposal(
             .ok_or_else(|| "commands.json is not a JSON object".to_string())?,
         None => serde_json::Value::Null,
     };
-    // A shebang-only script is an empty one; don't make the user review it.
-    let script = script
-        .unwrap_or_default()
-        .lines()
-        .filter(|l| !l.starts_with("#!"))
-        .collect::<Vec<_>>()
-        .join("\n");
     Ok(SetupProposal {
-        setup_script: truncate(script.trim(), MAX_SCRIPT_CHARS),
+        setup_script: script_body(script.unwrap_or_default()),
         test_commands: command_list(commands.get("test")),
         run_commands: command_list(commands.get("run")),
         environment_md: truncate(notes.unwrap_or_default(), MAX_NOTES_CHARS),
@@ -277,7 +338,52 @@ pub fn read_proposal(
             .get("skip_auto_install")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        role_setup,
     })
+}
+
+/// A script without its shebang, trimmed and capped. A shebang-only script
+/// is an empty one; don't make the user review it.
+fn script_body(script: &str) -> String {
+    let body = script
+        .lines()
+        .filter(|l| !l.starts_with("#!"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    truncate(body.trim(), MAX_SCRIPT_CHARS)
+}
+
+/// `roles/<role>.sh` files for roles that have workspace runs. An empty one
+/// stays in the map: it drops that role's current setup.
+fn role_scripts(files: &serde_json::Map<String, serde_json::Value>) -> BTreeMap<AgentRole, String> {
+    files
+        .iter()
+        .filter_map(|(path, contents)| {
+            let name = path.strip_prefix("roles/")?.strip_suffix(".sh")?;
+            let role: AgentRole = name.parse().ok()?;
+            project_setup::SETUP_ROLES
+                .contains(&role)
+                .then(|| (role, script_body(contents.as_str().unwrap_or_default())))
+        })
+        .collect()
+}
+
+/// The proposal with the current role setups it doesn't mention kept, so a
+/// rescan for an unrelated reason doesn't silently drop the tester's
+/// browser.
+pub fn keep_unmentioned_roles(
+    mut proposal: SetupProposal,
+    settings: &ProjectSettings,
+) -> SetupProposal {
+    for (role, commands) in &settings.sandbox_role_setup {
+        if !commands.trim().is_empty() {
+            proposal
+                .role_setup
+                .entry(*role)
+                .or_insert_with(|| commands.trim().to_string());
+        }
+    }
+    proposal
 }
 
 /// The settings with an approved proposal applied.
@@ -300,6 +406,11 @@ pub fn apply_proposal(
         sandbox_run_commands: commands(&proposal.run_commands),
         sandbox_environment_notes: non_empty(&proposal.environment_md),
         sandbox_setup_stack: Some(stack_hash.to_string()),
+        sandbox_role_setup: proposal
+            .role_setup
+            .iter()
+            .filter_map(|(role, commands)| Some((*role, non_empty(commands)?)))
+            .collect(),
         ..settings.clone()
     }
 }
@@ -373,6 +484,7 @@ impl SetupScanService {
             scan: ProjectSetupScan::find(&self.db.pool, project_id).await?,
             stack_changed,
             auto_steps: auto_steps(&roots, &project.settings),
+            requests: SetupRequest::find_pending(&self.db.pool, project_id).await?,
         })
     }
 
@@ -392,12 +504,16 @@ impl SetupScanService {
             ));
         }
         let stack = stack_fingerprint(&Self::roots(&repos));
-        if !ProjectSetupScan::begin(pool, project_id, &stack).await? {
+        // The scan answers what is pending now; requests that arrive while
+        // it runs wait for the next one.
+        let requests = SetupRequest::find_pending(pool, project_id).await?;
+        let request_ids: Vec<Uuid> = requests.iter().map(|r| r.id).collect();
+        if !ProjectSetupScan::begin(pool, project_id, &stack, &request_ids).await? {
             return Err(SetupScanError::AlreadyScanning);
         }
         let service = self.clone();
         tokio::spawn(async move {
-            if let Err(e) = service.scan(project, repos).await {
+            if let Err(e) = service.scan(project, repos, requests).await {
                 tracing::warn!("Setup scan of project {project_id} failed: {e}");
                 let _ = ProjectSetupScan::set_failed(&service.db.pool, project_id, &e.to_string())
                     .await;
@@ -412,13 +528,15 @@ impl SetupScanService {
         &self,
         project: Project,
         repos: Vec<(String, PathBuf, String)>,
+        requests: Vec<SetupRequest>,
     ) -> Result<(), SetupScanError> {
         let pool = &self.db.pool;
         let project_id = project.id;
         let names: Vec<String> = repos.iter().map(|(name, _, _)| name.clone()).collect();
         let steps = auto_steps(&Self::roots(&repos), &project.settings);
-        let task = scan_task(&project.name, &names, &steps, &project.settings);
+        let task = scan_task(&project.name, &names, &steps, &project.settings, &requests);
         let name = project.name.clone();
+        let settings = project.settings.clone();
         let (job_id, result) = self
             .jobs
             .run(JobRequest {
@@ -435,7 +553,10 @@ impl SetupScanService {
             ProjectSetupScan::set_job(pool, project_id, job_id).await?;
         }
         let output = result.map_err(SetupScanError::Invalid)?;
-        let proposal = read_proposal(&output.files).map_err(SetupScanError::Invalid)?;
+        let proposal = keep_unmentioned_roles(
+            read_proposal(&output.files).map_err(SetupScanError::Invalid)?,
+            &settings,
+        );
         let summary = Some(output.message.trim()).filter(|s| !s.is_empty());
         ProjectSetupScan::set_ready(pool, project_id, &proposal, summary).await?;
         self.container
@@ -473,7 +594,7 @@ impl SetupScanService {
             ));
         }
         let settings = apply_proposal(&project.settings, proposal, &scan.stack_hash);
-        Ok(Project::update(
+        let project = Project::update(
             pool,
             project_id,
             &UpdateProject {
@@ -481,7 +602,36 @@ impl SetupScanService {
                 ..Default::default()
             },
         )
-        .await?)
+        .await?;
+        SetupRequest::decide(
+            pool,
+            project_id,
+            &scan.request_ids.0,
+            SetupRequestStatus::Resolved,
+        )
+        .await?;
+        Ok(project)
+    }
+
+    /// Drops a pending setup request without setting anything up.
+    pub async fn dismiss_request(
+        &self,
+        project_id: Uuid,
+        request_id: Uuid,
+    ) -> Result<(), SetupScanError> {
+        let changed = SetupRequest::decide(
+            &self.db.pool,
+            project_id,
+            &[request_id],
+            SetupRequestStatus::Dismissed,
+        )
+        .await?;
+        if changed == 0 {
+            return Err(SetupScanError::Invalid(
+                "That setup request is not pending in this project".into(),
+            ));
+        }
+        Ok(())
     }
 
     pub async fn discard(&self, project_id: Uuid) -> Result<(), SetupScanError> {
@@ -543,7 +693,7 @@ fn auto_steps(roots: &[(String, PathBuf)], settings: &ProjectSettings) -> Vec<St
         sandbox_setup_skip_install: false,
         ..settings.clone()
     };
-    project_setup::plan(roots, Some(&settings))
+    project_setup::plan(roots, Some(&settings), None)
         .steps
         .into_iter()
         .map(|step| format!("[{}] {}", step.repo, step.command))
@@ -586,7 +736,77 @@ mod tests {
                 run_commands: vec!["cd /workspace/web && pnpm dev".into()],
                 environment_md: "# Notes\nNo database here.".into(),
                 skip_auto_install: true,
+                role_setup: BTreeMap::new(),
             }
+        );
+    }
+
+    #[test]
+    fn reads_role_scripts_for_workspace_roles_only() {
+        let proposal = read_proposal(&files(&[
+            (
+                "roles/tester.sh",
+                "#!/bin/bash\ncd /workspace/web && npx playwright install chromium\n",
+            ),
+            ("roles/reviewer.sh", "\n"),
+            // Headless jobs never run role setup; made-up roles neither.
+            ("roles/triage.sh", "echo no"),
+            ("roles/wizard.sh", "echo no"),
+            ("tester.sh", "echo no"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            proposal.role_setup,
+            BTreeMap::from([
+                (
+                    AgentRole::Tester,
+                    "cd /workspace/web && npx playwright install chromium".to_string()
+                ),
+                (AgentRole::Reviewer, String::new()),
+            ])
+        );
+        assert!(proposal.setup_script.is_empty());
+    }
+
+    #[test]
+    fn rescans_keep_role_setups_they_dont_mention() {
+        let settings = ProjectSettings {
+            sandbox_role_setup: BTreeMap::from([
+                (AgentRole::Tester, "npx playwright install chromium".into()),
+                (AgentRole::Coder, "cargo install just".into()),
+            ]),
+            ..Default::default()
+        };
+        let proposal = keep_unmentioned_roles(
+            SetupProposal {
+                role_setup: BTreeMap::from([(AgentRole::Coder, String::new())]),
+                ..Default::default()
+            },
+            &settings,
+        );
+        // Kept: the agent said nothing about testers. Dropped: it emptied
+        // the coder setup on purpose.
+        assert_eq!(
+            proposal
+                .role_setup
+                .get(&AgentRole::Tester)
+                .map(String::as_str),
+            Some("npx playwright install chromium")
+        );
+        assert_eq!(
+            proposal
+                .role_setup
+                .get(&AgentRole::Coder)
+                .map(String::as_str),
+            Some("")
+        );
+        let applied = apply_proposal(&settings, &proposal, "s");
+        assert_eq!(
+            applied.sandbox_role_setup,
+            BTreeMap::from([(
+                AgentRole::Tester,
+                "npx playwright install chromium".to_string()
+            )])
         );
     }
 
@@ -648,6 +868,8 @@ mod tests {
             run_commands: sqlx::types::Json(vec![]),
             environment_md: None,
             skip_auto_install: false,
+            role_setup: sqlx::types::Json(BTreeMap::new()),
+            request_ids: sqlx::types::Json(vec![]),
             summary: None,
             stack_hash: stack.into(),
             error: None,
@@ -696,6 +918,7 @@ mod tests {
                 run_commands: vec![],
                 environment_md: "notes".into(),
                 skip_auto_install: true,
+                role_setup: BTreeMap::new(),
             },
             "abc",
         );
@@ -715,14 +938,49 @@ mod tests {
             &["[web] pnpm install --frozen-lockfile".into()],
             &ProjectSettings {
                 sandbox_setup_commands: Some("cargo install sqlx-cli".into()),
+                sandbox_role_setup: BTreeMap::from([(
+                    AgentRole::Tester,
+                    "npx playwright install chromium".into(),
+                )]),
                 ..Default::default()
             },
+            &[request()],
         );
         assert!(task.contains("- /workspace/web\n- /workspace/api\n"));
         assert!(task.contains("- [web] pnpm install --frozen-lockfile"));
         assert!(task.contains("cargo install sqlx-cli"));
-        for out in ["setup.sh", "commands.json", "environment.md"] {
+        for out in [
+            "setup.sh",
+            "commands.json",
+            "environment.md",
+            "roles/<role>.sh",
+        ] {
             assert!(task.contains(&format!("/kanbain/out/{out}")), "{out}");
+        }
+        assert!(task.contains("tester:\n```sh\nnpx playwright install chromium\n```"));
+        assert!(task.contains("- **Headless Chromium** (asked by a tester agent): WebGL checks"));
+        assert!(task.contains("Its suggestion: `npx playwright install chromium`"));
+        assert!(task.contains("`conflict_resolver`"));
+
+        let quiet = scan_task("Shop", &[], &[], &ProjectSettings::default(), &[]);
+        assert!(!quiet.contains("asked for them"));
+        assert!(!quiet.contains("current role setups"));
+    }
+
+    fn request() -> SetupRequest {
+        SetupRequest {
+            id: Uuid::new_v4(),
+            project_id: Uuid::nil(),
+            issue_id: None,
+            execution_process_id: None,
+            role: db::models::setup_request::RoleColumn(Some(AgentRole::Tester)),
+            agent: Some("tester".into()),
+            need: "Headless Chromium".into(),
+            reason: "WebGL\nchecks".into(),
+            suggestion: Some("npx playwright install chromium".into()),
+            status: SetupRequestStatus::Pending,
+            created_at: chrono::Utc::now(),
+            resolved_at: None,
         }
     }
 }

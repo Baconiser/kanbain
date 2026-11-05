@@ -146,9 +146,12 @@ pub fn environment_md(
         "\n## Rules\n\n\
          - You cannot install toolchains, cargo subcommands or system packages, and \
          network access is limited to package registries.\n\
-         - If a tool or dependency you need is missing, do not hunt for workarounds. \
-         Say exactly what is missing (e.g. \"`cargo component` is not installed\") in \
-         your result and stop that line of work.\n",
+         - If a tool or dependency you need is missing, do not hunt for workarounds \
+         (no probing `/usr/bin`, no guessing at global installs). If you have the \
+         `request_setup` tool, call it once per missing thing so the project's owner \
+         can add it to the setup; either way, say exactly what is missing (e.g. \
+         \"`cargo component` is not installed\") in your result and stop that line of \
+         work.\n",
     );
     md
 }
@@ -189,45 +192,74 @@ fn project_md(settings: &ProjectSettings) -> String {
     md
 }
 
-/// The "Project setup" section: what was installed and whether it worked.
+/// The "Project setup" section: what was installed and whether it worked,
+/// then the run's role setup, if it has one.
 fn setup_md(setup: &SetupReport) -> String {
-    if setup.outcome == SetupOutcome::NothingToDo {
-        return String::new();
-    }
-    let mut md = String::from(
-        "\n## Project setup\n\n\
-         KanbAIn ran these before you started (again whenever a lockfile changes):\n\n",
-    );
-    for step in &setup.plan.steps {
-        md.push_str(&format!(
-            "- `/workspace/{}`: `{}`\n",
-            step.repo, step.command
-        ));
-    }
-    if let Some(commands) = &setup.plan.project_commands {
-        md.push_str(&format!(
-            "- Project commands, from `/workspace`:\n\n```sh\n{commands}\n```\n"
-        ));
-    }
-    md.push_str(match &setup.outcome {
-        SetupOutcome::Ran | SetupOutcome::UpToDate => {
-            "\nStatus: succeeded. Dependencies are installed; don't reinstall them. \
-             If you add a dependency, update the lockfile and commit it: the next run \
-             installs it.\n"
+    let mut md = String::new();
+    if setup.outcome != SetupOutcome::NothingToDo {
+        md.push_str(
+            "\n## Project setup\n\n\
+             KanbAIn ran these before you started (again whenever a lockfile changes):\n\n",
+        );
+        for step in &setup.plan.steps {
+            md.push_str(&format!(
+                "- `/workspace/{}`: `{}`\n",
+                step.repo, step.command
+            ));
         }
-        _ => "",
-    });
-    if let SetupOutcome::Failed { failed_steps, tail } = &setup.outcome {
-        md.push_str("\nStatus: **failed**");
-        if !failed_steps.is_empty() {
-            md.push_str(&format!(" ({})", failed_steps.join(", ")));
+        if let Some(commands) = &setup.plan.project_commands {
+            md.push_str(&format!(
+                "- Project commands, from `/workspace`:\n\n```sh\n{commands}\n```\n"
+            ));
         }
+        if matches!(setup.outcome, SetupOutcome::Ran | SetupOutcome::UpToDate) {
+            md.push_str(
+                "\nStatus: succeeded. Dependencies are installed; don't reinstall them. \
+                 If you add a dependency, update the lockfile and commit it: the next run \
+                 installs it.\n",
+            );
+        }
+        md.push_str(&failure_md(&setup.outcome));
+    }
+    if let (Some(role), Some(outcome)) = (&setup.plan.role, &setup.role_outcome) {
         md.push_str(&format!(
-            ". Whatever those steps install is missing; report that instead of \
-             working around it.\n\n```\n{tail}\n```\n"
+            "\n## {} setup\n\n\
+             Extra commands this project runs for {} agents only, after the project \
+             setup:\n\n```sh\n{}\n```\n",
+            capitalize(role.role.as_ref()),
+            role.role.as_ref().replace('_', " "),
+            role.commands
         ));
+        if matches!(outcome, SetupOutcome::Ran | SetupOutcome::UpToDate) {
+            md.push_str("\nStatus: succeeded; what these install is there.\n");
+        }
+        md.push_str(&failure_md(outcome));
     }
     md
+}
+
+fn failure_md(outcome: &SetupOutcome) -> String {
+    let SetupOutcome::Failed { failed_steps, tail } = outcome else {
+        return String::new();
+    };
+    let mut md = String::from("\nStatus: **failed**");
+    if !failed_steps.is_empty() {
+        md.push_str(&format!(" ({})", failed_steps.join(", ")));
+    }
+    md.push_str(&format!(
+        ". Whatever those steps install is missing; report that instead of \
+         working around it.\n\n```\n{tail}\n```\n"
+    ));
+    md
+}
+
+fn capitalize(text: &str) -> String {
+    let text = text.replace('_', " ");
+    let mut chars = text.chars();
+    match chars.next() {
+        Some(first) => first.to_uppercase().chain(chars).collect(),
+        None => String::new(),
+    }
 }
 
 #[cfg(test)]
@@ -306,6 +338,7 @@ mod tests {
         let ok = SetupReport {
             plan: plan.clone(),
             outcome: SetupOutcome::Ran,
+            role_outcome: None,
         };
         let md = environment_md(&repos, false, Some(&ok), None);
         assert!(md.contains("- `/workspace/web`: `npm ci`"));
@@ -319,11 +352,51 @@ mod tests {
                 failed_steps: vec!["[/workspace/web] npm ci".into()],
                 tail: "npm ERR! boom".into(),
             },
+            role_outcome: None,
         };
         let md = environment_md(&repos, false, Some(&failed), None);
         assert!(md.contains("Status: **failed** ([/workspace/web] npm ci)"));
         assert!(md.contains("npm ERR! boom"));
         assert!(md.contains("node_modules"));
+        assert!(!md.contains("agents only"));
+    }
+
+    #[test]
+    fn role_setup_gets_its_own_section() {
+        use executors::adapters::AgentRole;
+
+        use crate::project_setup::{RoleSetup, SetupPlan};
+
+        let report = |role_outcome| SetupReport {
+            plan: SetupPlan {
+                role: Some(RoleSetup {
+                    role: AgentRole::ConflictResolver,
+                    commands: "npx playwright install chromium".into(),
+                }),
+                ..Default::default()
+            },
+            outcome: SetupOutcome::NothingToDo,
+            role_outcome: Some(role_outcome),
+        };
+        let md = environment_md(&[], false, Some(&report(SetupOutcome::UpToDate)), None);
+        // No shared setup, so no "Project setup" heading; the role still shows.
+        assert!(!md.contains("## Project setup"));
+        assert!(md.contains("## Conflict resolver setup"));
+        assert!(md.contains("for conflict resolver agents only"));
+        assert!(md.contains("npx playwright install chromium"));
+        assert!(md.contains("Status: succeeded"));
+
+        let md = environment_md(
+            &[],
+            false,
+            Some(&report(SetupOutcome::Failed {
+                failed_steps: vec!["conflict_resolver setup".into()],
+                tail: "no space left".into(),
+            })),
+            None,
+        );
+        assert!(md.contains("Status: **failed** (conflict_resolver setup)"));
+        assert!(md.contains("no space left"));
     }
 
     #[test]

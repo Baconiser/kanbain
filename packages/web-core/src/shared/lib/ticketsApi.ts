@@ -119,6 +119,11 @@ export const projectsApi = {
     ),
   discardSetupScan: (id: string) =>
     request<void>(`/api/projects/${id}/setup-scan/discard`, 'POST'),
+  dismissSetupRequest: (id: string, requestId: string) =>
+    request<void>(
+      `/api/projects/${id}/setup-requests/${requestId}/dismiss`,
+      'POST'
+    ),
   detectExternalId: (id: string, text: string) =>
     request<string | null>(`/api/projects/${id}/detect-external-id`, 'POST', {
       text,

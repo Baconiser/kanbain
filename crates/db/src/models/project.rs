@@ -54,6 +54,11 @@ pub struct ProjectSettings {
     /// that sees another one starts a new setup scan.
     #[serde(default)]
     pub sandbox_setup_stack: Option<String>,
+    /// Extra setup commands for one agent role only (a tester's browser,
+    /// say), run after the shared setup in that role's runs.
+    #[serde(default)]
+    #[ts(type = "Partial<Record<AgentRole, string>>")]
+    pub sandbox_role_setup: BTreeMap<AgentRole, String>,
     /// Let code go to a code embedder that is not on this machine or its
     /// private network (E9). Off by default.
     #[serde(default)]

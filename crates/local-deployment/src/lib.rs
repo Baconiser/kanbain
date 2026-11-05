@@ -44,6 +44,7 @@ pub mod pty;
 pub mod report;
 pub mod sandbox;
 pub mod search;
+pub mod setup_request;
 pub mod setup_scan;
 
 #[derive(Clone)]
@@ -298,6 +299,11 @@ impl Deployment for LocalDeployment {
                 db.clone(),
                 search.clone(),
                 report::ProblemReports::new(db.clone(), jobs.clone()),
+                setup_request::SetupRequests::new(
+                    db.clone(),
+                    agent_library.clone(),
+                    container.clone(),
+                ),
             )));
 
         let events = EventService::new(db.clone(), events_msg_store, events_entry_count);
